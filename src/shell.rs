@@ -1,5 +1,6 @@
 use std::{
-    ffi::OsString,
+    ffi::{OsStr, OsString},
+    path::Path,
     process::{Command, Stdio},
 };
 
@@ -38,4 +39,38 @@ impl Shell for Command {
 
         Ok(())
     }
+}
+
+pub(crate) fn get_rustup_targets() -> Result<Vec<String>> {
+    let output = Command::new("rustup").args(["target", "list"]).output()?;
+
+    let stdout = unsafe { OsStr::from_encoded_bytes_unchecked(&output.stdout) };
+    let targets: Vec<_> = stdout
+        .to_str()
+        .unwrap()
+        .split('\n')
+        .filter(|line| !line.is_empty())
+        .map(|line| line.trim_end_matches("(installed)").trim().to_string())
+        .filter(|line| line.contains("-none"))
+        .collect();
+
+    Ok(targets)
+}
+
+pub(crate)  fn get_cargo_packages(workdir: &Path) -> Vec<String> {
+    let output = Command::new("cargo")
+        .current_dir(workdir)
+        .args(["metadata", "--format-version=1", "--no-deps"])
+        .output()
+        .unwrap();
+    let stdout = unsafe { OsStr::from_encoded_bytes_unchecked(&output.stdout) };
+    let data = stdout.to_str().unwrap();
+
+    let v: serde_json::Value = serde_json::from_str(data).unwrap();
+    let packages = v["packages"].as_array().unwrap();
+
+    packages
+        .iter()
+        .map(|p| p["name"].as_str().unwrap().to_string())
+        .collect()
 }

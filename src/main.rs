@@ -10,6 +10,7 @@ mod config;
 mod project;
 mod shell;
 mod ui;
+mod os;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -51,7 +52,10 @@ fn main() -> Result<()> {
         SubCommands::Build => {
             Compile::run(&mut project, false);
         }
-        SubCommands::Qemu(args) => {}
+        SubCommands::Qemu(args) => {
+            Compile::run(&mut project, args.debug);
+            
+        }
         SubCommands::Uboot => {}
     }
 

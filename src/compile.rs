@@ -17,11 +17,15 @@ impl Compile {
 
         let log_level = format!("{:?}", project.config.compile.log_level);
 
-        let all_features = project.package_all_features();
-
-        let features_log_level = format!("log/release_max_level_{}", log_level.to_lowercase());
+        let deps = project.package_dependencies();
 
         let mut features = project.config.compile.features.join(" ");
+
+        if deps.contains(&"log".to_string()) {
+            let features_log_level = format!("log/release_max_level_{}", log_level.to_lowercase());
+            features += " ";
+            features += &features_log_level;
+        }
 
         let mut args = vec![
             "build",
@@ -40,8 +44,7 @@ impl Compile {
             args.push("--release");
         }
 
-        let rust_flags = project.config.compile.rust_flags.clone()
-            + "  -C link-arg=-no-pie -C link-arg=-znostart-stop-gc";
+        let rust_flags = project.config.compile.rust_flags.clone();
 
         let mut cmd = project.shell("cargo");
 
