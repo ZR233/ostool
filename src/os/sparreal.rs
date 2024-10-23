@@ -3,11 +3,11 @@ use std::path::{Path, PathBuf};
 use super::OsConfig;
 
 pub struct Sparreal {
-    workdir: PathBuf,
+    _workdir: PathBuf,
 }
 
 impl Sparreal {
-    pub fn new_box(workdir: &Path) -> Option<Box<dyn OsConfig>> {
+    pub fn new_box(_workdir: &Path) -> Option<Box<dyn OsConfig>> {
         None
     }
 }
