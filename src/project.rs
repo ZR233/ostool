@@ -7,6 +7,7 @@ use crate::{config::ProjectConfig, os::new_config, shell::Shell};
 pub struct Project {
     workdir: PathBuf,
     pub config: ProjectConfig,
+    pub arch: Arch,
     pub bin_path: Option<PathBuf>,
 }
 
@@ -24,11 +25,13 @@ impl Project {
         } else {
             config = toml::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
         }
+        let arch = Arch::from_target(&config.compile.target).unwrap();
 
         Ok(Self {
             workdir,
             config,
             bin_path: None,
+            arch,
         })
     }
 
@@ -91,5 +94,45 @@ impl Project {
         let data = stdout.to_str().unwrap();
 
         serde_json::from_str(data).unwrap()
+    }
+}
+
+pub enum Arch {
+    Aarch64,
+    Riscv64,
+    X86_64,
+}
+
+impl Default for Arch {
+    fn default() -> Self {
+        Self::Aarch64
+    }
+}
+
+impl Arch {
+    pub fn qemu_arch(&self) -> String {
+        let arch = match self {
+            Arch::Aarch64 => "aarch64",
+            Arch::Riscv64 => "riscv64",
+            Arch::X86_64 => "x86_64",
+        };
+
+        format!("qemu-system-{}", arch)
+    }
+
+    fn from_target(target: &str) -> Result<Arch> {
+        if target.contains("aarch64") {
+            return Ok(Arch::Aarch64);
+        }
+
+        if target.contains("riscv64") {
+            return Ok(Arch::Riscv64);
+        }
+
+        if target.contains("x86_64") {
+            return Ok(Arch::X86_64);
+        }
+
+        Err(anyhow::anyhow!("Unsupportedtarget: {}", target))
     }
 }

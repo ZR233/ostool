@@ -23,6 +23,7 @@ impl Shell for Command {
         println!("{}", cmd_str.purple().bold());
 
         let out = self
+            .stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .spawn()?
@@ -57,7 +58,7 @@ pub(crate) fn get_rustup_targets() -> Result<Vec<String>> {
     Ok(targets)
 }
 
-pub(crate)  fn get_cargo_packages(workdir: &Path) -> Vec<String> {
+pub(crate) fn get_cargo_packages(workdir: &Path) -> Vec<String> {
     let output = Command::new("cargo")
         .current_dir(workdir)
         .args(["metadata", "--format-version=1", "--no-deps"])

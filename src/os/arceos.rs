@@ -9,6 +9,7 @@ use colored::Colorize;
 use crate::{
     config::{
         compile::{Compile, LogLevel},
+        qemu::Qemu,
         ProjectConfig,
     },
     shell::get_cargo_packages,
@@ -52,7 +53,13 @@ impl OsConfig for ArceOS {
         }
         let platform = platforms[shell_select("select platform", &platforms)].clone();
         let arch = platform.split("-").next().unwrap().to_string();
-        let target = format!("{}-unknown-none", arch);
+        let mut target = format!("{}-unknown-none", arch);
+        let mut cpu = None;
+
+        if arch == "aarch64" {
+            cpu = Some("cortex-a53".to_string());
+            target = "aarch64-unknown-none-softfloat".to_string();
+        }
 
         let mut env = BTreeMap::new();
         env.insert("AX_PLATFORM".to_string(), platform.clone());
@@ -85,6 +92,12 @@ impl OsConfig for ArceOS {
                     .iter()
                     .map(|o| o.to_string())
                     .collect(),
+            },
+            qemu: Qemu {
+                machine: Some("virt".to_string()),
+                cpu,
+                graphic: false,
+                args: "-smp 4".to_string(),
             },
         }
     }

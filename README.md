@@ -1,5 +1,5 @@
 # ostool
-Rust构建OS的工具集
+Rust开发OS的工具集
 
 ## 使用
 

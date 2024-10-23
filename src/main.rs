@@ -4,11 +4,13 @@ use anyhow::Result;
 use clap::*;
 use compile::Compile;
 use project::Project;
+use qemu::Qemu;
 
 mod compile;
 mod config;
 mod os;
 mod project;
+mod qemu;
 mod shell;
 mod ui;
 
@@ -54,6 +56,7 @@ fn main() -> Result<()> {
         }
         SubCommands::Qemu(args) => {
             Compile::run(&mut project, args.debug);
+            Qemu::run(&mut project, args);
         }
         SubCommands::Uboot => {}
     }

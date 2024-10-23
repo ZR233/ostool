@@ -33,6 +33,7 @@ impl Compile {
             &project.config.compile.package,
             "--target",
             &project.config.compile.target,
+            "-Z", "unstable-options"
         ];
 
         if !features.is_empty() {

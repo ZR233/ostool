@@ -9,6 +9,7 @@ use sparreal::Sparreal;
 use crate::{
     config::{
         compile::{Compile, LogLevel},
+        qemu::Qemu,
         ProjectConfig,
     },
     shell::{get_cargo_packages, get_rustup_targets},
@@ -51,6 +52,13 @@ impl OsConfig for Custom {
         let packages = get_cargo_packages(&self.workdir);
         let package = packages[shell_select("select package:", &packages)].clone();
 
+        let mut cpu = None;
+
+        let arch = target.split("-").next().unwrap().to_string();
+        if arch == "aarch64" {
+            cpu = Some("cortex-a53".to_string());
+        }
+
         ProjectConfig {
             compile: Compile {
                 target,
@@ -61,6 +69,12 @@ impl OsConfig for Custom {
                 custom_shell: None,
                 env: BTreeMap::new(),
                 features: Vec::new(),
+            },
+            qemu: Qemu {
+                machine: Some("virt".to_string()),
+                cpu,
+                graphic: false,
+                args: String::new(),
             },
         }
     }
