@@ -2,7 +2,7 @@ use std::{ffi::OsStr, fs, io::Write, os::unix::ffi::OsStrExt, path::PathBuf, pro
 
 use anyhow::Result;
 
-use crate::{config::ProjectConfig, os::new_config};
+use crate::{config::ProjectConfig, os::new_config, shell::Shell};
 
 pub struct Project {
     workdir: PathBuf,
@@ -38,6 +38,17 @@ impl Project {
         cmd
     }
 
+    pub fn install_deps(&self) {
+        self.shell("cargo")
+            .args(["install", "cargo-binutils"])
+            .exec()
+            .unwrap();
+        self.shell("rustup")
+            .args(["component", "add", "llvm-tools-preview", "rust-src"])
+            .exec()
+            .unwrap();
+    }
+
     pub fn output_dir(&self, debug: bool) -> PathBuf {
         let pwd = self.workdir.clone();
 
@@ -47,8 +58,6 @@ impl Project {
             .join(target)
             .join(if debug { "debug" } else { "release" })
     }
-
-
 
     pub fn package_metadata(&self) -> serde_json::Value {
         let meta = self.cargo_meta();

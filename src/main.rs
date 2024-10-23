@@ -7,10 +7,10 @@ use project::Project;
 
 mod compile;
 mod config;
+mod os;
 mod project;
 mod shell;
 mod ui;
-mod os;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -47,14 +47,13 @@ fn main() -> Result<()> {
     println!("Workdir: {}", workdir.display());
 
     let mut project = Project::new(workdir, cli.config)?;
-
+    project.install_deps();
     match cli.command {
         SubCommands::Build => {
             Compile::run(&mut project, false);
         }
         SubCommands::Qemu(args) => {
             Compile::run(&mut project, args.debug);
-            
         }
         SubCommands::Uboot => {}
     }
