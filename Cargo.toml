@@ -2,6 +2,7 @@
 name = "ostool"
 version = "0.1.0"
 edition = "2021"
+description = "A tool for operating system development"
 authors = ["周睿 <zrufo747@outlook.com>"]
 license = "MIT OR Apache-2.0"
 categories = ["os", "embedded", "cli", "os-dev"]
