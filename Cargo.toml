@@ -5,7 +5,7 @@ edition = "2021"
 description = "A tool for operating system development"
 authors = ["周睿 <zrufo747@outlook.com>"]
 license = "MIT OR Apache-2.0"
-categories = ["os", "embedded", "cli", "os-dev"]
+categories = ["os", "embedded", "development-tools", "config"]
 repository = "https://github.com/ZR233/ostool"
 
 [dependencies]

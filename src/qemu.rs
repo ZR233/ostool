@@ -1,4 +1,4 @@
-use std::{fs, process::Stdio};
+use std::fs;
 
 use crate::{project::Project, shell::Shell, QemuArgs};
 
