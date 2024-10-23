@@ -1,0 +1,12 @@
+{
+  "name": "ostool",
+  "description": "A tool for operating system development.",
+  "authors": [{
+    "name": "周睿",
+    "email": "zrufo747@outlook.com"
+  }],
+  "keywords": ["qemu", "uboot", "build"],
+  "test_repos": [],
+  "repo": "ZR233/ostool",
+  "doc_url": "https://github.com/ZR233/ostool"
+}
