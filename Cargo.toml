@@ -1,6 +1,6 @@
 [package]
 name = "ostool"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 description = "A tool for operating system development"
 authors = ["周睿 <zrufo747@outlook.com>"]
@@ -19,3 +19,4 @@ serialport = "4.6"
 network-interface = "2.0.0"
 tftpd = "0.3"
 serde_json = "1.0"
+object = "0.36.5"

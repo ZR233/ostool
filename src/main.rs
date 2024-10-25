@@ -5,6 +5,7 @@ use clap::*;
 use compile::Compile;
 use project::Project;
 use qemu::Qemu;
+use test::CargoTest;
 
 mod compile;
 mod config;
@@ -12,6 +13,7 @@ mod os;
 mod project;
 mod qemu;
 mod shell;
+mod test;
 mod ui;
 
 #[derive(Parser, Debug)]
@@ -30,6 +32,12 @@ enum SubCommands {
     Build,
     Qemu(QemuArgs),
     Uboot,
+    CargoTest(TestArgs),
+}
+
+#[derive(Args, Debug, Default)]
+struct TestArgs {
+    elf: String,
 }
 
 #[derive(Args, Debug, Default)]
@@ -59,6 +67,16 @@ fn main() -> Result<()> {
             Qemu::run(&mut project, args);
         }
         SubCommands::Uboot => {}
+        SubCommands::CargoTest(args) => {
+            CargoTest::run(&mut project, args.elf);
+            Qemu::run(
+                &mut project,
+                QemuArgs {
+                    debug: false,
+                    dtb: false,
+                },
+            );
+        }
     }
 
     Ok(())
