@@ -1,4 +1,4 @@
-use std::{ffi::OsStr, fs, io::Write, os::unix::ffi::OsStrExt, path::PathBuf, process::Command};
+use std::{ffi::OsStr, fs, io::Write, path::PathBuf, process::Command};
 
 use anyhow::Result;
 
@@ -90,7 +90,7 @@ impl Project {
             .args(["metadata", "--format-version=1", "--no-deps"])
             .output()
             .unwrap();
-        let stdout = OsStr::from_bytes(&output.stdout);
+        let stdout = unsafe { OsStr::from_encoded_bytes_unchecked(&output.stdout) };
         let data = stdout.to_str().unwrap();
 
         serde_json::from_str(data).unwrap()
