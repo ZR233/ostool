@@ -2,8 +2,8 @@ use crate::{
     project::{Arch, Project},
     shell::Shell,
 };
-use object::{Architecture, Object, ObjectSection};
-use std::{env, fs, path::PathBuf};
+use object::{Architecture, Object};
+use std::{fs, path::PathBuf};
 
 pub struct CargoTest {}
 
