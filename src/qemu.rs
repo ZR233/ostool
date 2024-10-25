@@ -32,6 +32,7 @@ impl Qemu {
             .args
             .split(" ")
             .map(|o| o.trim())
+            .filter(|o| !o.is_empty())
             .collect::<Vec<_>>();
 
         cmd.args(more_args);
@@ -45,7 +46,7 @@ impl Qemu {
             cmd.arg(cpu);
         }
         cmd.arg("-kernel");
-        cmd.arg(bin_path);
+        cmd.arg(&bin_path);
         cmd.exec().unwrap();
     }
 }
