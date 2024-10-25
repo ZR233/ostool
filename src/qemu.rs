@@ -18,6 +18,7 @@ impl Qemu {
         }
 
         let bin_path = project.bin_path.as_ref().unwrap();
+        let bin_path = fs::canonicalize(bin_path).unwrap();
 
         let mut cmd = project.shell(project.arch.qemu_arch());
         if !project.config.qemu.graphic {
@@ -34,8 +35,7 @@ impl Qemu {
             .collect::<Vec<_>>();
 
         cmd.args(more_args);
-        cmd.arg("-kernel");
-        cmd.arg(bin_path);
+
         if cli.debug {
             cmd.args(["-s", "-S"]);
         }
@@ -44,7 +44,8 @@ impl Qemu {
             cmd.arg("-cpu");
             cmd.arg(cpu);
         }
-
+        cmd.arg("-kernel");
+        cmd.arg(bin_path);
         cmd.exec().unwrap();
     }
 }
