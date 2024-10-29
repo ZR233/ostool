@@ -25,7 +25,7 @@ impl CargoTest {
             .args(["--strip-all", "-O", "binary"])
             .arg(&elf)
             .arg(&bin_path)
-            .exec()
+            .exec(project.is_print_cmd)
             .unwrap();
 
         project.bin_path = Some(bin_path);

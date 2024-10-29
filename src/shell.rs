@@ -10,19 +10,21 @@ use cargo_metadata::Metadata;
 use colored::Colorize;
 
 pub trait Shell {
-    fn exec(&mut self) -> Result<()>;
+    fn exec(&mut self, is_print_cmd: bool) -> Result<()>;
 }
 
 impl Shell for Command {
-    fn exec(&mut self) -> Result<()> {
-        let mut cmd_str = self.get_program().to_string_lossy().to_string();
+    fn exec(&mut self, is_print_cmd: bool) -> Result<()> {
+        if is_print_cmd {
+            let mut cmd_str = self.get_program().to_string_lossy().to_string();
 
-        for arg in self.get_args() {
-            cmd_str += " ";
-            cmd_str += arg.to_string_lossy().as_ref();
+            for arg in self.get_args() {
+                cmd_str += " ";
+                cmd_str += arg.to_string_lossy().as_ref();
+            }
+
+            println!("{}", cmd_str.purple().bold());
         }
-
-        println!("{}", cmd_str.purple().bold());
 
         let mut child = self.stdout(Stdio::piped()).spawn()?;
 

@@ -1,5 +1,11 @@
 use std::{
-    collections::HashMap, env::{self, Vars}, ffi::OsStr, fs, io::Write, path::{Path, PathBuf}, process::Command
+    collections::HashMap,
+    env::{self},
+    ffi::OsStr,
+    fs,
+    io::Write,
+    path::PathBuf,
+    process::Command,
 };
 
 use anyhow::Result;
@@ -17,19 +23,16 @@ pub struct Project {
     pub arch: Arch,
     pub bin_path: Option<PathBuf>,
     pub is_print_cmd: bool,
-    pub envs: HashMap<String, String>,
 }
 
 impl Project {
     pub fn new(workdir: PathBuf, config: Option<String>) -> Result<Self> {
-        let envs = env::vars();
-
-        // let meta = metadata(&workdir);
+        let meta = metadata(&workdir);
 
         let config_path = config
             .map(PathBuf::from)
-            // .unwrap_or(meta.workspace_root.as_std_path().join(".project.toml"));
-            .unwrap_or(workdir.join(".project.toml"));
+            .unwrap_or(meta.workspace_root.as_std_path().join(".project.toml"));
+        // .unwrap_or(workdir.join(".project.toml"));
         let config;
         if !fs::exists(&config_path)? {
             config = new_config(&workdir);
@@ -47,14 +50,13 @@ impl Project {
             bin_path: None,
             arch,
             is_print_cmd: true,
-            envs: envs.collect(),
         })
     }
 
     pub fn shell<S: AsRef<OsStr>>(&self, program: S) -> Command {
         let mut cmd = Command::new(program);
-        cmd.envs(&self.envs);
-        let dir = PathBuf::from(format!("{}", self.workdir.display()).trim_start_matches("\\\\?\\"));
+        let dir =
+            PathBuf::from(format!("{}", self.workdir.display()).trim_start_matches("\\\\?\\"));
         cmd.current_dir(dir);
         cmd
     }
@@ -68,11 +70,11 @@ impl Project {
     fn install_deps(&self) {
         self.shell("cargo")
             .args(["install", "cargo-binutils"])
-            .exec()
+            .exec(self.is_print_cmd)
             .unwrap();
         self.shell("rustup")
             .args(["component", "add", "llvm-tools-preview", "rust-src"])
-            .exec()
+            .exec(self.is_print_cmd)
             .unwrap();
     }
 
@@ -143,5 +145,3 @@ impl Arch {
         Err(anyhow::anyhow!("Unsupportedtarget: {}", target))
     }
 }
-
-

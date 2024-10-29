@@ -70,6 +70,7 @@ fn main() -> Result<()> {
         }
         SubCommands::Uboot => {}
         SubCommands::CargoTest(args) => {
+            project.is_print_cmd = false;
             CargoTest::run(&mut project, args.elf);
             Qemu::run(
                 &mut project,

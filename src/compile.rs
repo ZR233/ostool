@@ -17,7 +17,6 @@ impl Compile {
 
         let log_level = format!("{:?}", project.config.compile.log_level);
 
-
         let mut features = project.config.compile.features.join(" ");
 
         let deps = project.package_dependencies();
@@ -56,7 +55,10 @@ impl Compile {
             cmd.env(key, value);
         }
 
-        cmd.args(args).env("RUSTFLAGS", rust_flags).exec().unwrap();
+        cmd.args(args)
+            .env("RUSTFLAGS", rust_flags)
+            .exec(project.is_print_cmd)
+            .unwrap();
 
         let elf = project
             .output_dir(debug)
@@ -70,7 +72,7 @@ impl Compile {
             .args(["--strip-all", "-O", "binary"])
             .arg(&elf)
             .arg(&bin_path)
-            .exec()
+            .exec(project.is_print_cmd)
             .unwrap();
 
         let img_size = std::fs::metadata(&bin_path).unwrap().len();

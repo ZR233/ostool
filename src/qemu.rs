@@ -49,6 +49,6 @@ impl Qemu {
         }
         cmd.arg("-kernel");
         cmd.arg(&bin_path);
-        cmd.exec().unwrap();
+        cmd.exec(project.is_print_cmd).unwrap();
     }
 }
