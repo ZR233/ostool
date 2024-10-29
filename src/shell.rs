@@ -76,3 +76,7 @@ pub(crate) fn get_cargo_packages(workdir: &Path) -> Vec<String> {
         .map(|p| p["name"].as_str().unwrap().to_string())
         .collect()
 }
+
+pub(crate) fn check_porgram(program: &str) -> bool {
+    Command::new(program).arg("--version").output().is_ok()
+}

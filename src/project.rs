@@ -9,7 +9,11 @@ use std::{
 use anyhow::Result;
 use cargo_metadata::Metadata;
 
-use crate::{config::ProjectConfig, os::new_config, shell::Shell};
+use crate::{
+    config::ProjectConfig,
+    os::new_config,
+    shell::{check_porgram, Shell},
+};
 
 pub struct Project {
     workdir: PathBuf,
@@ -50,7 +54,13 @@ impl Project {
         cmd
     }
 
-    pub fn install_deps(&self) {
+    pub fn prepere_deps(&self) {
+        if !check_porgram("rust-objcopy") {
+            self.install_deps();
+        }
+    }
+
+    fn install_deps(&self) {
         self.shell("cargo")
             .args(["install", "cargo-binutils"])
             .exec()

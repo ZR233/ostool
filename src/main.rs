@@ -59,7 +59,8 @@ fn main() -> Result<()> {
     println!("Workdir: {}", workdir.display());
 
     let mut project = Project::new(workdir, cli.config)?;
-    project.install_deps();
+
+    project.prepere_deps();
     match cli.command {
         SubCommands::Build => {
             Compile::run(&mut project, false);
@@ -82,4 +83,17 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn it_works() {
+        assert_eq!(1, 1);
+    }
+
+    #[test]
+    fn it_works2() {
+        assert_eq!(0, 1);
+    }
 }
