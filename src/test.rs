@@ -5,7 +5,7 @@ use crate::{
 };
 use object::{Architecture, Object};
 use serde::{Deserialize, Serialize};
-use std::{fs, path::PathBuf};
+use std::{collections::BTreeMap, fs, path::PathBuf};
 
 pub struct CargoTest {}
 
@@ -35,8 +35,11 @@ impl CargoTest {
         let cargo_toml_content = fs::read_to_string(cargo_toml).unwrap();
         let cargo_toml_value: CargoToml = toml::from_str(&cargo_toml_content).unwrap();
 
-        if let Some(test_qemu) = cargo_toml_value.test_qemu {
-            project.config.qemu = test_qemu;
+        if let Some(arch_map) = cargo_toml_value.test_qemu {
+            let k = project.arch.qemu_arch();
+            if let Some(qemu) = arch_map.get(&k) {
+                project.config.qemu = qemu.clone();
+            }
         }
 
         project.bin_path = Some(bin_path);
@@ -46,7 +49,7 @@ impl CargoTest {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct CargoToml {
     #[serde(rename = "test-qemu")]
-    pub test_qemu: Option<Qemu>,
+    pub test_qemu: Option<BTreeMap<String, Qemu>>,
 }
 
 impl From<Architecture> for Arch {

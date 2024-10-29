@@ -20,7 +20,7 @@ impl Qemu {
         let bin_path = project.bin_path.as_ref().unwrap();
         let bin_path = fs::canonicalize(bin_path).unwrap();
 
-        let mut cmd = project.shell(project.arch.qemu_arch());
+        let mut cmd = project.shell(project.arch.qemu_program());
         if !project.config.qemu.graphic {
             cmd.arg("-nographic");
         }

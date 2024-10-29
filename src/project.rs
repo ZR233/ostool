@@ -106,7 +106,6 @@ impl Project {
     }
 }
 
-
 #[derive(Debug, Clone, Copy)]
 pub enum Arch {
     Aarch64,
@@ -121,14 +120,16 @@ impl Default for Arch {
 }
 
 impl Arch {
+    pub fn qemu_program(&self) -> String {
+        format!("qemu-system-{}", self.qemu_arch())
+    }
     pub fn qemu_arch(&self) -> String {
-        let arch = match self {
+        match self {
             Arch::Aarch64 => "aarch64",
             Arch::Riscv64 => "riscv64",
             Arch::X86_64 => "x86_64",
-        };
-
-        format!("qemu-system-{}", arch)
+        }
+        .to_string()
     }
 
     fn from_target(target: &str) -> Result<Arch> {
