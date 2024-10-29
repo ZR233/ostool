@@ -74,10 +74,13 @@ impl Project {
     }
 
     pub fn metadata(&self) {
+        let mainifest = self.workdir.join("Cargo.toml");
+        println!("manifest: {}", mainifest.display());
+
         let mut cmd = cargo_metadata::MetadataCommand::new();
-        cmd.manifest_path(self.workdir.join("Cargo.toml"));
+        cmd.manifest_path(mainifest);
         let meta = cmd.exec().unwrap();
-        println!("{:?}", meta);
+        // println!("{:?}", meta);
     }
 
     pub fn package_dependencies(&self) -> Vec<String> {
