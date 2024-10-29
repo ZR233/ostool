@@ -65,6 +65,7 @@ pub(crate) fn get_cargo_packages(workdir: &Path) -> Vec<String> {
         .output()
         .unwrap();
     let stdout = unsafe { OsStr::from_encoded_bytes_unchecked(&output.stdout) };
+    println!("{:?}", stdout);
     let data = stdout.to_str().unwrap();
 
     let v: serde_json::Value = serde_json::from_str(data).unwrap();
