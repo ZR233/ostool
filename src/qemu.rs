@@ -35,7 +35,9 @@ impl Qemu {
             .filter(|o| !o.is_empty())
             .collect::<Vec<_>>();
 
-        cmd.args(more_args);
+        if !more_args.is_empty() {
+            cmd.args(more_args);
+        }
 
         if cli.debug {
             cmd.args(["-s", "-S"]);
