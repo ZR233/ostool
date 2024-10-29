@@ -56,7 +56,6 @@ fn main() -> Result<()> {
     let mut workdir = PathBuf::from(cli.workdir.unwrap_or("./".to_string()));
     workdir = fs::canonicalize(&workdir)
         .unwrap_or_else(|_| panic!("Workdir not found: {}", workdir.display()));
-    println!("Workdir: {}", workdir.display());
 
     let mut project = Project::new(workdir, cli.config)?;
 

@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::Result;
-use cargo_metadata::Metadata;
+use cargo_metadata::{Metadata, Package};
 
 use crate::{
     config::ProjectConfig,
@@ -20,6 +20,7 @@ pub struct Project {
     pub config: ProjectConfig,
     pub arch: Arch,
     pub bin_path: Option<PathBuf>,
+    pub is_print_cmd: bool,
 }
 
 impl Project {
@@ -45,6 +46,7 @@ impl Project {
             config,
             bin_path: None,
             arch,
+            is_print_cmd: true,
         })
     }
 
@@ -85,38 +87,17 @@ impl Project {
         metadata(&self.workdir)
     }
 
-    pub fn package_metadata(&self) -> serde_json::Value {
-        let meta = self.cargo_meta();
-        let packages = meta["packages"].as_array().unwrap();
-        let package = packages
-            .iter()
-            .find(|one| one["name"] == self.config.compile.package)
-            .unwrap();
-
-        package.clone()
+    pub fn package_metadata(&self) -> Package {
+        self.cargo_metadata()
+            .packages
+            .into_iter()
+            .find(|one| one.name == self.config.compile.package)
+            .unwrap_or_else(|| panic!("Package {} not found!", self.config.compile.package))
     }
 
     pub fn package_dependencies(&self) -> Vec<String> {
         let meta = self.package_metadata();
-
-        meta["dependencies"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|one| one["name"].as_str().unwrap().to_string())
-            .collect()
-    }
-
-    fn cargo_meta(&self) -> serde_json::Value {
-        let output = Command::new("cargo")
-            .current_dir(&self.workdir)
-            .args(["metadata", "--format-version=1", "--no-deps"])
-            .output()
-            .unwrap();
-        let stdout = unsafe { OsStr::from_encoded_bytes_unchecked(&output.stdout) };
-        let data = stdout.to_str().unwrap();
-
-        serde_json::from_str(data).unwrap()
+        meta.dependencies.into_iter().map(|dep| dep.name).collect()
     }
 }
 
