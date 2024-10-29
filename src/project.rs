@@ -1,12 +1,4 @@
-use std::{
-    collections::HashMap,
-    env::{self},
-    ffi::OsStr,
-    fs,
-    io::Write,
-    path::PathBuf,
-    process::Command,
-};
+use std::{ffi::OsStr, fs, io::Write, path::PathBuf, process::Command};
 
 use anyhow::Result;
 use cargo_metadata::{Metadata, Package};
