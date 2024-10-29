@@ -1,10 +1,12 @@
 use std::{
     ffi::{OsStr, OsString},
-    path::Path,
+    io::{BufRead, BufReader},
+    path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
 use anyhow::Result;
+use cargo_metadata::Metadata;
 use colored::Colorize;
 
 pub trait Shell {
@@ -22,12 +24,16 @@ impl Shell for Command {
 
         println!("{}", cmd_str.purple().bold());
 
-        let out = self
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .spawn()?
-            .wait_with_output()?;
+        let mut child = self.stdout(Stdio::piped()).spawn()?;
+
+        let stdout = BufReader::new(child.stdout.take().unwrap());
+        for line in stdout.lines() {
+            let line = line.expect("Failed to read line");
+            // 解析输出为UTF-8
+            println!("{}", line);
+        }
+
+        let out = child.wait_with_output()?;
 
         if !out.status.success() {
             unsafe {
@@ -41,7 +47,15 @@ impl Shell for Command {
         Ok(())
     }
 }
-
+pub(crate) fn metadata(workdir: &Path) -> Metadata {
+    let mut mainifest = workdir.join("Cargo.toml");
+    mainifest = PathBuf::from(format!("{}", mainifest.display()).trim_start_matches("\\\\?\\"));
+    println!("manifest: {}", mainifest.display());
+    let mut cmd = cargo_metadata::MetadataCommand::new();
+    cmd.manifest_path(mainifest);
+    cmd.no_deps();
+    cmd.exec().unwrap()
+}
 pub(crate) fn get_rustup_targets() -> Result<Vec<String>> {
     let output = Command::new("rustup").args(["target", "list"]).output()?;
 
@@ -59,22 +73,9 @@ pub(crate) fn get_rustup_targets() -> Result<Vec<String>> {
 }
 
 pub(crate) fn get_cargo_packages(workdir: &Path) -> Vec<String> {
-    let output = Command::new("cargo")
-        .current_dir(workdir)
-        .args(["metadata", "--format-version=1", "--no-deps"])
-        .output()
-        .unwrap();
-    let stdout = unsafe { OsStr::from_encoded_bytes_unchecked(&output.stdout) };
-    println!("{:?}", stdout);
-    let data = stdout.to_str().unwrap();
+    let meta = metadata(workdir);
 
-    let v: serde_json::Value = serde_json::from_str(data).unwrap();
-    let packages = v["packages"].as_array().unwrap();
-
-    packages
-        .iter()
-        .map(|p| p["name"].as_str().unwrap().to_string())
-        .collect()
+    meta.packages.into_iter().map(|p| p.name).collect()
 }
 
 pub(crate) fn check_porgram(program: &str) -> bool {

@@ -1,9 +1,5 @@
 use std::{
-    ffi::OsStr,
-    fs,
-    io::Write,
-    path::{Path, PathBuf},
-    process::Command,
+    collections::HashMap, env::{self, Vars}, ffi::OsStr, fs, io::Write, path::{Path, PathBuf}, process::Command
 };
 
 use anyhow::Result;
@@ -12,7 +8,7 @@ use cargo_metadata::{Metadata, Package};
 use crate::{
     config::ProjectConfig,
     os::new_config,
-    shell::{check_porgram, Shell},
+    shell::{check_porgram, metadata, Shell},
 };
 
 pub struct Project {
@@ -21,15 +17,19 @@ pub struct Project {
     pub arch: Arch,
     pub bin_path: Option<PathBuf>,
     pub is_print_cmd: bool,
+    pub envs: HashMap<String, String>,
 }
 
 impl Project {
     pub fn new(workdir: PathBuf, config: Option<String>) -> Result<Self> {
-        let meta = metadata(&workdir);
+        let envs = env::vars();
+
+        // let meta = metadata(&workdir);
 
         let config_path = config
             .map(PathBuf::from)
-            .unwrap_or(meta.workspace_root.as_std_path().join(".project.toml"));
+            // .unwrap_or(meta.workspace_root.as_std_path().join(".project.toml"));
+            .unwrap_or(workdir.join(".project.toml"));
         let config;
         if !fs::exists(&config_path)? {
             config = new_config(&workdir);
@@ -47,12 +47,15 @@ impl Project {
             bin_path: None,
             arch,
             is_print_cmd: true,
+            envs: envs.collect(),
         })
     }
 
     pub fn shell<S: AsRef<OsStr>>(&self, program: S) -> Command {
         let mut cmd = Command::new(program);
-        cmd.current_dir(&self.workdir);
+        cmd.envs(&self.envs);
+        let dir = PathBuf::from(format!("{}", self.workdir.display()).trim_start_matches("\\\\?\\"));
+        cmd.current_dir(dir);
         cmd
     }
 
@@ -141,11 +144,4 @@ impl Arch {
     }
 }
 
-fn metadata(workdir: &Path) -> Metadata {
-    let mut mainifest = workdir.join("Cargo.toml");
-    mainifest = PathBuf::from(format!("{}", mainifest.display()).trim_start_matches("\\\\?\\"));
-    println!("manifest: {}", mainifest.display());
-    let mut cmd = cargo_metadata::MetadataCommand::new();
-    cmd.manifest_path(mainifest);
-    cmd.exec().unwrap()
-}
+

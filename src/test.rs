@@ -3,15 +3,14 @@ use crate::{
     shell::Shell,
 };
 use object::{Architecture, Object};
-use std::{env, fs, path::PathBuf};
+use std::{fs, path::PathBuf};
 
 pub struct CargoTest {}
 
 impl CargoTest {
     pub fn run(project: &mut Project, elf: String) {
         let meta = project.cargo_metadata();
-        
-        
+
         let binary_data = fs::read(&elf).unwrap();
         let file = object::File::parse(&*binary_data).unwrap();
         let arch = file.architecture();

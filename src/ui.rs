@@ -1,7 +1,9 @@
 use std::io::Write;
 
+use colored::Colorize;
+
 pub fn shell_select(question: &str, options: &[String]) -> usize {
-    println!("{}", question);
+    println!("{}", question.yellow());
     for (i, option) in options.iter().enumerate() {
         println!("  {}: {}", i, option);
     }

@@ -17,10 +17,10 @@ impl Compile {
 
         let log_level = format!("{:?}", project.config.compile.log_level);
 
-        let deps = project.package_dependencies();
 
         let mut features = project.config.compile.features.join(" ");
 
+        let deps = project.package_dependencies();
         if deps.contains(&"log".to_string()) {
             let features_log_level = format!("log/release_max_level_{}", log_level.to_lowercase());
             features += " ";
@@ -33,12 +33,15 @@ impl Compile {
             &project.config.compile.package,
             "--target",
             &project.config.compile.target,
-            "-Z", "unstable-options"
+            "-Z",
+            "unstable-options",
         ];
 
         if !features.is_empty() {
             args.push("--features");
-            args.push(&features);
+            for feature in features.split_whitespace() {
+                args.push(feature);
+            }
         }
 
         if !debug {
