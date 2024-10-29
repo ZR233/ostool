@@ -1,6 +1,13 @@
-use std::{ffi::OsStr, fs, io::Write, path::PathBuf, process::Command};
+use std::{
+    ffi::OsStr,
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use anyhow::Result;
+use cargo_metadata::Metadata;
 
 use crate::{config::ProjectConfig, os::new_config, shell::Shell};
 
@@ -13,9 +20,11 @@ pub struct Project {
 
 impl Project {
     pub fn new(workdir: PathBuf, config: Option<String>) -> Result<Self> {
+        let meta = metadata(&workdir);
+
         let config_path = config
             .map(PathBuf::from)
-            .unwrap_or(workdir.join(".project.toml"));
+            .unwrap_or(meta.workspace_root.as_std_path().join(".project.toml"));
         let config;
         if !fs::exists(&config_path)? {
             config = new_config(&workdir);
@@ -62,6 +71,10 @@ impl Project {
             .join(if debug { "debug" } else { "release" })
     }
 
+    pub fn cargo_metadata(&self) -> Metadata {
+        metadata(&self.workdir)
+    }
+
     pub fn package_metadata(&self) -> serde_json::Value {
         let meta = self.cargo_meta();
         let packages = meta["packages"].as_array().unwrap();
@@ -71,16 +84,6 @@ impl Project {
             .unwrap();
 
         package.clone()
-    }
-
-    pub fn metadata(&self) {
-        let mainifest = self.workdir.join("Cargo.toml");
-        println!("manifest: {}", mainifest.display());
-
-        let mut cmd = cargo_metadata::MetadataCommand::new();
-        cmd.manifest_path(mainifest);
-        let meta = cmd.exec().unwrap();
-        // println!("{:?}", meta);
     }
 
     pub fn package_dependencies(&self) -> Vec<String> {
@@ -95,8 +98,6 @@ impl Project {
     }
 
     fn cargo_meta(&self) -> serde_json::Value {
-        self.metadata();
-        
         let output = Command::new("cargo")
             .current_dir(&self.workdir)
             .args(["metadata", "--format-version=1", "--no-deps"])
@@ -147,4 +148,13 @@ impl Arch {
 
         Err(anyhow::anyhow!("Unsupportedtarget: {}", target))
     }
+}
+
+fn metadata(workdir: &Path) -> Metadata {
+    let mut mainifest = workdir.join("Cargo.toml");
+    mainifest = PathBuf::from(format!("{}", mainifest.display()).trim_start_matches("\\\\?\\"));
+    println!("manifest: {}", mainifest.display());
+    let mut cmd = cargo_metadata::MetadataCommand::new();
+    cmd.manifest_path(mainifest);
+    cmd.exec().unwrap()
 }

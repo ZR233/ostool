@@ -9,7 +9,8 @@ pub struct CargoTest {}
 
 impl CargoTest {
     pub fn run(project: &mut Project, elf: String) {
-        project.metadata();
+        let meta = project.cargo_metadata();
+        
         
         let binary_data = fs::read(&elf).unwrap();
         let file = object::File::parse(&*binary_data).unwrap();
