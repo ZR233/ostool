@@ -73,6 +73,13 @@ impl Project {
         package.clone()
     }
 
+    pub fn metadata(&self) {
+        let mut cmd = cargo_metadata::MetadataCommand::new();
+        cmd.manifest_path(self.workdir.join("Cargo.toml"));
+        let meta = cmd.exec().unwrap();
+        println!("{:?}", meta);
+    }
+
     pub fn package_dependencies(&self) -> Vec<String> {
         let meta = self.package_metadata();
 
@@ -85,6 +92,8 @@ impl Project {
     }
 
     fn cargo_meta(&self) -> serde_json::Value {
+        self.metadata();
+        
         let output = Command::new("cargo")
             .current_dir(&self.workdir)
             .args(["metadata", "--format-version=1", "--no-deps"])

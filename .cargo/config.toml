@@ -1,0 +1,2 @@
+[target.'cfg(all())']
+runner="target/debug/ostool cargo-test /home/zhour/qcl/arceos/target/aarch64-unknown-none-softfloat/release/arceos-httpserver "
