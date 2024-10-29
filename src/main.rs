@@ -38,6 +38,9 @@ enum SubCommands {
 #[derive(Args, Debug, Default)]
 struct TestArgs {
     elf: String,
+    mode: Option<String>,
+    #[arg(long)]
+    show_output: bool,
 }
 
 #[derive(Args, Debug, Default)]
