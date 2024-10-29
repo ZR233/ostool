@@ -53,9 +53,7 @@ struct QemuArgs {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let mut workdir = PathBuf::from(cli.workdir.unwrap_or("./".to_string()));
-    workdir = fs::canonicalize(&workdir)
-        .unwrap_or_else(|_| panic!("Workdir not found: {}", workdir.display()));
+    let workdir = PathBuf::from(cli.workdir.unwrap_or("./".to_string()));
 
     let mut project = Project::new(workdir, cli.config)?;
 

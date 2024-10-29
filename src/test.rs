@@ -1,15 +1,17 @@
 use crate::{
+    config::qemu::Qemu,
     project::{Arch, Project},
     shell::Shell,
 };
 use object::{Architecture, Object};
+use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
 
 pub struct CargoTest {}
 
 impl CargoTest {
     pub fn run(project: &mut Project, elf: String) {
-        let meta = project.cargo_metadata();
+        project.config.qemu.machine = Some("virt".to_string());
 
         let binary_data = fs::read(&elf).unwrap();
         let file = object::File::parse(&*binary_data).unwrap();
@@ -28,8 +30,23 @@ impl CargoTest {
             .exec(project.is_print_cmd)
             .unwrap();
 
+        project.config.qemu = Qemu::new_default(project.arch);
+        let cargo_toml = project.workdir().join("Cargo.toml");
+        let cargo_toml_content = fs::read_to_string(cargo_toml).unwrap();
+        let cargo_toml_value: CargoToml = toml::from_str(&cargo_toml_content).unwrap();
+
+        if let Some(test_qemu) = cargo_toml_value.test_qemu {
+            project.config.qemu = test_qemu;
+        }
+
         project.bin_path = Some(bin_path);
     }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct CargoToml {
+    #[serde(rename = "test-qemu")]
+    pub test_qemu: Option<Qemu>,
 }
 
 impl From<Architecture> for Arch {

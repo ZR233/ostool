@@ -52,7 +52,6 @@ impl Shell for Command {
 pub(crate) fn metadata(workdir: &Path) -> Metadata {
     let mut mainifest = workdir.join("Cargo.toml");
     mainifest = PathBuf::from(format!("{}", mainifest.display()).trim_start_matches("\\\\?\\"));
-    println!("manifest: {}", mainifest.display());
     let mut cmd = cargo_metadata::MetadataCommand::new();
     cmd.manifest_path(mainifest);
     cmd.no_deps();

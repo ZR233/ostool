@@ -1,4 +1,10 @@
-use std::{ffi::OsStr, fs, io::Write, path::PathBuf, process::Command};
+use std::{
+    ffi::OsStr,
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use anyhow::Result;
 use cargo_metadata::{Metadata, Package};
@@ -24,7 +30,7 @@ impl Project {
         let config_path = config
             .map(PathBuf::from)
             .unwrap_or(meta.workspace_root.as_std_path().join(".project.toml"));
-        // .unwrap_or(workdir.join(".project.toml"));
+
         let config;
         if !fs::exists(&config_path)? {
             config = new_config(&workdir);
@@ -45,11 +51,13 @@ impl Project {
         })
     }
 
+    pub fn workdir(&self) -> &Path {
+        &self.workdir
+    }
+
     pub fn shell<S: AsRef<OsStr>>(&self, program: S) -> Command {
         let mut cmd = Command::new(program);
-        let dir =
-            PathBuf::from(format!("{}", self.workdir.display()).trim_start_matches("\\\\?\\"));
-        cmd.current_dir(dir);
+        cmd.current_dir(self.workdir());
         cmd
     }
 
@@ -98,6 +106,8 @@ impl Project {
     }
 }
 
+
+#[derive(Debug, Clone, Copy)]
 pub enum Arch {
     Aarch64,
     Riscv64,
