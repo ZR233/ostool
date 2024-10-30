@@ -7,6 +7,8 @@ use std::{
     },
 };
 
+use colored::Colorize;
+
 use crate::{project::Project, shell::Shell, QemuArgs};
 
 pub struct Qemu {}
@@ -68,7 +70,8 @@ impl Qemu {
             })
             .unwrap();
             if !is_ok.load(Ordering::SeqCst) {
-                panic!("Test failed");
+                println!("{}", "Test failed!".red());
+                exit(-1);
             }
         } else {
             cmd.exec(project.is_print_cmd).unwrap();
