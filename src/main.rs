@@ -64,7 +64,7 @@ fn main() -> Result<()> {
         }
         SubCommands::Qemu(args) => {
             Compile::run(&mut project, args.debug);
-            Qemu::run(&mut project, args);
+            Qemu::run(&mut project, args, false);
         }
         SubCommands::Uboot => {}
         SubCommands::CargoTest(args) => {
@@ -76,6 +76,7 @@ fn main() -> Result<()> {
                     debug: false,
                     dtb: false,
                 },
+                true,
             );
         }
     }

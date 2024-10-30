@@ -1,11 +1,18 @@
-use std::fs;
+use std::{
+    fs,
+    process::{exit, ExitCode},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
 
 use crate::{project::Project, shell::Shell, QemuArgs};
 
 pub struct Qemu {}
 
 impl Qemu {
-    pub fn run(project: &mut Project, cli: QemuArgs) {
+    pub fn run(project: &mut Project, cli: QemuArgs, is_check_test: bool) {
         let mut machine = "virt".to_string();
 
         if let Some(m) = project.config.qemu.machine.as_ref() {
@@ -49,6 +56,22 @@ impl Qemu {
         }
         cmd.arg("-kernel");
         cmd.arg(&bin_path);
-        cmd.exec(project.is_print_cmd).unwrap();
+
+        if is_check_test {
+            let is_ok = Arc::new(AtomicBool::new(false));
+            let is_ok2 = is_ok.clone();
+            cmd.exec_with_lines(project.is_print_cmd, move |line| {
+                if line.contains("All tests passed") {
+                    is_ok2.store(true, Ordering::SeqCst);
+                }
+                Ok(())
+            })
+            .unwrap();
+            if !is_ok.load(Ordering::SeqCst) {
+                panic!("Test failed");
+            }
+        } else {
+            cmd.exec(project.is_print_cmd).unwrap();
+        }
     }
 }

@@ -2,7 +2,7 @@ use std::{
     ffi::{OsStr, OsString},
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::{Command, Output, Stdio},
 };
 
 use anyhow::Result;
@@ -10,11 +10,22 @@ use cargo_metadata::Metadata;
 use colored::Colorize;
 
 pub trait Shell {
-    fn exec(&mut self, is_print_cmd: bool) -> Result<()>;
+    fn exec_with_lines(
+        &mut self,
+        is_print_cmd: bool,
+        on_line: impl Fn(&str) -> Result<()>,
+    ) -> Result<()>;
+    fn exec(&mut self, is_print_cmd: bool) -> Result<()> {
+        self.exec_with_lines(is_print_cmd, |_| Ok(()))
+    }
 }
 
 impl Shell for Command {
-    fn exec(&mut self, is_print_cmd: bool) -> Result<()> {
+    fn exec_with_lines(
+        &mut self,
+        is_print_cmd: bool,
+        on_line: impl Fn(&str) -> Result<()>,
+    ) -> Result<()> {
         if is_print_cmd {
             let mut cmd_str = self.get_program().to_string_lossy().to_string();
 
@@ -33,6 +44,7 @@ impl Shell for Command {
             let line = line.expect("Failed to read line");
             // 解析输出为UTF-8
             println!("{}", line);
+            on_line(&line)?;
         }
 
         let out = child.wait_with_output()?;
