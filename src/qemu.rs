@@ -71,7 +71,7 @@ impl Qemu {
             .unwrap();
             if !is_ok.load(Ordering::SeqCst) {
                 println!("{}", "Test failed!".red());
-                exit(-1);
+                exit(1);
             }
         } else {
             cmd.exec(project.is_print_cmd).unwrap();
