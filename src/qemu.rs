@@ -1,6 +1,6 @@
 use std::{
     fs,
-    process::{exit, ExitCode},
+    process::exit,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,

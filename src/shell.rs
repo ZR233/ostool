@@ -2,7 +2,7 @@ use std::{
     ffi::{OsStr, OsString},
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
-    process::{Command, Output, Stdio},
+    process::{Command, Stdio},
 };
 
 use anyhow::Result;

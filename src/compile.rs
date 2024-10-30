@@ -36,13 +36,6 @@ impl Compile {
             "unstable-options",
         ];
 
-        if !features.is_empty() {
-            args.push("--features");
-            for feature in features.split_whitespace() {
-                args.push(feature);
-            }
-        }
-
         if !debug {
             args.push("--release");
         }
@@ -55,10 +48,14 @@ impl Compile {
             cmd.env(key, value);
         }
 
-        cmd.args(args)
-            .env("RUSTFLAGS", rust_flags)
-            .exec(project.is_print_cmd)
-            .unwrap();
+        cmd.env("RUSTFLAGS", rust_flags).args(args);
+
+        if !features.is_empty() {
+            cmd.arg("--features");
+            let features_str = features.split_whitespace().collect::<Vec<_>>().join(" ");
+            cmd.arg(features_str);
+        }
+        cmd.exec(project.is_print_cmd).unwrap();
 
         let elf = project
             .output_dir(debug)
