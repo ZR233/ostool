@@ -55,14 +55,15 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     let workdir = PathBuf::from(cli.workdir.unwrap_or("./".to_string()));
 
-    let mut project = Project::new(workdir, cli.config)?;
-
+    let mut project = Project::new(workdir);
     project.prepere_deps();
     match cli.command {
         SubCommands::Build => {
+            project.config_by_file(cli.config).unwrap();
             Compile::run(&mut project, false);
         }
         SubCommands::Qemu(args) => {
+            project.config_by_file(cli.config).unwrap();
             Compile::run(&mut project, args.debug);
             Qemu::run(&mut project, args, false);
         }

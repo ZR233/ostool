@@ -1,5 +1,5 @@
 use crate::{
-    config::qemu::Qemu,
+    config::{compile::LogLevel, qemu::Qemu, ProjectConfig},
     project::{Arch, Project},
     shell::Shell,
 };
@@ -11,12 +11,15 @@ pub struct CargoTest {}
 
 impl CargoTest {
     pub fn run(project: &mut Project, elf: String) {
-        project.config.qemu.machine = Some("virt".to_string());
-
         let binary_data = fs::read(&elf).unwrap();
         let file = object::File::parse(&*binary_data).unwrap();
         let arch = file.architecture();
         project.arch = arch.into();
+        
+
+        let mut config = ProjectConfig::new(project.arch);
+        config.qemu.machine = Some("virt".to_string());
+        config.compile.log_level = LogLevel::Error;
 
         let mut bin_path = PathBuf::from(&elf);
         bin_path = bin_path.parent().unwrap().join("test.bin");
@@ -30,7 +33,7 @@ impl CargoTest {
             .exec(project.is_print_cmd)
             .unwrap();
 
-        project.config.qemu = Qemu::new_default(project.arch);
+        config.qemu = Qemu::new_default(project.arch);
         let cargo_toml = project.workdir().join("Cargo.toml");
         let cargo_toml_content = fs::read_to_string(cargo_toml).unwrap();
         let cargo_toml_value: CargoToml = toml::from_str(&cargo_toml_content).unwrap();
@@ -38,10 +41,10 @@ impl CargoTest {
         if let Some(arch_map) = cargo_toml_value.test_qemu {
             let k = project.arch.qemu_arch();
             if let Some(qemu) = arch_map.get(&k) {
-                project.config.qemu = qemu.clone();
+                config.qemu = qemu.clone();
             }
         }
-
+        project.config = Some(config);
         project.bin_path = Some(bin_path);
     }
 }

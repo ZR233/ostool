@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Compile {
     pub target: String,
     pub kernel_bin_name: Option<String>,
@@ -21,4 +21,10 @@ pub enum LogLevel {
     Info,
     Warn,
     Error,
+}
+
+impl Default for LogLevel {
+    fn default() -> Self {
+        Self::Debug
+    }
 }

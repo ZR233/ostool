@@ -17,7 +17,7 @@ impl Qemu {
     pub fn run(project: &mut Project, cli: QemuArgs, is_check_test: bool) {
         let mut machine = "virt".to_string();
 
-        if let Some(m) = project.config.qemu.machine.as_ref() {
+        if let Some(m) = project.config_ref().qemu.machine.as_ref() {
             machine = m.to_string();
         }
 
@@ -30,13 +30,13 @@ impl Qemu {
         let bin_path = fs::canonicalize(bin_path).unwrap();
 
         let mut cmd = project.shell(project.arch.qemu_program());
-        if !project.config.qemu.graphic {
+        if !project.config_ref().qemu.graphic {
             cmd.arg("-nographic");
         }
         cmd.args(["-machine", &machine]);
 
         let more_args = project
-            .config
+            .config_ref()
             .qemu
             .args
             .split(" ")
@@ -52,7 +52,7 @@ impl Qemu {
             cmd.args(["-s", "-S"]);
         }
 
-        if let Some(cpu) = &project.config.qemu.cpu {
+        if let Some(cpu) = &project.config_ref().qemu.cpu {
             cmd.arg("-cpu");
             cmd.arg(cpu);
         }

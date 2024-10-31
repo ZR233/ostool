@@ -17,38 +17,45 @@ use crate::{
 
 pub struct Project {
     workdir: PathBuf,
-    pub config: ProjectConfig,
+    pub config: Option<ProjectConfig>,
     pub arch: Arch,
     pub bin_path: Option<PathBuf>,
     pub is_print_cmd: bool,
 }
 
 impl Project {
-    pub fn new(workdir: PathBuf, config: Option<String>) -> Result<Self> {
-        let meta = metadata(&workdir);
+    pub fn new(workdir: PathBuf) -> Self {
+        Self {
+            workdir,
+            config: None,
+            bin_path: None,
+            arch: Arch::Aarch64,
+            is_print_cmd: true,
+        }
+    }
 
-        let config_path = config
+    pub fn config_by_file(&mut self, config_path: Option<String>) -> Result<()> {
+        let meta = metadata(self.workdir());
+        let config_path = config_path
             .map(PathBuf::from)
             .unwrap_or(meta.workspace_root.as_std_path().join(".project.toml"));
 
         let config;
         if !fs::exists(&config_path)? {
-            config = new_config(&workdir);
+            config = new_config(self.workdir());
             let config_str = toml::to_string(&config).unwrap();
             let mut file = fs::File::create(&config_path).unwrap();
             file.write_all(config_str.as_bytes()).unwrap();
         } else {
             config = toml::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
         }
-        let arch = Arch::from_target(&config.compile.target).unwrap();
+        self.arch = Arch::from_target(&config.compile.target).unwrap();
+        self.config = Some(config);
+        Ok(())
+    }
 
-        Ok(Self {
-            workdir,
-            config,
-            bin_path: None,
-            arch,
-            is_print_cmd: true,
-        })
+    pub fn config_ref(&self) -> &ProjectConfig {
+        self.config.as_ref().unwrap()
     }
 
     pub fn workdir(&self) -> &Path {
@@ -81,7 +88,7 @@ impl Project {
     pub fn output_dir(&self, debug: bool) -> PathBuf {
         let pwd = self.workdir.clone();
 
-        let target = &self.config.compile.target;
+        let target = &self.config_ref().compile.target;
 
         pwd.join("target")
             .join(target)
@@ -96,8 +103,8 @@ impl Project {
         self.cargo_metadata()
             .packages
             .into_iter()
-            .find(|one| one.name == self.config.compile.package)
-            .unwrap_or_else(|| panic!("Package {} not found!", self.config.compile.package))
+            .find(|one| one.name == self.config_ref().compile.package)
+            .unwrap_or_else(|| panic!("Package {} not found!", self.config_ref().compile.package))
     }
 
     pub fn package_dependencies(&self) -> Vec<String> {

@@ -7,7 +7,7 @@ pub struct Compile {}
 impl Compile {
     pub fn run(project: &mut Project, debug: bool) {
         let bin_name = project
-            .config
+            .config_ref()
             .compile
             .kernel_bin_name
             .clone()
@@ -15,9 +15,9 @@ impl Compile {
 
         let bin_path = project.output_dir(debug).join(bin_name);
 
-        let log_level = format!("{:?}", project.config.compile.log_level);
+        let log_level = format!("{:?}", project.config_ref().compile.log_level);
 
-        let mut features = project.config.compile.features.join(" ");
+        let mut features = project.config_ref().compile.features.join(" ");
 
         let deps = project.package_dependencies();
         if deps.contains(&"log".to_string()) {
@@ -29,9 +29,9 @@ impl Compile {
         let mut args = vec![
             "build",
             "-p",
-            &project.config.compile.package,
+            &project.config_ref().compile.package,
             "--target",
-            &project.config.compile.target,
+            &project.config_ref().compile.target,
             "-Z",
             "unstable-options",
         ];
@@ -40,11 +40,11 @@ impl Compile {
             args.push("--release");
         }
 
-        let rust_flags = project.config.compile.rust_flags.clone();
+        let rust_flags = project.config_ref().compile.rust_flags.clone();
 
         let mut cmd = project.shell("cargo");
 
-        for (key, value) in &project.config.compile.env {
+        for (key, value) in &project.config_ref().compile.env {
             cmd.env(key, value);
         }
 
@@ -59,7 +59,7 @@ impl Compile {
 
         let elf = project
             .output_dir(debug)
-            .join(&project.config.compile.package);
+            .join(&project.config_ref().compile.package);
 
         let _ = std::fs::remove_file("target/kernel.elf");
         std::fs::copy(&elf, "target/kernel.elf").unwrap();
