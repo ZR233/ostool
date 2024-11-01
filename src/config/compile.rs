@@ -11,7 +11,13 @@ pub struct Compile {
     pub rust_flags: String,
     pub features: Vec<String>,
     pub env: BTreeMap<String, String>,
-    pub custom_shell: Option<String>,
+    pub custom_build: Option<CustomBuild>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CustomBuild {
+    pub shell: String,
+    pub elf: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

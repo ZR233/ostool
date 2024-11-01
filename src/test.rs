@@ -14,10 +14,9 @@ impl CargoTest {
         let binary_data = fs::read(&elf).unwrap();
         let file = object::File::parse(&*binary_data).unwrap();
         let arch = file.architecture();
-        project.arch = arch.into();
-        
+        project.arch = Some(arch.into());
 
-        let mut config = ProjectConfig::new(project.arch);
+        let mut config = ProjectConfig::new(project.arch.unwrap());
         config.qemu.machine = Some("virt".to_string());
         config.compile.log_level = LogLevel::Error;
 
@@ -33,13 +32,13 @@ impl CargoTest {
             .exec(project.is_print_cmd)
             .unwrap();
 
-        config.qemu = Qemu::new_default(project.arch);
+        config.qemu = Qemu::new_default(project.arch.unwrap());
         let cargo_toml = project.workdir().join("Cargo.toml");
         let cargo_toml_content = fs::read_to_string(cargo_toml).unwrap();
         let cargo_toml_value: CargoToml = toml::from_str(&cargo_toml_content).unwrap();
 
         if let Some(arch_map) = cargo_toml_value.test_qemu {
-            let k = project.arch.qemu_arch();
+            let k = project.arch.unwrap().qemu_arch();
             if let Some(qemu) = arch_map.get(&k) {
                 config.qemu = qemu.clone();
             }

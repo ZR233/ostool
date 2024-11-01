@@ -61,7 +61,7 @@ impl OsConfig for Sparreal {
                 rust_flags:
                     "-C link-arg=-TLink.x -C link-arg=-no-pie -C link-arg=-znostart-stop-gc"
                         .to_string(),
-                custom_shell: None,
+                custom_build: None,
                 env: BTreeMap::new(),
                 features: Vec::new(),
             },
@@ -71,6 +71,7 @@ impl OsConfig for Sparreal {
                 graphic: false,
                 args: String::new(),
             },
+            uboot: None,
         }
     }
 }

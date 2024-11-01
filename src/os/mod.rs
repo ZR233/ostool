@@ -66,7 +66,7 @@ impl OsConfig for Custom {
                 package,
                 log_level: LogLevel::Debug,
                 rust_flags: String::new(),
-                custom_shell: None,
+                custom_build: None,
                 env: BTreeMap::new(),
                 features: Vec::new(),
             },
@@ -76,6 +76,7 @@ impl OsConfig for Custom {
                 graphic: false,
                 args: String::new(),
             },
+            uboot: None,
         }
     }
 }

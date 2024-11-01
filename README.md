@@ -1,4 +1,5 @@
 # ostool
+
 Rust开发OS的工具集
 
 ## 使用
@@ -11,9 +12,9 @@ ostool --help
 ### Qemu启动
 
 ```shell
-ostool qemu
+ostool run qemu
 # debug
-ostool qemu -d
+ostool run qemu -d
 ```
 
 ### U-Boot 启动
@@ -21,4 +22,3 @@ ostool qemu -d
 ```shell
 ostool uboot
 ```
-

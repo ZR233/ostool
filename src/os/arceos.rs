@@ -86,7 +86,7 @@ impl OsConfig for ArceOS {
                 package,
                 log_level: LogLevel::Debug,
                 rust_flags,
-                custom_shell: None,
+                custom_build: None,
                 env,
                 features: ["axstd/log-level-info", "axstd/smp"]
                     .iter()
@@ -99,6 +99,7 @@ impl OsConfig for ArceOS {
                 graphic: false,
                 args: "-smp 4".to_string(),
             },
+            uboot: None,
         }
     }
 }

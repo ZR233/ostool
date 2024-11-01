@@ -15,10 +15,11 @@ use crate::{
     shell::{check_porgram, metadata, Shell},
 };
 
+#[derive(Default)]
 pub struct Project {
     workdir: PathBuf,
     pub config: Option<ProjectConfig>,
-    pub arch: Arch,
+    pub arch: Option<Arch>,
     pub bin_path: Option<PathBuf>,
     pub is_print_cmd: bool,
 }
@@ -27,18 +28,14 @@ impl Project {
     pub fn new(workdir: PathBuf) -> Self {
         Self {
             workdir,
-            config: None,
-            bin_path: None,
-            arch: Arch::Aarch64,
             is_print_cmd: true,
+            ..Default::default()
         }
     }
 
-    pub fn config_by_file(&mut self, config_path: Option<String>) -> Result<()> {
+    pub fn config_with_file(&mut self) -> Result<()> {
         let meta = metadata(self.workdir());
-        let config_path = config_path
-            .map(PathBuf::from)
-            .unwrap_or(meta.workspace_root.as_std_path().join(".project.toml"));
+        let config_path = meta.workspace_root.as_std_path().join(".project.toml");
 
         let config;
         if !fs::exists(&config_path)? {
@@ -49,7 +46,7 @@ impl Project {
         } else {
             config = toml::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
         }
-        self.arch = Arch::from_target(&config.compile.target).unwrap();
+        self.arch = Some(Arch::from_target(&config.compile.target).unwrap());
         self.config = Some(config);
         Ok(())
     }

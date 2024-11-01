@@ -14,6 +14,7 @@ mod project;
 mod qemu;
 mod shell;
 mod test;
+mod uboot;
 mod ui;
 
 #[derive(Parser, Debug)]
@@ -21,8 +22,6 @@ mod ui;
 struct Cli {
     #[arg(short, long)]
     workdir: Option<String>,
-    #[arg(short, long)]
-    config: Option<String>,
     #[command(subcommand)]
     command: SubCommands,
 }
@@ -30,9 +29,19 @@ struct Cli {
 #[derive(Subcommand, Debug)]
 enum SubCommands {
     Build,
+    Run(RunArgs),
+    CargoTest(TestArgs),
+}
+#[derive(Args, Debug)]
+struct RunArgs {
+    #[command(subcommand)]
+    command: RunSubCommands,
+}
+
+#[derive(Subcommand, Debug)]
+enum RunSubCommands {
     Qemu(QemuArgs),
     Uboot,
-    CargoTest(TestArgs),
 }
 
 #[derive(Args, Debug, Default)]
@@ -59,15 +68,10 @@ fn main() -> Result<()> {
     project.prepere_deps();
     match cli.command {
         SubCommands::Build => {
-            project.config_by_file(cli.config).unwrap();
+            project.config_with_file().unwrap();
             Compile::run(&mut project, false);
         }
-        SubCommands::Qemu(args) => {
-            project.config_by_file(cli.config).unwrap();
-            Compile::run(&mut project, args.debug);
-            Qemu::run(&mut project, args, false);
-        }
-        SubCommands::Uboot => {}
+
         SubCommands::CargoTest(args) => {
             project.is_print_cmd = false;
             CargoTest::run(&mut project, args.elf);
@@ -80,20 +84,19 @@ fn main() -> Result<()> {
                 true,
             );
         }
+        SubCommands::Run(run_args) => {
+            project.config_with_file().unwrap();
+            match run_args.command {
+                RunSubCommands::Qemu(args) => {
+                    Compile::run(&mut project, args.debug);
+                    Qemu::run(&mut project, args, false);
+                }
+                RunSubCommands::Uboot => {
+                    Compile::run(&mut project, false);
+                }
+            };
+        }
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(1, 1);
-    }
-
-    #[test]
-    fn it_works2() {
-        assert_eq!(0, 1);
-    }
 }
