@@ -28,7 +28,7 @@ impl Qemu {
             Arch::X86_64 => Self {
                 machine: Some("virt".to_string()),
                 cpu: Some("qemu64".to_string()),
-                graphic: true,
+                graphic: false,
                 args: "".to_string(),
             },
         }
