@@ -93,6 +93,7 @@ fn main() -> Result<()> {
                 }
                 RunSubCommands::Uboot => {
                     Compile::run(&mut project, false);
+                    
                 }
             };
         }
