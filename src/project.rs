@@ -21,6 +21,7 @@ pub struct Project {
     pub config: Option<ProjectConfig>,
     pub arch: Option<Arch>,
     pub bin_path: Option<PathBuf>,
+    pub out_dir: Option<PathBuf>,
     pub is_print_cmd: bool,
 }
 
@@ -87,14 +88,19 @@ impl Project {
             .unwrap();
     }
 
-    pub fn output_dir(&self, debug: bool) -> PathBuf {
-        let pwd = self.workdir.clone();
+    pub fn out_dir_with_profile(&self, debug: bool) -> PathBuf {
+        let meta = metadata(self.workdir());
+        let pwd = meta.workspace_root.as_std_path();
 
         let target = &self.config_ref().compile.target;
 
         pwd.join("target")
             .join(target)
             .join(if debug { "debug" } else { "release" })
+    }
+
+    pub fn out_dir(&self) -> PathBuf {
+        self.out_dir.clone().unwrap()
     }
 
     pub fn cargo_metadata(&self) -> Metadata {

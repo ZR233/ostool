@@ -3,11 +3,13 @@ use std::{
     io::{self, stdin, stdout, Read, Write},
     net::{IpAddr, Ipv4Addr},
     path::{Path, PathBuf},
+    process::exit,
     sync::{Arc, Mutex},
     thread::{self, sleep},
     time::Duration,
 };
 
+use colored::Colorize;
 use network_interface::{Addr, NetworkInterface, NetworkInterfaceConfig};
 use serde::{Deserialize, Serialize};
 
@@ -82,7 +84,7 @@ impl UbootConfig {
 pub struct Uboot {}
 
 impl Uboot {
-    pub fn run(project: &mut Project) {
+    pub fn run(project: &mut Project, is_check_test: bool) {
         let config = project.config_ref().uboot.clone().unwrap();
 
         let kernel_bin = project
@@ -126,7 +128,7 @@ impl Uboot {
             }
         });
 
-        let out_dir = project.output_dir(false);
+        let out_dir = project.out_dir();
         let dtb_name = PathBuf::from(&config.dtb_file)
             .file_name()
             .unwrap()
@@ -168,17 +170,23 @@ impl Uboot {
                         }
                     }
                     history.push(ch);
-                    if !in_shell {
-                        let s = String::from_utf8(history.to_vec()).unwrap();
-                        if s.contains("Hit any key to stop autoboot") {
-                            in_shell = true;
-                            let mut port = port.lock().unwrap();
-                            port.write_all(b"a").unwrap();
-                            sleep(Duration::from_secs(1));
-
-                            port.write_all(cmd.as_bytes()).unwrap();
-                            port.write_all(b"\r\n").unwrap();
+                    let s = String::from_utf8(history.to_vec()).unwrap();
+                    if in_shell {
+                        if s.contains("All tests passed") {
+                            exit(0);
                         }
+                        if s.contains("panicked at") {
+                            println!("{}", "Test failed!".red());
+                            exit(1);
+                        }
+                    } else if s.contains("Hit any key to stop autoboot") {
+                        in_shell = true;
+                        let mut port = port.lock().unwrap();
+                        port.write_all(b"a").unwrap();
+                        sleep(Duration::from_secs(1));
+
+                        port.write_all(cmd.as_bytes()).unwrap();
+                        port.write_all(b"\r\n").unwrap();
                     }
 
                     stdout().write_all(&buf).unwrap();

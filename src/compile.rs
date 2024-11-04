@@ -13,7 +13,9 @@ impl Compile {
             .clone()
             .unwrap_or("kernel.bin".to_string());
 
-        let bin_path = project.output_dir(debug).join(bin_name);
+        project.out_dir = Some(project.out_dir_with_profile(debug));
+
+        let bin_path = project.out_dir().join(bin_name);
 
         let log_level = format!("{:?}", project.config_ref().compile.log_level);
 
@@ -62,7 +64,7 @@ impl Compile {
         cmd.exec(project.is_print_cmd).unwrap();
 
         let elf = project
-            .output_dir(debug)
+            .out_dir()
             .join(&project.config_ref().compile.package);
 
         let _ = std::fs::remove_file("target/kernel.elf");

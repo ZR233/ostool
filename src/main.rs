@@ -76,14 +76,18 @@ fn main() -> Result<()> {
         SubCommands::CargoTest(args) => {
             project.is_print_cmd = false;
             CargoTest::run(&mut project, args.elf);
-            Qemu::run(
-                &mut project,
-                QemuArgs {
-                    debug: false,
-                    dtb: false,
-                },
-                true,
-            );
+            if project.config.as_ref().is_some_and(|c| c.uboot.is_some()) {
+                Uboot::run(&mut project, true);
+            } else {
+                Qemu::run(
+                    &mut project,
+                    QemuArgs {
+                        debug: false,
+                        dtb: false,
+                    },
+                    true,
+                );
+            }
         }
         SubCommands::Run(run_args) => {
             project.config_with_file().unwrap();
@@ -101,7 +105,7 @@ fn main() -> Result<()> {
                         project.save_config();
                     }
 
-                    Uboot::run(&mut project);
+                    Uboot::run(&mut project, false);
                 }
             };
         }

@@ -2,10 +2,17 @@ use crate::{
     config::{compile::LogLevel, qemu::Qemu, ProjectConfig},
     project::{Arch, Project},
     shell::Shell,
+    uboot::UbootConfig,
 };
 use object::{Architecture, Object};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs, path::PathBuf};
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Config {
+    qemu: Option<Qemu>,
+    uboot: Option<UbootConfig>,
+}
 
 pub struct CargoTest {}
 
@@ -15,13 +22,13 @@ impl CargoTest {
         let file = object::File::parse(&*binary_data).unwrap();
         let arch = file.architecture();
         project.arch = Some(arch.into());
+        project.out_dir = PathBuf::from(&elf).parent().map(|p| p.to_path_buf());
 
         let mut config = ProjectConfig::new(project.arch.unwrap());
         config.qemu.machine = Some("virt".to_string());
         config.compile.log_level = LogLevel::Error;
 
-        let mut bin_path = PathBuf::from(&elf);
-        bin_path = bin_path.parent().unwrap().join("test.bin");
+        let bin_path = project.out_dir().join("test.bin");
 
         let _ = fs::remove_file(&bin_path);
         project
@@ -33,6 +40,17 @@ impl CargoTest {
             .unwrap();
 
         config.qemu = Qemu::new_default(project.arch.unwrap());
+
+        let config_path = project.workdir().join("bare-test.toml");
+
+        if config_path.exists() {
+            let test_config: Config =
+                toml::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
+            if let Some(q) = test_config.qemu.clone() {
+                config.qemu = q;
+            }
+            config.uboot = test_config.uboot;
+        }
         let cargo_toml = project.workdir().join("Cargo.toml");
         let cargo_toml_content = fs::read_to_string(cargo_toml).unwrap();
         let cargo_toml_value: CargoToml = toml::from_str(&cargo_toml_content).unwrap();
