@@ -6,6 +6,7 @@ use compile::Compile;
 use project::Project;
 use qemu::Qemu;
 use test::CargoTest;
+use uboot::Uboot;
 
 mod compile;
 mod config;
@@ -93,7 +94,14 @@ fn main() -> Result<()> {
                 }
                 RunSubCommands::Uboot => {
                     Compile::run(&mut project, false);
-                    
+
+                    let config = project.config.as_mut().unwrap();
+                    if config.uboot.is_none() {
+                        config.uboot = Some(uboot::UbootConfig::config_by_select());
+                        project.save_config();
+                    }
+
+                    Uboot::run(&mut project);
                 }
             };
         }

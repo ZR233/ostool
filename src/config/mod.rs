@@ -1,3 +1,5 @@
+use std::{fs, path::Path};
+
 use compile::Compile;
 use qemu::Qemu;
 use serde::{Deserialize, Serialize};
@@ -21,5 +23,9 @@ impl ProjectConfig {
             qemu: Qemu::new_default(arch),
             uboot: None,
         }
+    }
+
+    pub fn save(&self, path: &Path) {
+        fs::write(path, toml::to_string(self).unwrap()).unwrap();
     }
 }

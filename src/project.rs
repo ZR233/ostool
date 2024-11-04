@@ -71,6 +71,11 @@ impl Project {
         }
     }
 
+    pub fn save_config(&self) {
+        let config_path = self.workdir().join(".project.toml");
+        self.config_ref().save(&config_path);
+    }
+
     fn install_deps(&self) {
         self.shell("cargo")
             .args(["install", "cargo-binutils"])

@@ -26,8 +26,12 @@ impl Compile {
             features += &features_log_level;
         }
 
+        let manifest_path = project.workdir().join("Cargo.toml");
+
         let mut args = vec![
             "build",
+            "--manifest-path",
+            &manifest_path.to_str().unwrap(),
             "-p",
             &project.config_ref().compile.package,
             "--target",
