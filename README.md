@@ -20,5 +20,5 @@ ostool run qemu -d
 ### U-Boot 启动
 
 ```shell
-ostool uboot
+ostool run uboot
 ```
