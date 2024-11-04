@@ -172,12 +172,14 @@ impl Uboot {
                     history.push(ch);
                     let s = String::from_utf8(history.to_vec()).unwrap();
                     if in_shell {
-                        if s.contains("All tests passed") {
-                            exit(0);
-                        }
-                        if s.contains("panicked at") {
-                            println!("{}", "Test failed!".red());
-                            exit(1);
+                        if is_check_test {
+                            if s.contains("All tests passed") {
+                                exit(0);
+                            }
+                            if s.contains("panicked at") {
+                                println!("{}", "Test failed!".red());
+                                exit(1);
+                            }
                         }
                     } else if s.contains("Hit any key to stop autoboot") {
                         in_shell = true;
