@@ -165,14 +165,28 @@ impl Uboot {
                     let ch = buf[0];
                     if ch == b'\n' && history.last() != Some(&b'\r') {
                         stdout().write_all(b"\r").unwrap();
-                        if in_shell {
-                            history.clear();
-                        }
+                        history.push(b'\r');
                     }
                     history.push(ch);
-                    let s = String::from_utf8(history.to_vec()).unwrap();
-                    if in_shell {
-                        if is_check_test {
+
+                    if !in_shell {
+                        if let Ok(s) = String::from_utf8(history.clone()) {
+                            if s.contains("Hit any key to stop autoboot") {
+                                in_shell = true;
+                                let mut port = port.lock().unwrap();
+                                port.write_all(b"a").unwrap();
+                                sleep(Duration::from_secs(1));
+
+                                port.write_all(cmd.as_bytes()).unwrap();
+                                port.write_all(b"\r\n").unwrap();
+                                history.clear();
+                            }
+                        }
+                    }
+
+                    if history.ends_with(b"\r\n") {
+                        let s = String::from_utf8(history.to_vec()).unwrap();
+                        if in_shell && is_check_test {
                             if s.contains("All tests passed") {
                                 exit(0);
                             }
@@ -181,14 +195,6 @@ impl Uboot {
                                 exit(1);
                             }
                         }
-                    } else if s.contains("Hit any key to stop autoboot") {
-                        in_shell = true;
-                        let mut port = port.lock().unwrap();
-                        port.write_all(b"a").unwrap();
-                        sleep(Duration::from_secs(1));
-
-                        port.write_all(cmd.as_bytes()).unwrap();
-                        port.write_all(b"\r\n").unwrap();
                     }
 
                     stdout().write_all(&buf).unwrap();
