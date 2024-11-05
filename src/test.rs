@@ -2,7 +2,7 @@ use crate::{
     config::{compile::LogLevel, qemu::Qemu, ProjectConfig},
     project::{Arch, Project},
     shell::Shell,
-    uboot::{self, UbootConfig},
+    uboot::UbootConfig,
 };
 use object::{Architecture, Object};
 use serde::{Deserialize, Serialize};
