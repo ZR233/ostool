@@ -51,6 +51,8 @@ struct TestArgs {
     mode: Option<String>,
     #[arg(long)]
     show_output: bool,
+    #[arg(long)]
+    uboot: bool,
 }
 
 #[derive(Args, Debug, Default)]
@@ -75,8 +77,8 @@ fn main() -> Result<()> {
 
         SubCommands::CargoTest(args) => {
             project.is_print_cmd = false;
-            CargoTest::run(&mut project, args.elf);
-            if project.config.as_ref().is_some_and(|c| c.uboot.is_some()) {
+            CargoTest::run(&mut project, args.elf, args.uboot);
+            if args.uboot {
                 Uboot::run(&mut project, true);
             } else {
                 Qemu::run(

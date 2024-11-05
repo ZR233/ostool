@@ -2,7 +2,7 @@ use crate::{
     config::{compile::LogLevel, qemu::Qemu, ProjectConfig},
     project::{Arch, Project},
     shell::Shell,
-    uboot::UbootConfig,
+    uboot::{self, UbootConfig},
 };
 use object::{Architecture, Object};
 use serde::{Deserialize, Serialize};
@@ -11,13 +11,12 @@ use std::{collections::BTreeMap, fs, path::PathBuf};
 #[derive(Serialize, Deserialize, Debug)]
 struct Config {
     qemu: Option<Qemu>,
-    uboot: Option<UbootConfig>,
 }
 
 pub struct CargoTest {}
 
 impl CargoTest {
-    pub fn run(project: &mut Project, elf: String) {
+    pub fn run(project: &mut Project, elf: String, uboot: bool) {
         let binary_data = fs::read(&elf).unwrap();
         let file = object::File::parse(&*binary_data).unwrap();
         let arch = file.architecture();
@@ -49,8 +48,22 @@ impl CargoTest {
             if let Some(q) = test_config.qemu.clone() {
                 config.qemu = q;
             }
-            config.uboot = test_config.uboot;
         }
+
+        let config_user = project.workdir().join(".bare-test.toml");
+
+        if uboot {
+            let uboot_config;
+            if !config_user.exists() {
+                uboot_config = UbootConfig::config_by_select();
+                let s = toml::to_string(&uboot_config).unwrap();
+                fs::write(&config_user, s).unwrap();
+            } else {
+                uboot_config = toml::from_str(&fs::read_to_string(&config_user).unwrap()).unwrap();
+            }
+            config.uboot = Some(uboot_config);
+        }
+
         let cargo_toml = project.workdir().join("Cargo.toml");
         let cargo_toml_content = fs::read_to_string(cargo_toml).unwrap();
         let cargo_toml_value: CargoToml = toml::from_str(&cargo_toml_content).unwrap();
