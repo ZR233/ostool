@@ -67,6 +67,8 @@ impl Compile {
             .out_dir()
             .join(&project.config_ref().compile.package);
 
+        project.elf_path = Some(elf.clone());
+
         let _ = std::fs::remove_file("target/kernel.elf");
         std::fs::copy(&elf, "target/kernel.elf").unwrap();
 

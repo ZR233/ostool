@@ -52,7 +52,12 @@ impl OsConfig for ArceOS {
             }
         }
         let platform = platforms[shell_select("select platform", &platforms)].clone();
-        let arch = platform.split("-").next().unwrap().to_string();
+        let platform_split = platform.split("-").collect::<Vec<_>>();
+
+        let arch = platform_split[0].to_string();
+
+        let machine = platform_split[2].to_string();
+
         let mut target = format!("{}-unknown-none", arch);
         let mut cpu = None;
 
@@ -94,7 +99,7 @@ impl OsConfig for ArceOS {
                     .collect(),
             },
             qemu: Qemu {
-                machine: Some("virt".to_string()),
+                machine: Some(machine),
                 cpu,
                 graphic: false,
                 args: "-smp 4".to_string(),

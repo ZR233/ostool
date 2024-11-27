@@ -12,35 +12,53 @@ use std::{
 
 use colored::Colorize;
 
-use crate::{project::Project, shell::Shell, QemuArgs};
+use crate::{
+    project::{Arch, Project},
+    shell::Shell,
+    QemuArgs,
+};
+
+struct QemuParams {
+    kernel: PathBuf,
+    machine: String,
+    cmd: Command,
+}
 
 pub struct Qemu {}
 
 impl Qemu {
     pub fn run(project: &mut Project, cli: QemuArgs, is_check_test: bool) {
-        let mut machine = "virt".to_string();
+        let cmd = project.shell(project.arch.unwrap().qemu_program());
+
+        let mut params = QemuParams {
+            kernel: PathBuf::new(),
+            machine: "virt".to_string(),
+            cmd,
+        };
+
+        if matches!(project.arch, Some(Arch::X86_64)) {
+            params.machine = "q35".to_string();
+        }
 
         if let Some(m) = project.config_ref().qemu.machine.as_ref() {
-            machine = m.to_string();
+            params.machine = m.to_string();
         }
 
         if cli.dtb {
             let _ = fs::remove_file("target/qemu.dtb");
-            machine = format!("{},dumpdtb=target/qemu.dtb", machine);
+            params.machine = format!("{},dumpdtb=target/qemu.dtb", params.machine);
         }
 
         let bin_path = project.bin_path.as_ref().unwrap();
-        let bin_path = fs::canonicalize(bin_path).unwrap();
-
-        let mut cmd = project.shell(project.arch.unwrap().qemu_program());
+        params.kernel = fs::canonicalize(bin_path).unwrap();
 
         #[cfg(target_os = "windows")]
-        Self::cmd_windows_env(&mut cmd);
+        Self::cmd_windows_env(project, &mut params);
 
         if !project.config_ref().qemu.graphic {
-            cmd.arg("-nographic");
+            params.cmd.arg("-nographic");
         }
-        cmd.args(["-machine", &machine]);
+        params.cmd.args(["-machine", &params.machine]);
 
         let more_args = project
             .config_ref()
@@ -52,41 +70,45 @@ impl Qemu {
             .collect::<Vec<_>>();
 
         if !more_args.is_empty() {
-            cmd.args(more_args);
+            params.cmd.args(more_args);
         }
 
         if cli.debug {
-            cmd.args(["-s", "-S"]);
+            params.cmd.args(["-s", "-S"]);
         }
 
         if let Some(cpu) = &project.config_ref().qemu.cpu {
-            cmd.arg("-cpu");
-            cmd.arg(cpu);
+            params.cmd.arg("-cpu");
+            params.cmd.arg(cpu);
         }
-        cmd.arg("-kernel");
-        cmd.arg(&bin_path);
+        params.cmd.arg("-kernel");
+        params.cmd.arg(&params.kernel);
 
         if is_check_test {
             let is_ok = Arc::new(AtomicBool::new(false));
             let is_ok2 = is_ok.clone();
-            cmd.exec_with_lines(project.is_print_cmd, move |line| {
-                if line.contains("All tests passed") {
-                    is_ok2.store(true, Ordering::SeqCst);
-                }
-                Ok(())
-            })
-            .unwrap();
+            params
+                .cmd
+                .exec_with_lines(project.is_print_cmd, move |line| {
+                    if line.contains("All tests passed") {
+                        is_ok2.store(true, Ordering::SeqCst);
+                    }
+                    Ok(())
+                })
+                .unwrap();
             if !is_ok.load(Ordering::SeqCst) {
                 println!("{}", "Test failed!".red());
                 exit(1);
             }
         } else {
-            cmd.exec(project.is_print_cmd).unwrap();
+            params.cmd.exec(project.is_print_cmd).unwrap();
         }
     }
 
-    fn cmd_windows_env(cmd: &mut Command) {
-        let env = cmd.get_envs().collect::<HashMap<_, _>>();
+    fn cmd_windows_env(project: &mut Project, params: &mut QemuParams) {
+        params.kernel = project.elf_path.clone().unwrap();
+
+        let env = params.cmd.get_envs().collect::<HashMap<_, _>>();
         let mut mysys2_root = PathBuf::from("C:\\msys64");
         if let Some(p) = std::env::var_os("MSYS2_ROOT") {
             mysys2_root = PathBuf::from(p);
@@ -113,6 +135,6 @@ impl Qemu {
             path.push(mingw64);
         }
 
-        cmd.env("PATH", path);
+        params.cmd.env("PATH", path);
     }
 }

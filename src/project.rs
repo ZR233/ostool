@@ -21,6 +21,7 @@ pub struct Project {
     pub config: Option<ProjectConfig>,
     pub arch: Option<Arch>,
     pub bin_path: Option<PathBuf>,
+    pub elf_path: Option<PathBuf>,
     pub out_dir: Option<PathBuf>,
     pub is_print_cmd: bool,
 }
