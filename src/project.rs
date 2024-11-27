@@ -40,7 +40,7 @@ impl Project {
         let config_path = meta.workspace_root.as_std_path().join(".project.toml");
 
         let config;
-        if !fs::exists(&config_path)? {
+        if !config_path.try_exists()? {
             config = new_config(self.workdir());
             let config_str = toml::to_string(&config).unwrap();
             let mut file = fs::File::create(&config_path).unwrap();
