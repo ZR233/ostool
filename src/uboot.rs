@@ -146,7 +146,7 @@ impl Uboot {
             println!("DTB file not provided");
             format!("dhcp $loadaddr {ip}:{kernel_bin};go $loadaddr")
         };
-
+        Self::run_tftp(&out_dir);
         let mut in_shell = false;
         println!("启动命令：{}", boot_cmd);
 
