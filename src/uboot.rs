@@ -129,26 +129,26 @@ impl Uboot {
         });
 
         let out_dir = project.out_dir();
-        let dtb_name = PathBuf::from(&config.dtb_file)
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .to_string();
-        let ftp_dtb = out_dir.join(&dtb_name);
 
-        let _ = fs::copy(config.dtb_file, ftp_dtb);
+        let boot_cmd = if let Some(dtb) = PathBuf::from(&config.dtb_file).file_name() {
+            let dtb_load_addr = "0x90600000";
 
-        Self::run_tftp(&out_dir);
-        let mut in_shell = false;
+            let dtb_name = dtb.to_str().unwrap().to_string();
 
-        let dtb_load_addr = "0x90600000";
+            let ftp_dtb = out_dir.join(&dtb_name);
 
-        let cmd = format!(
+            let _ = fs::copy(config.dtb_file, ftp_dtb);
+
+            format!(
             "dhcp {dtb_load_addr} {ip}:{dtb_name};fdt addr {dtb_load_addr};bootp {ip}:{kernel_bin};booti $loadaddr - {dtb_load_addr}"
-        );
+        )
+        } else {
+            println!("DTB file not provided");
+            format!("dhcp $loadaddr {ip}:{kernel_bin};go $loadaddr")
+        };
 
-        println!("启动命令：{}", cmd);
+        let mut in_shell = false;
+        println!("启动命令：{}", boot_cmd);
 
         println!("等待 U-Boot 启动...");
 
@@ -177,7 +177,7 @@ impl Uboot {
                                 port.write_all(b"a").unwrap();
                                 sleep(Duration::from_secs(1));
 
-                                port.write_all(cmd.as_bytes()).unwrap();
+                                port.write_all(boot_cmd.as_bytes()).unwrap();
                                 port.write_all(b"\r\n").unwrap();
                                 history.clear();
                             }
