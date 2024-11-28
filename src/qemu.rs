@@ -38,6 +38,7 @@ impl Qemu {
 
         if matches!(project.arch, Some(Arch::X86_64)) {
             params.machine = "q35".to_string();
+            params.kernel = project.elf_path.clone().unwrap();
         }
 
         if let Some(m) = project.config_ref().qemu.machine.as_ref() {
@@ -106,8 +107,6 @@ impl Qemu {
     }
 
     fn cmd_windows_env(project: &mut Project, params: &mut QemuParams) {
-        params.kernel = project.elf_path.clone().unwrap();
-
         let env = params.cmd.get_envs().collect::<HashMap<_, _>>();
         let mut mysys2_root = PathBuf::from("C:\\msys64");
         if let Some(p) = std::env::var_os("MSYS2_ROOT") {
