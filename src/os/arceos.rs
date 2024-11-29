@@ -68,6 +68,12 @@ impl OsConfig for ArceOS {
 
         let mut env = BTreeMap::new();
         env.insert("AX_PLATFORM".to_string(), platform.clone());
+        env.insert("AX_LOG".to_string(), "debug".to_string());
+        env.insert("AX_SMP".to_string(), "2".to_string());
+        env.insert("AX_ARCH".to_string(), arch.clone());
+        env.insert("AX_TARGET".to_string(), target.clone());
+        env.insert("AX_MODE".to_string(), "release".to_string());
+
 
         let packages = get_cargo_packages(&self.workdir);
         let package = packages[shell_select("select package:", &packages)].clone();
@@ -102,7 +108,7 @@ impl OsConfig for ArceOS {
                 machine: Some(machine),
                 cpu,
                 graphic: false,
-                args: "-smp 4".to_string(),
+                args: "-smp 2".to_string(),
             },
             uboot: None,
         }
