@@ -106,7 +106,7 @@ impl Qemu {
         }
     }
 
-    fn cmd_windows_env(project: &mut Project, params: &mut QemuParams) {
+    fn cmd_windows_env(_project: &mut Project, params: &mut QemuParams) {
         let env = params.cmd.get_envs().collect::<HashMap<_, _>>();
         let mut mysys2_root = PathBuf::from("C:\\msys64");
         if let Some(p) = std::env::var_os("MSYS2_ROOT") {
