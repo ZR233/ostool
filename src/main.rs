@@ -2,20 +2,15 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::*;
-use compile::Compile;
+use colored::Colorize;
 use project::Project;
-use qemu::Qemu;
-use test::CargoTest;
-use uboot::Uboot;
+use step::{CargoTestPrepare, Compile, Qemu, Step, Uboot, UbootConfig};
 
-mod compile;
 mod config;
 mod os;
 mod project;
-mod qemu;
 mod shell;
-mod test;
-mod uboot;
+mod step;
 mod ui;
 
 #[derive(Parser, Debug)]
@@ -69,47 +64,56 @@ fn main() -> Result<()> {
 
     let mut project = Project::new(workdir);
     project.prepere_deps();
+
+    let mut steps: Vec<Box<dyn Step>> = vec![];
+
     match cli.command {
         SubCommands::Build => {
             project.config_with_file().unwrap();
-            Compile::run(&mut project, false);
+            steps.push(Compile::new_boxed(false));
         }
 
         SubCommands::CargoTest(args) => {
             project.is_print_cmd = false;
-            CargoTest::run(&mut project, args.elf, args.uboot);
+
+            steps.push(CargoTestPrepare::new_boxed(args.elf, args.uboot));
             if args.uboot {
-                Uboot::run(&mut project, true);
+                steps.push(Uboot::new_boxed(true));
             } else {
-                Qemu::run(
-                    &mut project,
+                steps.push(Qemu::new_boxed(
                     QemuArgs {
                         debug: false,
                         dtb: false,
                     },
                     true,
-                );
+                ));
             }
         }
         SubCommands::Run(run_args) => {
             project.config_with_file().unwrap();
             match run_args.command {
                 RunSubCommands::Qemu(args) => {
-                    Compile::run(&mut project, args.debug);
-                    Qemu::run(&mut project, args, false);
+                    steps.push(Compile::new_boxed(args.debug));
+                    steps.push(Qemu::new_boxed(args, false));
                 }
                 RunSubCommands::Uboot => {
-                    Compile::run(&mut project, false);
+                    steps.push(Compile::new_boxed(false));
 
                     let config = project.config.as_mut().unwrap();
                     if config.uboot.is_none() {
-                        config.uboot = Some(uboot::UbootConfig::config_by_select());
+                        config.uboot = Some(UbootConfig::config_by_select());
                         project.save_config();
                     }
 
-                    Uboot::run(&mut project, false);
+                    steps.push(Uboot::new_boxed(false));
                 }
             };
+        }
+    }
+
+    for step in &mut steps {
+        if let Err(skip) = step.run(&mut project) {
+            println!("{}", format!("warn: {}", skip).yellow());
         }
     }
 

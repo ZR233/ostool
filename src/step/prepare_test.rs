@@ -2,20 +2,28 @@ use crate::{
     config::{compile::LogLevel, qemu::Qemu, ProjectConfig},
     project::{Arch, Project},
     shell::Shell,
-    uboot::UbootConfig,
 };
 use object::{Architecture, Object};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs, path::PathBuf};
+
+use super::Step;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Config {
     qemu: Option<Qemu>,
 }
 
-pub struct CargoTest {}
+pub struct CargoTestPrepare {
+    elf: String,
+    uboot: bool,
+}
 
-impl CargoTest {
+impl CargoTestPrepare {
+    pub fn new_boxed(elf: String, uboot: bool) -> Box<Self> {
+        Box::new(Self { elf, uboot })
+    }
+
     pub fn run(project: &mut Project, elf: String, uboot: bool) {
         let binary_data = fs::read(&elf).unwrap();
         let file = object::File::parse(&*binary_data).unwrap();
@@ -93,5 +101,12 @@ impl From<Architecture> for Arch {
             Architecture::Riscv64 => Self::Riscv64,
             _ => panic!("{value:?} not support!"),
         }
+    }
+}
+
+
+impl Step for CargoTestPrepare {
+    fn run(&mut self, project: &mut Project) -> anyhow::Result<()> {
+        todo!()
     }
 }

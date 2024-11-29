@@ -1,11 +1,19 @@
 use byte_unit::Byte;
 
-use crate::{project::Project, shell::Shell};
+use crate::{project::Project, shell::Shell, step::Step};
 
-pub struct Compile {}
+pub struct Compile {
+    is_debug: bool,
+}
 
 impl Compile {
-    pub fn run(project: &mut Project, debug: bool) {
+    pub fn new_boxed(is_debug: bool) -> Box<dyn Step> {
+        Box::new(Self { is_debug })
+    }
+}
+
+impl Step for Compile {
+    fn run(&mut self, project: &mut Project) -> anyhow::Result<()> {
         let bin_name = project
             .config_ref()
             .compile
@@ -13,7 +21,7 @@ impl Compile {
             .clone()
             .unwrap_or("kernel.bin".to_string());
 
-        project.out_dir = Some(project.out_dir_with_profile(debug));
+        project.out_dir = Some(project.out_dir_with_profile(self.is_debug));
 
         let bin_path = project.out_dir().join(bin_name);
 
@@ -42,7 +50,7 @@ impl Compile {
             "unstable-options",
         ];
 
-        if !debug {
+        if !self.is_debug {
             args.push("--release");
         }
 
@@ -83,6 +91,8 @@ impl Compile {
         let img_size = std::fs::metadata(&bin_path).unwrap().len();
         println!("kernel image size: {:#}", Byte::from_u64(img_size));
 
-        project.bin_path = Some(bin_path)
+        project.bin_path = Some(bin_path);
+
+        Ok(())
     }
 }

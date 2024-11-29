@@ -15,6 +15,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{project::Project, ui};
 
+use super::Step;
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UbootConfig {
     pub serial: String,
@@ -81,10 +83,34 @@ impl UbootConfig {
     }
 }
 
-pub struct Uboot {}
+pub struct Uboot {
+    is_check_test: bool,
+}
 
 impl Uboot {
-    pub fn run(project: &mut Project, is_check_test: bool) {
+    pub fn new_boxed(is_check_test: bool) -> Box<Self> {
+        Box::new(Self { is_check_test })
+    }
+
+    fn run_tftp(file_dir: &Path) {
+        use tftpd::{Config, Server};
+        println!("启动 TFTP 服务器...");
+        println!("文件目录：{}", file_dir.display());
+        let mut config = Config::default();
+        config.directory = PathBuf::from(file_dir);
+        config.send_directory = config.directory.clone();
+        config.port = 69;
+        config.ip_address = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
+
+        std::thread::spawn(move || {
+            let mut server = Server::new(&config).unwrap();
+            server.listen();
+        });
+    }
+}
+
+impl Step for Uboot {
+    fn run(&mut self, project: &mut Project) -> anyhow::Result<()> {
         let config = project.config_ref().uboot.clone().unwrap();
 
         let kernel_bin = project
@@ -186,7 +212,7 @@ impl Uboot {
 
                     if history.ends_with(b"\r\n") {
                         let s = String::from_utf8(history.to_vec()).unwrap();
-                        if in_shell && is_check_test {
+                        if in_shell && self.is_check_test {
                             if s.contains("All tests passed") {
                                 exit(0);
                             }
@@ -205,21 +231,5 @@ impl Uboot {
                 Err(e) => eprintln!("{:?}", e),
             }
         }
-    }
-
-    fn run_tftp(file_dir: &Path) {
-        use tftpd::{Config, Server};
-        println!("启动 TFTP 服务器...");
-        println!("文件目录：{}", file_dir.display());
-        let mut config = Config::default();
-        config.directory = PathBuf::from(file_dir);
-        config.send_directory = config.directory.clone();
-        config.port = 69;
-        config.ip_address = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
-
-        std::thread::spawn(move || {
-            let mut server = Server::new(&config).unwrap();
-            server.listen();
-        });
     }
 }
