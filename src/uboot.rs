@@ -144,7 +144,7 @@ impl Uboot {
         )
         } else {
             println!("DTB file not provided");
-            format!("dhcp $loadaddr {ip}:{kernel_bin};go $loadaddr")
+            format!("dhcp $loadaddr {ip}:{kernel_bin};dcache flush;go $loadaddr")
         };
         Self::run_tftp(&out_dir);
         let mut in_shell = false;
