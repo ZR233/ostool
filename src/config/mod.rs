@@ -4,7 +4,7 @@ use compile::Compile;
 use qemu::Qemu;
 use serde::{Deserialize, Serialize};
 
-use crate::{project::Arch, uboot::UbootConfig};
+use crate::{project::Arch, step::UbootConfig};
 
 pub mod compile;
 pub mod qemu;

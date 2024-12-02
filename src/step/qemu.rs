@@ -78,6 +78,8 @@ impl Step for Qemu {
         if matches!(project.arch, Some(Arch::X86_64)) {
             self.machine = "q35".to_string();
             self.kernel = project.elf_path.clone().unwrap();
+        } else {
+            self.kernel = project.bin_path.clone().unwrap();
         }
 
         if let Some(m) = project.config_ref().qemu.machine.as_ref() {
@@ -89,8 +91,7 @@ impl Step for Qemu {
             self.machine = format!("{},dumpdtb=target/qemu.dtb", self.machine);
         }
 
-        let bin_path = project.bin_path.as_ref().unwrap();
-        self.kernel = fs::canonicalize(bin_path).unwrap();
+        self.kernel = fs::canonicalize(&self.kernel).unwrap();
 
         #[cfg(target_os = "windows")]
         self.cmd_windows_env();
@@ -140,7 +141,9 @@ impl Step for Qemu {
                 exit(1);
             }
         } else {
-            self.cmd.exec(project.is_print_cmd).expect("run qemu failed!");
+            self.cmd
+                .exec(project.is_print_cmd)
+                .expect("run qemu failed!");
         }
         Ok(())
     }

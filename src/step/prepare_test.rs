@@ -7,7 +7,7 @@ use object::{Architecture, Object};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
-use super::Step;
+use super::{Step, UbootConfig};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Config {
@@ -23,13 +23,32 @@ impl CargoTestPrepare {
     pub fn new_boxed(elf: String, uboot: bool) -> Box<Self> {
         Box::new(Self { elf, uboot })
     }
+}
 
-    pub fn run(project: &mut Project, elf: String, uboot: bool) {
-        let binary_data = fs::read(&elf).unwrap();
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct CargoToml {
+    #[serde(rename = "test-qemu")]
+    pub test_qemu: Option<BTreeMap<String, Qemu>>,
+}
+
+impl From<Architecture> for Arch {
+    fn from(value: Architecture) -> Self {
+        match value {
+            Architecture::Aarch64 => Self::Aarch64,
+            Architecture::X86_64 => Self::X86_64,
+            Architecture::Riscv64 => Self::Riscv64,
+            _ => panic!("{value:?} not support!"),
+        }
+    }
+}
+
+impl Step for CargoTestPrepare {
+    fn run(&mut self, project: &mut Project) -> anyhow::Result<()> {
+        let binary_data = fs::read(&self.elf).unwrap();
         let file = object::File::parse(&*binary_data).unwrap();
         let arch = file.architecture();
         project.arch = Some(arch.into());
-        project.out_dir = PathBuf::from(&elf).parent().map(|p| p.to_path_buf());
+        project.out_dir = PathBuf::from(&self.elf).parent().map(|p| p.to_path_buf());
 
         let mut config = ProjectConfig::new(project.arch.unwrap());
         config.qemu.machine = Some("virt".to_string());
@@ -41,7 +60,7 @@ impl CargoTestPrepare {
         project
             .shell("rust-objcopy")
             .args(["--strip-all", "-O", "binary"])
-            .arg(&elf)
+            .arg(&self.elf)
             .arg(&bin_path)
             .exec(project.is_print_cmd)
             .unwrap();
@@ -60,7 +79,7 @@ impl CargoTestPrepare {
 
         let config_user = project.workdir().join(".bare-test.toml");
 
-        if uboot {
+        if self.uboot {
             let uboot_config;
             if !config_user.exists() {
                 uboot_config = UbootConfig::config_by_select();
@@ -84,29 +103,7 @@ impl CargoTestPrepare {
         }
         project.config = Some(config);
         project.bin_path = Some(bin_path);
-    }
-}
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct CargoToml {
-    #[serde(rename = "test-qemu")]
-    pub test_qemu: Option<BTreeMap<String, Qemu>>,
-}
-
-impl From<Architecture> for Arch {
-    fn from(value: Architecture) -> Self {
-        match value {
-            Architecture::Aarch64 => Self::Aarch64,
-            Architecture::X86_64 => Self::X86_64,
-            Architecture::Riscv64 => Self::Riscv64,
-            _ => panic!("{value:?} not support!"),
-        }
-    }
-}
-
-
-impl Step for CargoTestPrepare {
-    fn run(&mut self, project: &mut Project) -> anyhow::Result<()> {
-        todo!()
+        Ok(())
     }
 }
