@@ -5,7 +5,11 @@ use crate::{
 };
 use object::{Architecture, Object};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fs, path::PathBuf};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+};
 
 use super::{Step, UbootConfig};
 
@@ -50,11 +54,22 @@ impl Step for CargoTestPrepare {
         project.arch = Some(arch.into());
         project.out_dir = PathBuf::from(&self.elf).parent().map(|p| p.to_path_buf());
 
+        let test_name = Path::new(&self.elf).file_stem().unwrap();
+
         let mut config = ProjectConfig::new(project.arch.unwrap());
         config.qemu.machine = Some("virt".to_string());
         config.compile.log_level = LogLevel::Error;
 
-        let bin_path = project.out_dir().join("test.bin");
+        let bin_path = project
+            .out_dir()
+            .join(format!("{}.bin", test_name.to_string_lossy()));
+
+        let elf_path = project
+            .out_dir()
+            .join(format!("{}.elf", test_name.to_string_lossy()));
+
+        let _ = fs::remove_file(&elf_path);
+        let _ = fs::copy(&self.elf, &elf_path);
 
         let _ = fs::remove_file(&bin_path);
         project
