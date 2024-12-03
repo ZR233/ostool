@@ -64,9 +64,7 @@ impl Step for CargoTestPrepare {
             .out_dir()
             .join(format!("{}.bin", test_name.to_string_lossy()));
 
-        let elf_path = project
-            .out_dir()
-            .join(format!("{}.elf", test_name.to_string_lossy()));
+        let elf_path = project.out_dir().join("test.elf");
 
         let _ = fs::remove_file(&elf_path);
         let _ = fs::copy(&self.elf, &elf_path);
