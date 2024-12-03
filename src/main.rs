@@ -48,6 +48,8 @@ struct TestArgs {
     show_output: bool,
     #[arg(long)]
     uboot: bool,
+    #[arg(long)]
+    no_run: bool,
 }
 
 #[derive(Args, Debug, Default)]
@@ -82,7 +84,7 @@ fn main() -> Result<()> {
             } else {
                 steps.push(Qemu::new_boxed(
                     QemuArgs {
-                        debug: false,
+                        debug: args.no_run,
                         dtb: false,
                     },
                     true,
