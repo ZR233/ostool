@@ -1,17 +1,20 @@
 use std::{
+    collections::VecDeque,
     fs,
-    io::{self, stdin, stdout, Read, Write},
+    io::{self, stdout, Read, Write},
     net::{IpAddr, Ipv4Addr},
     path::{Path, PathBuf},
     process::exit,
-    sync::{Arc, Mutex},
+    sync::Arc,
     thread::{self, sleep},
     time::Duration,
 };
 
 use colored::Colorize;
+use crossterm::event::{self, Event, KeyCode};
 use network_interface::{Addr, NetworkInterface, NetworkInterfaceConfig};
 use serde::{Deserialize, Serialize};
+use serialport::SerialPort;
 
 use crate::{project::Project, ui};
 
@@ -121,11 +124,6 @@ impl Step for Uboot {
             .unwrap()
             .to_string_lossy();
 
-        let port = serialport::new(config.serial.clone(), 115_200)
-            .timeout(Duration::from_millis(10))
-            .open()
-            .expect("Failed to open port");
-
         let mut ip = String::new();
 
         let interfaces = NetworkInterface::show().unwrap();
@@ -140,19 +138,8 @@ impl Step for Uboot {
             }
         }
 
-        println!("串口：{}", port.name().unwrap_or_default());
         println!("TFTP: {}", ip);
         println!("内核：{}", kernel_bin);
-
-        let port = Arc::new(Mutex::new(port));
-        thread::spawn({
-            let port = port.clone();
-            move || loop {
-                let mut buf = [0u8; 1];
-                let _ = stdin().read_exact(&mut buf);
-                let _ = port.lock().unwrap().write_all(&buf);
-            }
-        });
 
         let out_dir = project.out_dir();
 
@@ -173,21 +160,124 @@ impl Step for Uboot {
             format!("dhcp $loadaddr {ip}:{kernel_bin};dcache flush;go $loadaddr")
         };
         Self::run_tftp(&out_dir);
-        let mut in_shell = false;
         println!("启动命令：{}", boot_cmd);
 
         println!("等待 U-Boot 启动...");
 
-        let mut buf = [0u8; 1];
-        let mut history = Vec::new();
+        let sh = Arc::new(UbootShell {
+            boot_cmd,
+            need_check_test: self.is_check_test,
+        });
 
-        loop {
-            let res = {
-                let mut port = port.lock().unwrap();
-                port.read(&mut buf)
-            };
-            match res {
-                Ok(_t) => {
+        sh.run(&config.serial, config.baud_rate as _);
+        Ok(())
+    }
+}
+
+struct UbootShell {
+    boot_cmd: String,
+    need_check_test: bool,
+}
+
+impl UbootShell {
+    pub fn run(self: Arc<Self>, port_path: &str, baud_rate: u32) {
+        let mut port_rx = serialport::new(port_path, baud_rate)
+            .timeout(Duration::from_millis(500))
+            .open()
+            .unwrap();
+
+        println!(
+            "串口：{}, {}",
+            port_rx.name().unwrap_or_default(),
+            baud_rate
+        );
+
+        let mut port_tx = port_rx.try_clone().unwrap();
+
+        serial_wait_for_shell(&mut port_rx);
+
+        println!();
+        println!("{}", "Uboot shell ok".green());
+
+        port_tx.write_all(self.boot_cmd.as_bytes()).unwrap();
+        port_tx.write_all(b"\r\n").unwrap();
+        println!("{}", format!("Exec: {}", self.boot_cmd).green());
+
+        if !self.need_check_test {
+            thread::spawn(move || loop {
+                if let Ok(Event::Key(key)) = event::read() {
+                    if matches!(key.kind, event::KeyEventKind::Release) {
+                        match key.code {
+                            KeyCode::Char(ch) => {
+                                port_tx.write_all(&[ch as u8]).unwrap();
+                            }
+                            KeyCode::Backspace => {
+                                port_tx.write_all(&[127]).unwrap();
+                            }
+                            KeyCode::Enter => {
+                                port_tx.write_all(b"\r\n").unwrap();
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            });
+        }
+
+        let mut history = VecDeque::new();
+        let mut line_tmp = Vec::new();
+
+        let mut buff = [0u8; 1];
+        for byte in port_rx.bytes() {
+            match byte {
+                Ok(b) => {
+                    if b == b'\n' && buff[0] != b'\r' {
+                        io::stdout().write_all(b"\r").unwrap();
+                        line_tmp.push(b'\r');
+                    }
+                    buff[0] = b;
+                    line_tmp.push(b);
+
+                    if line_tmp.ends_with(b"\r\n") {
+                        let line = String::from_utf8_lossy(&line_tmp).to_string();
+                        if self.need_check_test {
+                            if line.contains("All tests passed") {
+                                exit(0);
+                            }
+                            if line.contains("panicked at") {
+                                println!("{}", "Test failed!".red());
+                                exit(1);
+                            }
+                        }
+
+                        history.push_back(line);
+                        if history.len() > 100 {
+                            history.pop_front();
+                        }
+
+                        line_tmp.clear();
+                    }
+
+                    io::stdout().write_all(&buff).unwrap();
+                    io::stdout().flush().unwrap();
+                }
+                Err(e) => match e.kind() {
+                    io::ErrorKind::TimedOut => sleep(Duration::from_micros(1)),
+                    _ => panic!("{}", e),
+                },
+            }
+        }
+    }
+}
+
+fn serial_wait_for_shell(port: &mut Box<dyn SerialPort>) {
+    let mut buf = [0u8; 1];
+    let mut history = Vec::new();
+    let mut is_itr = false;
+    loop {
+        match port.read(&mut buf) {
+            Ok(n) => {
+                if n == 1 {
                     let ch = buf[0];
                     if ch == b'\n' && history.last() != Some(&b'\r') {
                         stdout().write_all(b"\r").unwrap();
@@ -195,41 +285,22 @@ impl Step for Uboot {
                     }
                     history.push(ch);
 
-                    if !in_shell {
-                        if let Ok(s) = String::from_utf8(history.clone()) {
-                            if s.contains("Hit any key to stop autoboot") {
-                                in_shell = true;
-                                let mut port = port.lock().unwrap();
-                                port.write_all(b"a").unwrap();
-                                sleep(Duration::from_secs(1));
+                    io::stdout().write_all(&buf).unwrap();
 
-                                port.write_all(boot_cmd.as_bytes()).unwrap();
-                                port.write_all(b"\r\n").unwrap();
-                                history.clear();
-                            }
+                    if let Ok(s) = String::from_utf8(history.clone()) {
+                        if s.contains("Hit any key to stop autoboot") && !is_itr {
+                            port.write_all(b"a").unwrap();
+                            is_itr = true;
                         }
                     }
-
-                    if history.ends_with(b"\r\n") {
-                        let s = String::from_utf8(history.to_vec()).unwrap();
-                        if in_shell && self.is_check_test {
-                            if s.contains("All tests passed") {
-                                exit(0);
-                            }
-                            if s.contains("panicked at") {
-                                println!("{}", "Test failed!".red());
-                                exit(1);
-                            }
-                        }
-                    }
-
-                    stdout().write_all(&buf).unwrap();
                 }
-                Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
-                    stdout().flush().unwrap();
-                }
-                Err(e) => eprintln!("{:?}", e),
             }
+            Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
+                if history.contains(&b'#') {
+                    return;
+                }
+            }
+            Err(e) => eprintln!("{:?}", e),
         }
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "ostool"
-version = "0.3.16"
+version = "0.3.17"
 edition = "2021"
 description = "A tool for operating system development"
 authors = ["周睿 <zrufo747@outlook.com>"]
@@ -21,3 +21,5 @@ tftpd = "0.3.2"
 serde_json = "1.0"
 object = "0.36.5"
 cargo_metadata = "0.18.1"
+ratatui = "0.29.0"
+crossterm = "0.28.1"

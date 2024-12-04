@@ -91,8 +91,7 @@ impl Step for Compile {
         let img_size = std::fs::metadata(&bin_path).unwrap().len();
         println!("kernel image size: {:#}", Byte::from_u64(img_size));
 
-        project.bin_path = Some(bin_path);
-
+        project.set_binaries(elf, bin_path);
         Ok(())
     }
 }

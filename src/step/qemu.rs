@@ -24,7 +24,6 @@ pub struct Qemu {
     args: QemuArgs,
     is_check_test: bool,
     machine: String,
-    kernel: PathBuf,
     cmd: Command,
 }
 
@@ -34,7 +33,6 @@ impl Qemu {
             args: cli,
             is_check_test,
             machine: "virt".to_string(),
-            kernel: PathBuf::new(),
             cmd: Command::new("ls"),
         })
     }
@@ -77,9 +75,6 @@ impl Step for Qemu {
 
         if matches!(project.arch, Some(Arch::X86_64)) {
             self.machine = "q35".to_string();
-            self.kernel = project.elf_path.clone().unwrap();
-        } else {
-            self.kernel = project.bin_path.clone().unwrap();
         }
 
         if let Some(m) = project.config_ref().qemu.machine.as_ref() {
@@ -90,8 +85,6 @@ impl Step for Qemu {
             let _ = fs::remove_file("target/qemu.dtb");
             self.machine = format!("{},dumpdtb=target/qemu.dtb", self.machine);
         }
-
-        self.kernel = fs::canonicalize(&self.kernel).unwrap();
 
         #[cfg(target_os = "windows")]
         self.cmd_windows_env();
@@ -123,7 +116,7 @@ impl Step for Qemu {
             self.cmd.arg(cpu);
         }
         self.cmd.arg("-kernel");
-        self.cmd.arg(&self.kernel);
+        self.cmd.arg(project.to_load_kernel.as_ref().unwrap());
 
         if self.is_check_test {
             let is_ok = Arc::new(AtomicBool::new(false));

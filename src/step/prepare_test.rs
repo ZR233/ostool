@@ -115,7 +115,7 @@ impl Step for CargoTestPrepare {
             }
         }
         project.config = Some(config);
-        project.bin_path = Some(bin_path);
+        project.set_binaries(elf_path, bin_path);
 
         Ok(())
     }
