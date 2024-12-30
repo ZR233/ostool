@@ -86,8 +86,8 @@ impl Step for Qemu {
             self.machine = format!("{},dumpdtb=target/qemu.dtb", self.machine);
         }
 
-        #[cfg(target_os = "windows")]
-        self.cmd_windows_env();
+        // #[cfg(target_os = "windows")]
+        // self.cmd_windows_env();
 
         if !project.config_ref().qemu.graphic {
             self.cmd.arg("-nographic");

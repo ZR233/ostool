@@ -1,13 +1,17 @@
 use std::{
+    collections::HashMap,
     ffi::{OsStr, OsString},
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::OnceLock,
 };
 
 use anyhow::Result;
 use cargo_metadata::Metadata;
 use colored::Colorize;
+
+use crate::env::get_extra_path;
 
 pub trait Shell {
     fn exec_with_lines(
@@ -26,6 +30,24 @@ impl Shell for Command {
         is_print_cmd: bool,
         on_line: impl Fn(&str) -> Result<()>,
     ) -> Result<()> {
+        let env = self.get_envs().collect::<HashMap<_, _>>();
+
+        let mut path = env
+            .get(OsStr::new("PATH"))
+            .unwrap_or(&None)
+            .unwrap_or_default()
+            .to_os_string();
+        if !path.is_empty() {
+            path.push(";");
+        }
+
+        for p in get_extra_path() {
+            path.push(OsString::from(p));
+            path.push(";");
+        }
+
+        self.env("PATH", path);
+
         if is_print_cmd {
             let mut cmd_str = self.get_program().to_string_lossy().to_string();
 

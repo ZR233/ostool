@@ -7,6 +7,7 @@ use project::Project;
 use step::{CargoTestPrepare, Compile, Qemu, Step, Uboot, UbootConfig};
 
 mod config;
+mod env;
 mod os;
 mod project;
 mod shell;
@@ -63,6 +64,8 @@ struct QemuArgs {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let workdir = PathBuf::from(cli.workdir.unwrap_or("./".to_string()));
+
+    env::prepere_deps();
 
     let mut project = Project::new(workdir);
     project.prepere_deps();

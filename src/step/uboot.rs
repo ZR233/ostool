@@ -1,6 +1,6 @@
 use std::{
     collections::VecDeque,
-    fs,
+    fs::{self},
     io::{self, stdout, Read, Write},
     net::{IpAddr, Ipv4Addr},
     path::{Path, PathBuf},
@@ -144,7 +144,9 @@ impl Step for Uboot {
         let out_dir = project.out_dir();
 
         let boot_cmd = if let Some(dtb) = PathBuf::from(&config.dtb_file).file_name() {
-            let dtb_load_addr = "0x90600000";
+            // mkimage(project, &config.dtb_file);
+
+            // let dtb_load_addr = "0x90600000";
 
             let dtb_name = dtb.to_str().unwrap().to_string();
 
@@ -152,8 +154,11 @@ impl Step for Uboot {
 
             let _ = fs::copy(config.dtb_file, ftp_dtb);
 
+            // format!(
+            // "dhcp {dtb_load_addr} {ip}:{dtb_name};fdt addr {dtb_load_addr};bootp {ip}:{kernel_bin};booti $loadaddr - {dtb_load_addr}"
+
             format!(
-            "dhcp {dtb_load_addr} {ip}:{dtb_name};fdt addr {dtb_load_addr};bootp {ip}:{kernel_bin};booti $loadaddr - {dtb_load_addr}"
+            "dhcp $fdt_addr {ip}:{dtb_name};fdt addr $fdt_addr;bootp {ip}:{kernel_bin};booti $loadaddr - $fdt_addr"
         )
         } else {
             println!("DTB file not provided");
@@ -173,6 +178,29 @@ impl Step for Uboot {
         Ok(())
     }
 }
+
+// fn mkimage(project: &Project, fdt: &str) {
+//     let mut cmd = Command::new("mkimage");
+
+//     let bin = project.bin_path.as_ref().unwrap().to_string_lossy();
+
+//     let d = format!("\"{}\":\"{}\"", bin, fdt);
+//     // let d = format!("{}", bin);
+
+//     cmd.args(["-A", "arm"])
+//         .args(["-O", "linux"])
+//         .args(["-T", "multi"])
+//         .args(["-C", "none"])
+//         .args(["-n", "Speareal Kernel Image"])
+//         // .args(["-a", "0x1000000"])
+//         // .args(["-e", "0x1000000"])
+//         .arg("-d")
+//         // .arg(d)
+//         .arg(d)
+//         .arg(project.out_dir().join("uImage"));
+
+//     cmd.exec(true).unwrap();
+// }
 
 struct UbootShell {
     boot_cmd: String,
@@ -272,7 +300,7 @@ impl UbootShell {
 
 fn serial_wait_for_shell(port: &mut Box<dyn SerialPort>) {
     let mut buf = [0u8; 1];
-    let mut history = Vec::new();
+    let mut history: Vec<u8> = Vec::new();
     let mut is_itr = false;
     loop {
         match port.read(&mut buf) {
@@ -296,11 +324,29 @@ fn serial_wait_for_shell(port: &mut Box<dyn SerialPort>) {
                 }
             }
             Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
-                if history.contains(&b'#') {
+                let check_start = history.len().saturating_sub(5);
+                let to_check = &history[check_start..];
+
+                if to_check.contains(&b'#') || to_check.contains(&b'>') || is_itr {
                     return;
                 }
             }
             Err(e) => eprintln!("{:?}", e),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_shell_run() {
+        let sh = Arc::new(UbootShell {
+            boot_cmd: "".to_string(),
+            need_check_test: false,
+        });
+
+        sh.run("COM3", 115200);
     }
 }
