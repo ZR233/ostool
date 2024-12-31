@@ -284,10 +284,11 @@ impl UbootShell {
                         }
 
                         line_tmp.clear();
+                        io::stdout().flush().unwrap();
                     }
 
                     io::stdout().write_all(&buff).unwrap();
-                    io::stdout().flush().unwrap();
+                    // io::stdout().flush().unwrap();
                 }
                 Err(e) => match e.kind() {
                     io::ErrorKind::TimedOut => sleep(Duration::from_micros(1)),
