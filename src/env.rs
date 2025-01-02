@@ -1,7 +1,5 @@
 use std::{path::PathBuf, sync::OnceLock};
 
-use colored::Colorize;
-
 static EXTRA_PATH: OnceLock<Vec<PathBuf>> = OnceLock::new();
 
 pub fn prepere_deps() {
@@ -11,6 +9,7 @@ pub fn prepere_deps() {
 
 #[cfg(target_os = "windows")]
 fn windows() {
+    use colored::Colorize;
     let mut mysys2_root = PathBuf::from("C:\\msys64");
     if let Some(p) = std::env::var_os("MSYS2_ROOT") {
         mysys2_root = PathBuf::from(p);

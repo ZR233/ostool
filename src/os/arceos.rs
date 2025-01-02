@@ -74,7 +74,6 @@ impl OsConfig for ArceOS {
         env.insert("AX_TARGET".to_string(), target.clone());
         env.insert("AX_MODE".to_string(), "release".to_string());
 
-
         let packages = get_cargo_packages(&self.workdir);
         let package = packages[shell_select("select package:", &packages)].clone();
 

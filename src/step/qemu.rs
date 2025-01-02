@@ -1,8 +1,5 @@
 use std::{
-    collections::HashMap,
-    ffi::{OsStr, OsString},
     fs,
-    path::PathBuf,
     process::{exit, Command},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -37,7 +34,15 @@ impl Qemu {
         })
     }
 
+    #[allow(unused)]
+    #[cfg(target_os = "windows")]
     fn cmd_windows_env(&mut self) {
+        use std::{
+            collections::HashMap,
+            ffi::{OsStr, OsString},
+            path::PathBuf,
+        };
+
         let env = self.cmd.get_envs().collect::<HashMap<_, _>>();
         let mut mysys2_root = PathBuf::from("C:\\msys64");
         if let Some(p) = std::env::var_os("MSYS2_ROOT") {
