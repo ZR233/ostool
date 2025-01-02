@@ -54,7 +54,10 @@ impl Step for Compile {
             args.push("--release");
         }
 
-        let rust_flags = format!("{} -Clink-args=-Map=target/kernel.map", project.config_ref().compile.rust_flags);
+        let rust_flags = format!(
+            "{} -Clink-args=-Map=target/kernel.map",
+            project.config_ref().compile.rust_flags
+        );
 
         let mut cmd = project.shell("cargo");
 
