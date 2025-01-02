@@ -4,7 +4,6 @@ use std::{
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::OnceLock,
 };
 
 use anyhow::Result;
