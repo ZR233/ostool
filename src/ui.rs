@@ -9,9 +9,7 @@ pub fn shell_select(question: &str, options: &[String]) -> usize {
     }
 
     loop {
-        print!("> ");
         std::io::stdout().flush().unwrap();
-
         let mut input = String::new();
         let n = std::io::stdin().read_line(&mut input).unwrap();
         if n == 0 {
