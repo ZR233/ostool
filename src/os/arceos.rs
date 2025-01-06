@@ -31,7 +31,6 @@ impl ArceOS {
         let tmp_git_dir = tmp_dir.join("git");
         let tmp_registry_dir = tmp_dir.join("registry");
 
-
         vec![
             "docker build -t arceos -f Dockerfile .".to_string(),
             format!("docker run --rm -it -v .:/arceos -v \"{}:/usr/local/cargo/git\" -v \"{}:/usr/local/cargo/registry\" -w /arceos arceos make A=examples/helloworld ARCH=aarch64", 
