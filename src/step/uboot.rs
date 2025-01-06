@@ -169,9 +169,14 @@ impl Step for Uboot {
 
         println!("等待 U-Boot 启动...");
 
+        let kernel_size = fs::metadata(project.to_load_kernel.as_ref().unwrap())
+            .unwrap()
+            .len();
+
         let sh = Arc::new(UbootShell {
             boot_cmd,
             need_check_test: self.is_check_test,
+            kernel_size: kernel_size as _,
         });
 
         sh.run(&config.serial, config.baud_rate as _);
@@ -205,6 +210,7 @@ impl Step for Uboot {
 struct UbootShell {
     boot_cmd: String,
     need_check_test: bool,
+    kernel_size: usize,
 }
 
 impl UbootShell {
@@ -226,6 +232,25 @@ impl UbootShell {
 
         println!();
         println!("{}", "Uboot shell ok".green());
+
+        port_tx.write_all("echo $loadaddr\r\n".as_bytes()).unwrap();
+        // skip display echo
+        let _ = serial_read_until(&mut port_rx, b"\n");
+        let bytes = serial_read_until(&mut port_rx, b"\n");
+        let loadaddr_raw = String::from_utf8(bytes).unwrap();
+
+        println!("loadaddr: {}", loadaddr_raw);
+
+        let loadaddr = parse_value(&loadaddr_raw);
+
+        let mut fdt_addr = loadaddr + self.kernel_size as u32 + 0x100000;
+        fdt_addr = (fdt_addr + 0xFFF) & !0xFFF;
+
+        println!("{}", format!("set fdt_addr to {:#x}\r\n", fdt_addr).green());
+
+        port_tx
+            .write_all(format!("setenv fdt_addr {:#x}\r\n", fdt_addr).as_bytes())
+            .unwrap();
 
         port_tx.write_all(self.boot_cmd.as_bytes()).unwrap();
         port_tx.write_all(b"\r\n").unwrap();
@@ -299,6 +324,36 @@ impl UbootShell {
     }
 }
 
+fn parse_value(line: &str) -> u32 {
+    let mut line = line.trim();
+    let mut radix = 10;
+    if line.starts_with("0x") {
+        line = &line[2..];
+        radix = 16;
+    }
+    u32::from_str_radix(line, radix).unwrap()
+}
+
+fn serial_read_until(port: &mut Box<dyn SerialPort>, until: &[u8]) -> Vec<u8> {
+    let mut buf = [0u8; 1];
+    let mut vec = Vec::new();
+    loop {
+        match port.read(&mut buf) {
+            Ok(0) => break,
+            Ok(_) => {
+                vec.push(buf[0]);
+                if vec.ends_with(until) {
+                    break;
+                }
+            }
+            Err(_) => {
+                panic!("Error reading serial port")
+            }
+        }
+    }
+    vec
+}
+
 fn serial_wait_for_shell(port: &mut Box<dyn SerialPort>) {
     let mut buf = [0u8; 1];
     let mut history: Vec<u8> = Vec::new();
@@ -346,6 +401,7 @@ mod test {
         let sh = Arc::new(UbootShell {
             boot_cmd: "".to_string(),
             need_check_test: false,
+            kernel_size: 0,
         });
 
         sh.run("COM3", 115200);
