@@ -8,7 +8,7 @@ use sparreal::Sparreal;
 
 use crate::{
     config::{
-        compile::{Compile, LogLevel},
+        compile::{CargoBuild, Compile, LogLevel},
         qemu::Qemu,
         ProjectConfig,
     },
@@ -62,13 +62,15 @@ impl OsConfig for Custom {
         ProjectConfig {
             compile: Compile {
                 target,
-                kernel_bin_name: None,
-                package,
-                log_level: LogLevel::Debug,
-                rust_flags: String::new(),
-                custom_build: None,
-                env: BTreeMap::new(),
-                features: Vec::new(),
+                cargo: Some(CargoBuild {
+                    kernel_bin_name: None,
+                    package,
+                    log_level: LogLevel::Debug,
+                    rust_flags: String::new(),
+                    env: BTreeMap::new(),
+                    features: Vec::new(),
+                }),
+                custom: None,
             },
             qemu: Qemu {
                 machine: Some("virt".to_string()),

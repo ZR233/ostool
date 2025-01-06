@@ -1,5 +1,5 @@
 use crate::{
-    config::{compile::LogLevel, qemu::Qemu, ProjectConfig},
+    config::{qemu::Qemu, ProjectConfig},
     project::{Arch, Project},
     shell::Shell,
 };
@@ -58,7 +58,6 @@ impl Step for CargoTestPrepare {
 
         let mut config = ProjectConfig::new(project.arch.unwrap());
         config.qemu.machine = Some("virt".to_string());
-        config.compile.log_level = LogLevel::Error;
 
         let bin_path = project
             .out_dir()

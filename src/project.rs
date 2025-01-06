@@ -90,6 +90,12 @@ impl Project {
             .unwrap();
     }
 
+    pub fn workspace_root(&self) -> PathBuf {
+        let meta = metadata(self.workdir());
+        let pwd = meta.workspace_root.as_std_path();
+        pwd.into()
+    }
+
     pub fn out_dir_with_profile(&self, debug: bool) -> PathBuf {
         let meta = metadata(self.workdir());
         let pwd = meta.workspace_root.as_std_path();
@@ -113,8 +119,13 @@ impl Project {
         self.cargo_metadata()
             .packages
             .into_iter()
-            .find(|one| one.name == self.config_ref().compile.package)
-            .unwrap_or_else(|| panic!("Package {} not found!", self.config_ref().compile.package))
+            .find(|one| one.name == self.config_ref().compile.cargo.as_ref().unwrap().package)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Package {} not found!",
+                    self.config_ref().compile.cargo.as_ref().unwrap().package
+                )
+            })
     }
 
     pub fn package_dependencies(&self) -> Vec<String> {
