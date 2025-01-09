@@ -108,5 +108,20 @@ pub(crate) fn get_cargo_packages(workdir: &Path) -> Vec<String> {
 }
 
 pub(crate) fn check_porgram(program: &str) -> bool {
-    Command::new(program).arg("--version").output().is_ok()
+    match Command::new(program).arg("--version").output() {
+        Ok(out) => out.stderr.is_empty(),
+        Err(_) => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_check_porgram() {
+        let is_installed = check_porgram("rust-objcopy");
+
+        println!("is installed: {}", is_installed);
+    }
 }
