@@ -99,12 +99,17 @@ impl Compile {
 
     fn run_custom(&self, project: &mut Project, config: CustomBuild) {
         for cmd in &config.shell {
-            let mut cmd_iter = cmd.split_whitespace();
+            let mut parts = vec![];
 
+            for part in cmd {
+                for arg in part.split_whitespace() {
+                    parts.push(arg.trim().trim_matches('"'));
+                }
+            }
+            let mut cmd_iter = parts.iter();
             let mut p = project.shell(cmd_iter.next().unwrap());
-
             for arg in cmd_iter {
-                p.arg(arg.trim_matches('\"'));
+                p.arg(*arg);
             }
 
             p.exec(project.is_print_cmd).unwrap();
