@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    env,
     ffi::{OsStr, OsString},
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
@@ -29,23 +29,18 @@ impl Shell for Command {
         is_print_cmd: bool,
         on_line: impl Fn(&str) -> Result<()>,
     ) -> Result<()> {
-        let env = self.get_envs().collect::<HashMap<_, _>>();
+        let mut paths = vec![];
 
-        let mut path = env
-            .get(OsStr::new("PATH"))
-            .unwrap_or(&None)
-            .unwrap_or_default()
-            .to_os_string();
-        if !path.is_empty() {
-            path.push(";");
+        if let Some(path) = env::var_os("PATH") {
+            paths = env::split_paths(&path).collect::<Vec<_>>();
         }
 
         for p in get_extra_path() {
-            path.push(OsString::from(p));
-            path.push(";");
+            paths.push(p);
         }
+        let new_path = env::join_paths(paths)?;
 
-        self.env("PATH", path);
+        self.env("PATH", new_path);
 
         if is_print_cmd {
             let mut cmd_str = self.get_program().to_string_lossy().to_string();
