@@ -95,7 +95,7 @@ impl Uboot {
         Box::new(Self { is_check_test })
     }
 
-    fn run_tftp(file_dir: &Path) {
+    fn run_tftp(file_dir: &Path, ip: Ipv4Addr) {
         use tftpd::{Config, Server};
         println!("启动 TFTP 服务器...");
         println!("文件目录：{}", file_dir.display());
@@ -103,10 +103,12 @@ impl Uboot {
         config.directory = PathBuf::from(file_dir);
         config.send_directory = config.directory.clone();
         config.port = 69;
-        config.ip_address = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
+        config.ip_address = IpAddr::V4(ip);
 
         std::thread::spawn(move || {
-            let mut server = Server::new(&config).unwrap();
+            let mut server = Server::new(&config)
+                .map_err(|e| format!("TFTP server 启动失败： {e:?}。若权限不足，尝试执行 `sudo setcap cap_net_bind_service=+eip $(which ostool)` 并重启终端"))
+                .unwrap();
             server.listen();
         });
     }
@@ -124,7 +126,8 @@ impl Step for Uboot {
             .unwrap()
             .to_string_lossy();
 
-        let mut ip = String::new();
+        let mut ip_string = String::new();
+        let mut ip = Ipv4Addr::new(0, 0, 0, 0);
 
         let interfaces = NetworkInterface::show().unwrap();
         for interface in interfaces.iter() {
@@ -132,21 +135,22 @@ impl Step for Uboot {
                 let addr_list: Vec<Addr> = interface.addr.to_vec();
                 for one in addr_list {
                     if let Addr::V4(v4_if_addr) = one {
-                        ip = v4_if_addr.ip.to_string();
+                        ip_string = v4_if_addr.ip.to_string();
+                        ip = v4_if_addr.ip;
                     }
                 }
             }
         }
 
-        println!("TFTP: {}", ip);
+        println!("TFTP: {}", ip_string);
         println!("内核：{}", kernel_bin);
 
         let out_dir = project.out_dir();
 
+        let boot_cmd_base = "dhcp".to_string();
+
         let boot_cmd = if let Some(dtb) = PathBuf::from(&config.dtb_file).file_name() {
             // mkimage(project, &config.dtb_file);
-
-            // let dtb_load_addr = "0x90600000";
 
             let dtb_name = dtb.to_str().unwrap().to_string();
 
@@ -154,17 +158,15 @@ impl Step for Uboot {
 
             let _ = fs::copy(config.dtb_file, ftp_dtb);
 
-            // format!(
-            // "dhcp {dtb_load_addr} {ip}:{dtb_name};fdt addr {dtb_load_addr};bootp {ip}:{kernel_bin};booti $loadaddr - {dtb_load_addr}"
-
             format!(
-            "dhcp $fdt_addr {ip}:{dtb_name};fdt addr $fdt_addr;bootp {ip}:{kernel_bin};booti $loadaddr - $fdt_addr"
-        )
+            "{boot_cmd_base};tftp $fdt_addr {ip_string}:{dtb_name};fdt addr $fdt_addr;tftp $loadaddr {ip_string}:{kernel_bin};booti $loadaddr - $fdt_addr")
         } else {
             println!("DTB file not provided");
-            format!("dhcp $loadaddr {ip}:{kernel_bin};dcache flush;go $loadaddr")
+            format!(
+                "{boot_cmd_base};tftp $loadaddr {ip_string}:{kernel_bin};dcache flush;go $loadaddr"
+            )
         };
-        Self::run_tftp(&out_dir);
+        Self::run_tftp(&out_dir, ip);
         println!("启动命令：{}", boot_cmd);
 
         println!("等待 U-Boot 启动...");
@@ -216,8 +218,9 @@ struct UbootShell {
 impl UbootShell {
     pub fn run(self: Arc<Self>, port_path: &str, baud_rate: u32) {
         let mut port_rx = serialport::new(port_path, baud_rate)
-            .timeout(Duration::from_millis(500))
+            .timeout(Duration::from_millis(300))
             .open()
+            .map_err(|e| format!("无法打开串口 {port_path}: {:?}", e))
             .unwrap();
 
         println!(
@@ -233,24 +236,29 @@ impl UbootShell {
         println!();
         println!("{}", "Uboot shell ok".green());
 
-        port_tx.write_all("echo $loadaddr\r\n".as_bytes()).unwrap();
-        // skip display echo
-        let _ = serial_read_until(&mut port_rx, b"\n");
-        let bytes = serial_read_until(&mut port_rx, b"\n");
-        let loadaddr_raw = String::from_utf8(bytes).unwrap();
+        let loadaddr = env_int_read(&mut port_tx, "loadaddr").unwrap_or_else(|| {
+            let loadaddr =
+                env_int_read(&mut port_tx, "kernel_addr_r").expect("kernel_addr_r not found");
 
-        println!("loadaddr: {}", loadaddr_raw);
+            println!("$loadaddr not found, set to {:#x}", loadaddr);
 
-        let loadaddr = parse_value(&loadaddr_raw);
+            port_tx
+                .write_all(format!("setenv loadaddr {:#x}\r\n", loadaddr).as_bytes())
+                .unwrap();
 
-        let mut fdt_addr = loadaddr + self.kernel_size as u32 + 0x100000;
+            loadaddr
+        });
+
+        let mut fdt_addr = loadaddr + self.kernel_size as u64 + 0x100000;
         fdt_addr = (fdt_addr + 0xFFF) & !0xFFF;
 
-        println!("{}", format!("set fdt_addr to {:#x}\r\n", fdt_addr).green());
+        println!("{}", format!("set fdt_addr to {:#x}", fdt_addr).green());
 
         port_tx
             .write_all(format!("setenv fdt_addr {:#x}\r\n", fdt_addr).as_bytes())
             .unwrap();
+
+        port_tx.write_all("echo $serverip\r\n".as_bytes()).unwrap();
 
         port_tx.write_all(self.boot_cmd.as_bytes()).unwrap();
         port_tx.write_all(b"\r\n").unwrap();
@@ -324,14 +332,42 @@ impl UbootShell {
     }
 }
 
-fn parse_value(line: &str) -> u32 {
+fn env_int_read(port: &mut Box<dyn SerialPort>, name: &str) -> Option<u64> {
+    // clean buffer
+    loop {
+        if let Err(_e) = port.read(&mut [0; 100]) {
+            break;
+        }
+    }
+
+    port.write_all(format!("echo ${name}\r\n").as_bytes())
+        .unwrap();
+
+    let mut raw;
+
+    loop {
+        let bytes = serial_read_until(port, b"\n");
+        raw = String::from_utf8(bytes).unwrap();
+        print!("{raw}");
+
+        if raw.contains("0x") || raw.trim().is_empty() {
+            break;
+        }
+    }
+
+    println!("{}", format!("${name}: {raw}").green());
+
+    parse_value(&raw)
+}
+
+fn parse_value(line: &str) -> Option<u64> {
     let mut line = line.trim();
     let mut radix = 10;
     if line.starts_with("0x") {
         line = &line[2..];
         radix = 16;
     }
-    u32::from_str_radix(line, radix).unwrap()
+    u64::from_str_radix(line, radix).ok()
 }
 
 fn serial_read_until(port: &mut Box<dyn SerialPort>, until: &[u8]) -> Vec<u8> {
@@ -372,8 +408,17 @@ fn serial_wait_for_shell(port: &mut Box<dyn SerialPort>) {
                     io::stdout().write_all(&buf).unwrap();
 
                     if let Ok(s) = String::from_utf8(history.clone()) {
+                        if is_itr {
+                            continue;
+                        }
+
                         if s.contains("Hit any key to stop autoboot") && !is_itr {
                             port.write_all(b"a").unwrap();
+                            is_itr = true;
+                        }
+
+                        if s.contains("Hit key to stop autoboot('CTRL+C'):") && !is_itr {
+                            port.write_all(&[3]).unwrap();
                             is_itr = true;
                         }
                     }
