@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{env::current_dir, path::PathBuf};
 
 use anyhow::Result;
 use clap::*;
@@ -63,7 +63,10 @@ struct QemuArgs {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let workdir = PathBuf::from(cli.workdir.unwrap_or("./".to_string()));
+    let workdir = cli
+        .workdir
+        .map(|w| PathBuf::from(w))
+        .unwrap_or(current_dir().unwrap());
 
     env::prepere_deps();
 

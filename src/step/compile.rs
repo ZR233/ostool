@@ -79,6 +79,10 @@ impl Compile {
         project.elf_path = Some(elf.clone());
 
         let _ = std::fs::remove_file("target/kernel.elf");
+
+        println!("copying {} to target/kernel.elf", elf.display());
+
+        let _ = std::fs::remove_file("target/kernel.elf");
         std::fs::copy(&elf, "target/kernel.elf").unwrap();
 
         project
@@ -163,6 +167,6 @@ impl Step for Compile {
             return Ok(());
         }
 
-        panic!("配置文件错误，请删除 .project.yaml 文件后重试")
+        panic!("配置文件错误，请删除 .project.toml 文件后重试")
     }
 }
