@@ -5,7 +5,6 @@ use std::{
     net::{IpAddr, Ipv4Addr},
     path::{Path, PathBuf},
     process::exit,
-    sync::Arc,
     thread::{self, sleep},
     time::Duration,
 };
@@ -148,18 +147,22 @@ impl Step for Uboot {
         let out_dir = project.out_dir();
 
         let boot_cmd_base = "dhcp".to_string();
+        let mut fdtfile = String::new();
 
         let boot_cmd = if let Some(dtb) = PathBuf::from(&config.dtb_file).file_name() {
             // mkimage(project, &config.dtb_file);
 
             let dtb_name = dtb.to_str().unwrap().to_string();
 
+            fdtfile = dtb_name.to_string();
+
             let ftp_dtb = out_dir.join(&dtb_name);
 
             let _ = fs::copy(config.dtb_file, ftp_dtb);
 
-            format!(
-            "{boot_cmd_base};tftp $fdt_addr {ip_string}:{dtb_name};fdt addr $fdt_addr;tftp $loadaddr {ip_string}:{kernel_bin};booti $loadaddr - $fdt_addr")
+            // format!(
+            // "{boot_cmd_base};tftp $fdt_addr {ip_string}:{dtb_name};fdt addr $fdt_addr;tftp $loadaddr {ip_string}:{kernel_bin};booti $loadaddr - $fdt_addr")
+            format!("{boot_cmd_base};tftp $loadaddr $filename;tftp $fdt_addr $fdtfile;fdt addr $fdt_addr;booti $loadaddr - $fdt_addr")
         } else {
             println!("DTB file not provided");
             format!(
@@ -175,11 +178,15 @@ impl Step for Uboot {
             .unwrap()
             .len();
 
-        let sh = Arc::new(UbootShell {
+        let mut sh = UbootShell {
             boot_cmd,
             need_check_test: self.is_check_test,
             kernel_size: kernel_size as _,
-        });
+            bootfile: kernel_bin.to_string(),
+            fdtfile,
+            serverip: ip_string,
+            ..Default::default()
+        };
 
         sh.run(&config.serial, config.baud_rate as _);
         Ok(())
@@ -208,43 +215,49 @@ impl Step for Uboot {
 
 //     cmd.exec(true).unwrap();
 // }
-
+#[derive(Default)]
 struct UbootShell {
     boot_cmd: String,
     need_check_test: bool,
     kernel_size: usize,
+    bootfile: String,
+    fdtfile: String,
+    serverip: String,
+    _rx: Option<Box<dyn SerialPort>>,
+    tx: Option<Box<dyn SerialPort>>,
 }
 
 impl UbootShell {
-    pub fn run(self: Arc<Self>, port_path: &str, baud_rate: u32) {
-        let mut port_rx = serialport::new(port_path, baud_rate)
+    pub fn run(&mut self, port_path: &str, baud_rate: u32) {
+        let port_rx = serialport::new(port_path, baud_rate)
             .timeout(Duration::from_millis(300))
             .open()
             .map_err(|e| format!("无法打开串口 {port_path}: {:?}", e))
             .unwrap();
 
+        self._rx = Some(port_rx);
+
         println!(
             "串口：{}, {}",
-            port_rx.name().unwrap_or_default(),
+            self.rx().name().unwrap_or_default(),
             baud_rate
         );
 
-        let mut port_tx = port_rx.try_clone().unwrap();
+        self.tx = Some(self.rx().try_clone().unwrap());
 
-        serial_wait_for_shell(&mut port_rx);
+        self.wait_for_shell();
 
         println!();
         println!("{}", "Uboot shell ok".green());
 
-        let loadaddr = env_int_read(&mut port_tx, "loadaddr").unwrap_or_else(|| {
-            let loadaddr =
-                env_int_read(&mut port_tx, "kernel_addr_r").expect("kernel_addr_r not found");
+        let loadaddr = self.env_int_read("loadaddr").unwrap_or_else(|| {
+            let loadaddr = self
+                .env_int_read("kernel_addr_r")
+                .expect("kernel_addr_r not found");
 
             println!("$loadaddr not found, set to {:#x}", loadaddr);
 
-            port_tx
-                .write_all(format!("setenv loadaddr {:#x}\r\n", loadaddr).as_bytes())
-                .unwrap();
+            self.set_env("loadaddr", &format!("{loadaddr:#x}"));
 
             loadaddr
         });
@@ -252,19 +265,21 @@ impl UbootShell {
         let mut fdt_addr = loadaddr + self.kernel_size as u64 + 0x100000;
         fdt_addr = (fdt_addr + 0xFFF) & !0xFFF;
 
-        println!("{}", format!("set fdt_addr to {:#x}", fdt_addr).green());
+        self.set_env("autoload", "no");
 
-        port_tx
-            .write_all(format!("setenv fdt_addr {:#x}\r\n", fdt_addr).as_bytes())
-            .unwrap();
+        self.set_env("serverip", &self.serverip.to_string());
 
-        port_tx.write_all("echo $serverip\r\n".as_bytes()).unwrap();
+        self.set_env("bootfile", &self.bootfile.to_string());
 
-        port_tx.write_all(self.boot_cmd.as_bytes()).unwrap();
-        port_tx.write_all(b"\r\n").unwrap();
-        println!("{}", format!("Exec: {}", self.boot_cmd).green());
+        self.set_env("fdtfile", &self.fdtfile.to_string());
+
+        self.set_env("fdt_addr", &format!("{:#x}", fdt_addr));
+
+        self.send_cmd(&self.boot_cmd.to_string());
 
         if !self.need_check_test {
+            let mut port_tx = self.tx.take().unwrap();
+
             thread::spawn(move || loop {
                 if let Ok(Event::Key(key)) = event::read() {
                     if matches!(key.kind, event::KeyEventKind::Release) {
@@ -289,7 +304,10 @@ impl UbootShell {
         let mut line_tmp = Vec::new();
 
         let mut buff = [0u8; 1];
-        for byte in port_rx.bytes() {
+
+        let need_check_test = self.need_check_test;
+
+        for byte in self.rx().bytes() {
             match byte {
                 Ok(b) => {
                     if b == b'\n' && buff[0] != b'\r' {
@@ -301,7 +319,7 @@ impl UbootShell {
 
                     if line_tmp.ends_with(b"\r\n") {
                         let line = String::from_utf8_lossy(&line_tmp).to_string();
-                        if self.need_check_test {
+                        if need_check_test {
                             if line.contains("All tests passed") {
                                 exit(0);
                             }
@@ -330,34 +348,130 @@ impl UbootShell {
             }
         }
     }
-}
 
-fn env_int_read(port: &mut Box<dyn SerialPort>, name: &str) -> Option<u64> {
-    // clean buffer
-    loop {
-        if let Err(_e) = port.read(&mut [0; 100]) {
-            break;
+    fn rx(&mut self) -> &mut Box<dyn SerialPort> {
+        self._rx.as_mut().unwrap()
+    }
+
+    fn send_cmd(&mut self, cmd: &str) {
+        self.tx.as_mut().unwrap().write_all(cmd.as_bytes()).unwrap();
+        self.tx
+            .as_mut()
+            .unwrap()
+            .write_all("\r\n".as_bytes())
+            .unwrap();
+        self.tx.as_mut().unwrap().flush().unwrap();
+
+        let line = self.read_line();
+
+        println!("{line}");
+        sleep(Duration::from_millis(100));
+    }
+
+    fn wait_for_shell(&mut self) {
+        let mut buf = [0u8; 1];
+        let mut history: Vec<u8> = Vec::new();
+        let mut is_itr = false;
+        loop {
+            match self.rx().read(&mut buf) {
+                Ok(n) => {
+                    if n == 1 {
+                        let ch = buf[0];
+                        if ch == b'\n' && history.last() != Some(&b'\r') {
+                            stdout().write_all(b"\r").unwrap();
+                            history.push(b'\r');
+                        }
+                        history.push(ch);
+
+                        io::stdout().write_all(&buf).unwrap();
+
+                        if let Ok(s) = String::from_utf8(history.clone()) {
+                            if is_itr {
+                                continue;
+                            }
+
+                            if s.contains("Hit any key to stop autoboot") && !is_itr {
+                                self.tx.as_mut().unwrap().write_all(b"a").unwrap();
+                                is_itr = true;
+                            }
+
+                            if s.contains("Hit key to stop autoboot('CTRL+C'):") && !is_itr {
+                                self.tx.as_mut().unwrap().write_all(&[3]).unwrap();
+                                is_itr = true;
+                            }
+                        }
+                    }
+                }
+                Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
+                    let check_start = history.len().saturating_sub(5);
+                    let to_check = &history[check_start..];
+
+                    if to_check.contains(&b'#') || to_check.contains(&b'>') || is_itr {
+                        return;
+                    }
+                }
+                Err(e) => eprintln!("{:?}", e),
+            }
         }
     }
 
-    port.write_all(format!("echo ${name}\r\n").as_bytes())
-        .unwrap();
-
-    let mut raw;
-
-    loop {
-        let bytes = serial_read_until(port, b"\n");
-        raw = String::from_utf8(bytes).unwrap();
-        print!("{raw}");
-
-        if raw.contains("0x") || raw.trim().is_empty() {
-            break;
+    fn env_int_read(&mut self, name: &str) -> Option<u64> {
+        // clean buffer
+        loop {
+            if let Err(_e) = self.rx().read(&mut [0; 100]) {
+                break;
+            }
         }
+
+        self.tx
+            .as_mut()?
+            .write_all(format!("echo ${name}\r\n").as_bytes())
+            .unwrap();
+
+        let mut raw;
+
+        loop {
+            let bytes = serial_read_until(self.rx(), b"\n");
+            raw = String::from_utf8(bytes).unwrap();
+            if raw.contains("0x") || raw.trim().is_empty() {
+                break;
+            }
+        }
+        println!("{}", format!("${name}: {raw}").green());
+        parse_value(&raw)
     }
 
-    println!("{}", format!("${name}: {raw}").green());
+    fn set_env(&mut self, name: &str, value: &str) {
+        self.send_cmd(&format!("setenv {name} {value}"));
+    }
 
-    parse_value(&raw)
+    fn read_line(&mut self) -> String {
+        let mut line_raw = Vec::new();
+        let mut byte = [0; 1];
+
+        while let Ok(n) = self.rx().read(&mut byte) {
+            if n == 0 {
+                break;
+            }
+
+            if byte[0] == b'\r' {
+                continue;
+            }
+
+            if byte[0] == b'\n' {
+                break;
+            }
+
+            line_raw.push(byte[0]);
+        }
+
+        if line_raw.is_empty() {
+            return String::new();
+        }
+
+        let line = String::from_utf8_lossy(&line_raw);
+        line.trim().to_string()
+    }
 }
 
 fn parse_value(line: &str) -> Option<u64> {
@@ -390,64 +504,22 @@ fn serial_read_until(port: &mut Box<dyn SerialPort>, until: &[u8]) -> Vec<u8> {
     vec
 }
 
-fn serial_wait_for_shell(port: &mut Box<dyn SerialPort>) {
-    let mut buf = [0u8; 1];
-    let mut history: Vec<u8> = Vec::new();
-    let mut is_itr = false;
-    loop {
-        match port.read(&mut buf) {
-            Ok(n) => {
-                if n == 1 {
-                    let ch = buf[0];
-                    if ch == b'\n' && history.last() != Some(&b'\r') {
-                        stdout().write_all(b"\r").unwrap();
-                        history.push(b'\r');
-                    }
-                    history.push(ch);
-
-                    io::stdout().write_all(&buf).unwrap();
-
-                    if let Ok(s) = String::from_utf8(history.clone()) {
-                        if is_itr {
-                            continue;
-                        }
-
-                        if s.contains("Hit any key to stop autoboot") && !is_itr {
-                            port.write_all(b"a").unwrap();
-                            is_itr = true;
-                        }
-
-                        if s.contains("Hit key to stop autoboot('CTRL+C'):") && !is_itr {
-                            port.write_all(&[3]).unwrap();
-                            is_itr = true;
-                        }
-                    }
-                }
-            }
-            Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
-                let check_start = history.len().saturating_sub(5);
-                let to_check = &history[check_start..];
-
-                if to_check.contains(&b'#') || to_check.contains(&b'>') || is_itr {
-                    return;
-                }
-            }
-            Err(e) => eprintln!("{:?}", e),
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
 
     #[test]
     fn test_shell_run() {
-        let sh = Arc::new(UbootShell {
+        let mut sh = UbootShell {
             boot_cmd: "".to_string(),
             need_check_test: false,
             kernel_size: 0,
-        });
+            bootfile: todo!(),
+            fdtfile: todo!(),
+            serverip: todo!(),
+            _rx: todo!(),
+            tx: todo!(),
+        };
 
         sh.run("COM3", 115200);
     }

@@ -65,7 +65,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     let workdir = cli
         .workdir
-        .map(|w| PathBuf::from(w))
+        .map(PathBuf::from)
         .unwrap_or(current_dir().unwrap());
 
     env::prepere_deps();
