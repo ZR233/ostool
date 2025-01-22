@@ -67,6 +67,8 @@ else {
 }
 ```
 
+`.project.toml`
+
 ```toml
 [compile]
 target = "aarch64-unknown-none-softfloat"
