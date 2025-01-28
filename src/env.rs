@@ -9,8 +9,6 @@ pub fn prepere_deps() {
 
 #[cfg(target_os = "windows")]
 fn windows() {
-    
-
     use colored::Colorize;
     let mut mysys2_root = PathBuf::from("C:\\msys64");
     if let Some(p) = std::env::var_os("MSYS2_ROOT") {
