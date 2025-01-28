@@ -514,11 +514,11 @@ mod test {
             boot_cmd: "".to_string(),
             need_check_test: false,
             kernel_size: 0,
-            bootfile: todo!(),
-            fdtfile: todo!(),
-            serverip: todo!(),
-            _rx: todo!(),
-            tx: todo!(),
+            bootfile: "".to_string(),
+            fdtfile: "".to_string(),
+            serverip: "".to_string(),
+            _rx: None,
+            tx: None,
         };
 
         sh.run("COM3", 115200);
