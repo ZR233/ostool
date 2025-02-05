@@ -1,10 +1,10 @@
-use std::{env::current_dir, path::PathBuf};
+use std::{env::current_dir, path::PathBuf, thread::sleep, time::Duration};
 
 use anyhow::Result;
 use clap::*;
 use colored::Colorize;
 use project::Project;
-use step::{CargoTestPrepare, Compile, Qemu, Step, Uboot, UbootConfig};
+use step::{CargoTestPrepare, Compile, Qemu, Step, Tftp, Uboot, UbootConfig};
 
 mod config;
 mod env;
@@ -39,6 +39,7 @@ struct RunArgs {
 enum RunSubCommands {
     Qemu(QemuArgs),
     Uboot,
+    Tftp,
 }
 
 #[derive(Args, Debug, Default)]
@@ -114,6 +115,13 @@ fn main() -> Result<()> {
                     }
 
                     steps.push(Uboot::new_boxed(false));
+                }
+                RunSubCommands::Tftp => {
+                    steps.push(Compile::new_boxed(false));
+                    steps.push(Tftp::new_boxed());
+                    loop {
+                        sleep(Duration::from_secs(1));
+                    }
                 }
             };
         }
