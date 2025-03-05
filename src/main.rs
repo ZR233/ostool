@@ -71,6 +71,8 @@ fn main() -> Result<()> {
 
     env::prepere_deps();
 
+    let mut keep_run = false;
+
     let mut project = Project::new(workdir);
     project.prepere_deps();
 
@@ -100,6 +102,7 @@ fn main() -> Result<()> {
         }
         SubCommands::Run(run_args) => {
             project.config_with_file().unwrap();
+
             match run_args.command {
                 RunSubCommands::Qemu(args) => {
                     steps.push(Compile::new_boxed(args.debug));
@@ -107,6 +110,7 @@ fn main() -> Result<()> {
                 }
                 RunSubCommands::Uboot => {
                     steps.push(Compile::new_boxed(false));
+                    steps.push(Tftp::new_boxed());
 
                     let config = project.config.as_mut().unwrap();
                     if config.uboot.is_none() {
@@ -119,9 +123,7 @@ fn main() -> Result<()> {
                 RunSubCommands::Tftp => {
                     steps.push(Compile::new_boxed(false));
                     steps.push(Tftp::new_boxed());
-                    loop {
-                        sleep(Duration::from_secs(1));
-                    }
+                    keep_run = true;
                 }
             };
         }
@@ -130,6 +132,12 @@ fn main() -> Result<()> {
     for step in &mut steps {
         if let Err(skip) = step.run(&mut project) {
             println!("{}", format!("warn: {}", skip).yellow());
+        }
+    }
+
+    if keep_run {
+        loop {
+            sleep(Duration::from_secs(1));
         }
     }
 

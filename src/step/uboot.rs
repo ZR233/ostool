@@ -2,8 +2,7 @@ use std::{
     collections::VecDeque,
     fs::{self},
     io::{self, stdout, Read, Write},
-    net::{IpAddr, Ipv4Addr},
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::exit,
     thread::{self, sleep},
     time::Duration,
@@ -19,12 +18,13 @@ use crate::{project::Project, ui};
 
 use super::Step;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct UbootConfig {
     pub serial: String,
     pub baud_rate: i64,
     pub net: String,
     pub dtb_file: String,
+    pub dhcp: bool,
 }
 
 impl UbootConfig {
@@ -81,6 +81,7 @@ impl UbootConfig {
             baud_rate,
             net,
             dtb_file,
+            dhcp: true,
         }
     }
 }
@@ -92,24 +93,6 @@ pub struct Uboot {
 impl Uboot {
     pub fn new_boxed(is_check_test: bool) -> Box<Self> {
         Box::new(Self { is_check_test })
-    }
-
-    fn run_tftp(file_dir: &Path, ip: Ipv4Addr) {
-        use tftpd::{Config, Server};
-        println!("启动 TFTP 服务器...");
-        println!("文件目录：{}", file_dir.display());
-        let mut config = Config::default();
-        config.directory = PathBuf::from(file_dir);
-        config.send_directory = config.directory.clone();
-        config.port = 69;
-        config.ip_address = IpAddr::V4(ip);
-
-        std::thread::spawn(move || {
-            let mut server = Server::new(&config)
-                .map_err(|e| format!("TFTP server 启动失败： {e:?}。若权限不足，尝试执行 `sudo setcap cap_net_bind_service=+eip $(which ostool)` 并重启终端"))
-                .unwrap();
-            server.listen();
-        });
     }
 }
 
@@ -126,7 +109,6 @@ impl Step for Uboot {
             .to_string_lossy();
 
         let mut ip_string = String::new();
-        let mut ip = Ipv4Addr::new(0, 0, 0, 0);
 
         let interfaces = NetworkInterface::show().unwrap();
         for interface in interfaces.iter() {
@@ -135,18 +117,23 @@ impl Step for Uboot {
                 for one in addr_list {
                     if let Addr::V4(v4_if_addr) = one {
                         ip_string = v4_if_addr.ip.to_string();
-                        ip = v4_if_addr.ip;
                     }
                 }
             }
         }
 
-        println!("TFTP: {}", ip_string);
+        println!("TFTP : {}", ip_string);
+
         println!("内核：{}", kernel_bin);
 
         let out_dir = project.out_dir();
 
-        let boot_cmd_base = "dhcp".to_string();
+        let mut boot_cmd_base = String::new();
+
+        if config.dhcp {
+            boot_cmd_base = format!("{boot_cmd_base}dhcp;");
+        }
+
         let mut fdtfile = String::new();
 
         let boot_cmd = if let Some(dtb) = PathBuf::from(&config.dtb_file).file_name() {
@@ -160,16 +147,11 @@ impl Step for Uboot {
 
             let _ = fs::copy(config.dtb_file, ftp_dtb);
 
-            // format!(
-            // "{boot_cmd_base};tftp $fdt_addr {ip_string}:{dtb_name};fdt addr $fdt_addr;tftp $loadaddr {ip_string}:{kernel_bin};booti $loadaddr - $fdt_addr")
-            format!("{boot_cmd_base};tftp $loadaddr $filename;tftp $fdt_addr $fdtfile;fdt addr $fdt_addr;booti $loadaddr - $fdt_addr")
+            format!("{boot_cmd_base}tftp $loadaddr {ip_string}:$bootfile;tftp $fdt_addr {ip_string}:$fdtfile;fdt addr $fdt_addr;booti $loadaddr - $fdt_addr")
         } else {
             println!("DTB file not provided");
-            format!(
-                "{boot_cmd_base};tftp $loadaddr {ip_string}:{kernel_bin};dcache flush;go $loadaddr"
-            )
+            format!("{boot_cmd_base}tftp $loadaddr {ip_string}:$bootfile;dcache flush;go $loadaddr")
         };
-        Self::run_tftp(&out_dir, ip);
         println!("启动命令：{}", boot_cmd);
 
         println!("等待 U-Boot 启动...");
@@ -184,7 +166,6 @@ impl Step for Uboot {
             kernel_size: kernel_size as _,
             bootfile: kernel_bin.to_string(),
             fdtfile,
-            serverip: ip_string,
             ..Default::default()
         };
 
@@ -222,7 +203,6 @@ struct UbootShell {
     kernel_size: usize,
     bootfile: String,
     fdtfile: String,
-    serverip: String,
     _rx: Option<Box<dyn SerialPort>>,
     tx: Option<Box<dyn SerialPort>>,
 }
@@ -266,8 +246,6 @@ impl UbootShell {
         fdt_addr = (fdt_addr + 0xFFF) & !0xFFF;
 
         self.set_env("autoload", "no");
-
-        self.set_env("serverip", &self.serverip.to_string());
 
         self.set_env("bootfile", &self.bootfile.to_string());
 
@@ -516,7 +494,6 @@ mod test {
             kernel_size: 0,
             bootfile: "".to_string(),
             fdtfile: "".to_string(),
-            serverip: "".to_string(),
             _rx: None,
             tx: None,
         };

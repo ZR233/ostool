@@ -38,6 +38,7 @@ impl Project {
 
     pub fn config_with_file(&mut self) -> Result<()> {
         let meta = metadata(self.workdir());
+
         let config_path = meta.workspace_root.as_std_path().join(".project.toml");
 
         let config;
@@ -69,9 +70,11 @@ impl Project {
     }
 
     pub fn prepere_deps(&self) {
+        println!("check dependencies");
         if !check_porgram("rust-objcopy") {
             self.install_deps();
         }
+        println!("dependencies ready");
     }
 
     pub fn save_config(&self) {
@@ -80,6 +83,7 @@ impl Project {
     }
 
     fn install_deps(&self) {
+        println!("install dependencies");
         self.shell("cargo")
             .args(["install", "cargo-binutils"])
             .exec(self.is_print_cmd)

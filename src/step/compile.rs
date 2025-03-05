@@ -19,6 +19,8 @@ impl Compile {
     }
 
     fn run_cargo(&mut self, project: &mut Project, config: CargoBuild) -> anyhow::Result<()> {
+        println!("compiling...");
+
         let bin_name = config
             .kernel_bin_name
             .clone()

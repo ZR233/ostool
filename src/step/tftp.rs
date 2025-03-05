@@ -20,7 +20,7 @@ impl Step for Tftp {
         config.directory = file_dir;
         config.send_directory = config.directory.clone();
         config.port = 69;
-        config.ip_address = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
+        config.ip_address = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
 
         std::thread::spawn(move || {
             let mut server = Server::new(&config)
