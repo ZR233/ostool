@@ -1,3 +1,4 @@
+use colored::Colorize;
 use std::net::{IpAddr, Ipv4Addr};
 
 use super::Step;
@@ -24,8 +25,11 @@ impl Step for Tftp {
 
         std::thread::spawn(move || {
             let mut server = Server::new(&config)
-                .map_err(|e| format!("TFTP server 启动失败：{e:?}。若权限不足，尝试执行 `sudo setcap cap_net_bind_service=+eip $(which ostool)` 并重启终端"))
-                .unwrap();
+                .inspect_err(|e| {
+                    println!("{}", e);
+                    println!("{}","TFTP server 启动失败：{e:?}。若权限不足，尝试执行 `sudo setcap cap_net_bind_service=+eip $(which ostool)` 并重启终端".red());
+                    std::process::exit(1);
+                }).unwrap();
             server.listen();
         });
 

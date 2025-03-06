@@ -89,6 +89,7 @@ fn main() -> Result<()> {
 
             steps.push(CargoTestPrepare::new_boxed(args.elf, args.uboot));
             if args.uboot {
+                steps.push(Tftp::new_boxed());
                 steps.push(Uboot::new_boxed(true));
             } else {
                 steps.push(Qemu::new_boxed(
