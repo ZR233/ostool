@@ -59,9 +59,7 @@ impl OsConfig for Sparreal {
                     kernel_bin_name: None,
                     package,
                     log_level: LogLevel::Debug,
-                    rust_flags:
-                        "-C link-arg=-Tlink.x -C link-arg=-no-pie -C link-arg=-znostart-stop-gc"
-                            .to_string(),
+                    rust_flags: "".to_string(),
                     env: BTreeMap::new(),
                     features: Vec::new(),
                 }),
