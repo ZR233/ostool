@@ -25,6 +25,7 @@ pub struct UbootConfig {
     pub net: String,
     pub dtb_file: String,
     pub dhcp: bool,
+    pub board_ip: Option<String>,
 }
 
 impl UbootConfig {
@@ -82,6 +83,7 @@ impl UbootConfig {
             net,
             dtb_file,
             dhcp: true,
+            ..Default::default()
         }
     }
 }
@@ -166,6 +168,8 @@ impl Step for Uboot {
             kernel_size: kernel_size as _,
             bootfile: kernel_bin.to_string(),
             fdtfile,
+            server_ip: ip_string,
+            board_ip: config.board_ip.clone(),
             ..Default::default()
         };
 
@@ -203,6 +207,8 @@ struct UbootShell {
     kernel_size: usize,
     bootfile: String,
     fdtfile: String,
+    server_ip: String,
+    board_ip: Option<String>,
     _rx: Option<Box<dyn SerialPort>>,
     tx: Option<Box<dyn SerialPort>>,
 }
@@ -251,7 +257,13 @@ impl UbootShell {
 
         self.set_env("fdtfile", &self.fdtfile.to_string());
 
+        self.set_env("serverip", &self.server_ip.to_string());
+
         self.set_env("fdt_addr", &format!("{:#x}", fdt_addr));
+
+        if let Some(board_ip) = self.board_ip.clone() {
+            self.set_env("ipaddr", &board_ip);
+        }
 
         self.send_cmd(&self.boot_cmd.to_string());
 
@@ -483,8 +495,11 @@ mod test {
             kernel_size: 0,
             bootfile: "".to_string(),
             fdtfile: "".to_string(),
+
             _rx: None,
             tx: None,
+            server_ip: "",
+            board_ip: None,
         };
 
         sh.run("COM3", 115200);
