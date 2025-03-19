@@ -5,7 +5,7 @@ use std::{
     path::PathBuf,
     process::exit,
     thread::{self, sleep},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use colored::Colorize;
@@ -220,7 +220,7 @@ impl UbootShell {
         println!(
             "串口：{}, {}",
             self.rx().name().unwrap_or_default(),
-            baud_rate
+            self.rx().baud_rate().unwrap()
         );
 
         self.tx = Some(self.rx().try_clone().unwrap());
@@ -349,7 +349,10 @@ impl UbootShell {
     fn wait_for_shell(&mut self) {
         let mut buf = [0u8; 1];
         let mut history: Vec<u8> = Vec::new();
-        let mut is_itr = false;
+        const CTRL_C: u8 = 0x03;
+
+        let mut last = Instant::now();
+
         loop {
             match self.rx().read(&mut buf) {
                 Ok(n) => {
@@ -363,31 +366,17 @@ impl UbootShell {
 
                         io::stdout().write_all(&buf).unwrap();
 
-                        if let Ok(s) = String::from_utf8(history.clone()) {
-                            if is_itr {
-                                continue;
-                            }
+                        if history.ends_with(c"<INTERRUPT>".to_bytes()) {
+                            return;
+                        }
 
-                            if s.contains("Hit any key to stop autoboot") && !is_itr {
-                                self.tx.as_mut().unwrap().write_all(b"a").unwrap();
-                                is_itr = true;
-                            }
-
-                            if s.contains("Hit key to stop autoboot('CTRL+C'):") && !is_itr {
-                                self.tx.as_mut().unwrap().write_all(&[3]).unwrap();
-                                is_itr = true;
-                            }
+                        if last.elapsed() > Duration::from_millis(100) {
+                            let _ = self.tx.as_mut().unwrap().write_all(&[CTRL_C]);
+                            last = Instant::now();
                         }
                     }
                 }
-                Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {
-                    let check_start = history.len().saturating_sub(5);
-                    let to_check = &history[check_start..];
-
-                    if to_check.contains(&b'#') || to_check.contains(&b'>') || is_itr {
-                        return;
-                    }
-                }
+                Err(ref e) if e.kind() == io::ErrorKind::TimedOut => {}
                 Err(e) => eprintln!("{:?}", e),
             }
         }

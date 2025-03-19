@@ -737,7 +737,7 @@ checksum = "945462a4b81e43c4e3ba96bd7b49d834c6f61198356aa858733bc4acf3cbe62e"
 
 [[package]]
 name = "ostool"
-version = "0.6.2"
+version = "0.6.3"
 dependencies = [
  "anyhow",
  "byte-unit",
