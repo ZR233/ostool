@@ -18,6 +18,9 @@ use crate::{project::Project, ui};
 
 use super::Step;
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Default, Serialize, Deserialize, Debug, Clone)]
 pub struct UbootConfig {
     pub serial: String,
@@ -495,10 +498,9 @@ mod test {
             kernel_size: 0,
             bootfile: "".to_string(),
             fdtfile: "".to_string(),
-
             _rx: None,
             tx: None,
-            server_ip: "",
+            server_ip: "".to_string(),
             board_ip: None,
         };
 
