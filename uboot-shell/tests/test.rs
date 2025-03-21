@@ -1,12 +1,4 @@
-use std::{
-    process::{Child, Command, Stdio},
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
-    thread::{self, sleep},
-    time::{Duration, Instant},
-};
+use std::process::{Child, Command, Stdio};
 
 use ntest::timeout;
 use uboot_shell::UbootCli;
@@ -81,6 +73,19 @@ fn test_env() {
     uboot.wait_for_shell();
 
     assert_eq!(uboot.env_int("fdt_addr"), Some(0x40000000));
+
+    let _ = out.kill();
+    out.wait().unwrap();
+}
+
+#[test]
+#[timeout(5000)]
+fn test_loadx() {
+    let (mut out, mut uboot) = new_uboot();
+
+    uboot.wait_for_shell();
+
+    uboot.loady(0x40200000, "Cargo.toml");
 
     let _ = out.kill();
     out.wait().unwrap();

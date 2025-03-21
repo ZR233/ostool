@@ -5,7 +5,8 @@ edition = "2024"
 
 [dependencies]
 anyhow = { version = "1", features = ["backtrace"] }
-
+indicatif = "0.17"
 
 [dev-dependencies]
 ntest = "*"
+serialport = "4.6"

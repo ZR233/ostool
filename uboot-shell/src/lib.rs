@@ -1,7 +1,16 @@
 use std::{
+    fmt,
+    fs::File,
     io::*,
+    os::unix::fs::MetadataExt,
+    path::PathBuf,
     time::{Duration, Instant},
 };
+
+use indicatif::{ProgressBar, ProgressState, ProgressStyle};
+
+mod crc;
+mod ymodem;
 
 pub struct UbootCli {
     pub tx: Option<Box<dyn Write + Send>>,
@@ -44,13 +53,11 @@ impl UbootCli {
 
                         stdout().write_all(&buf).unwrap();
 
-                        if history.ends_with(c"<INTERRUPT>".to_bytes())
-                        // || history.ends_with("=>".as_bytes())
-                        {
+                        if history.ends_with(c"<INTERRUPT>".to_bytes()) {
                             return;
                         }
 
-                        if last.elapsed() > Duration::from_millis(100) {
+                        if last.elapsed() > Duration::from_millis(20) {
                             let _ = self.tx().write_all(&[CTRL_C]);
                             last = Instant::now();
                         }
@@ -90,10 +97,29 @@ impl UbootCli {
         line.trim().to_string()
     }
 
-    pub fn cmd(&mut self, cmd: &str) -> String {
+    pub fn wait_for_reply(&mut self, val: &str) -> String {
+        let mut reply = Vec::new();
+        let mut buff = [0u8; 1];
+        loop {
+            self.rx().read_exact(&mut buff).unwrap();
+            reply.push(buff[0]);
+            let _ = stdout().write_all(&buff);
+
+            if reply.ends_with(val.as_bytes()) {
+                break;
+            }
+        }
+        String::from_utf8_lossy(&reply).trim().to_string()
+    }
+
+    pub fn cmd_without_reply(&mut self, cmd: &str) {
         self.tx().write_all(cmd.as_bytes()).unwrap();
         self.tx().write_all("\r\n".as_bytes()).unwrap();
         self.tx().flush().unwrap();
+    }
+
+    pub fn cmd(&mut self, cmd: &str) -> String {
+        self.cmd_without_reply(cmd);
         let shell_start;
         loop {
             let line = self.read_line();
@@ -103,19 +129,7 @@ impl UbootCli {
                 break;
             }
         }
-        let mut reply = Vec::new();
-        let mut buff = [0u8; 1];
-        loop {
-            self.rx().read_exact(&mut buff).unwrap();
-            reply.push(buff[0]);
-
-            if reply.ends_with(shell_start.as_bytes()) {
-                break;
-            }
-        }
-
-        String::from_utf8_lossy(&reply)
-            .trim()
+        self.wait_for_reply(&shell_start)
             .trim_end_matches(&shell_start)
             .to_string()
     }
@@ -131,6 +145,48 @@ impl UbootCli {
     pub fn env_int(&mut self, name: impl Into<String>) -> Option<usize> {
         let line = self.env(name);
         parse_int(&line)
+    }
+
+    pub fn loady(&mut self, addr: usize, file: impl Into<String>) {
+        self.cmd_without_reply(&format!("loady {:#x}", addr));
+
+        let mut p = ymodem::Ymodem::new();
+
+        let file = PathBuf::from(file.into());
+        let name = file.file_name().unwrap().to_str().unwrap();
+
+        let mut file = File::open(&file).unwrap();
+
+        let size = file.metadata().unwrap().size();
+
+        let pb = ProgressBar::new(size);
+        pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+        .unwrap()
+        .with_key("eta", |state: &ProgressState, w: &mut dyn fmt::Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
+        .progress_chars("#>-"));
+
+        p.send(self, &mut file, name, size as _, |p| {
+            pb.set_position(p as _);
+        })
+        .unwrap();
+
+        pb.finish_with_message("upload done");
+    }
+}
+
+impl Read for UbootCli {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        self.rx().read(buf)
+    }
+}
+
+impl Write for UbootCli {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        self.tx().write(buf)
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        self.tx().flush()
     }
 }
 
