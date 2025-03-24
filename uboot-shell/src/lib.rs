@@ -1,5 +1,4 @@
 use std::{
-    fmt,
     fs::File,
     io::*,
     os::unix::fs::MetadataExt,
@@ -7,22 +6,23 @@ use std::{
     time::{Duration, Instant},
 };
 
-use indicatif::{ProgressBar, ProgressState, ProgressStyle};
-
 mod crc;
 mod ymodem;
 
-pub struct UbootCli {
+pub struct UbootShell {
     pub tx: Option<Box<dyn Write + Send>>,
     pub rx: Option<Box<dyn Read + Send>>,
 }
 
-impl UbootCli {
-    pub fn new(tx: impl Write + Send + 'static, rx: impl Read + Send + 'static) -> Self {
-        Self {
+impl UbootShell {
+    /// Create a new UbootShell instance, block wait for uboot shell.
+    pub fn new(tx: impl Write + Send + 'static, rx: impl Read + Send + 'static) -> Result<Self> {
+        let mut s = Self {
             tx: Some(Box::new(tx)),
             rx: Some(Box::new(rx)),
-        }
+        };
+        s.wait_for_shell()?;
+        Ok(s)
     }
 
     fn rx(&mut self) -> &mut Box<dyn Read + Send> {
@@ -33,7 +33,7 @@ impl UbootCli {
         self.tx.as_mut().unwrap()
     }
 
-    pub fn wait_for_shell(&mut self) {
+    fn wait_for_shell(&mut self) -> Result<()> {
         let mut buf = [0u8; 1];
         let mut history: Vec<u8> = Vec::new();
         const CTRL_C: u8 = 0x03;
@@ -54,7 +54,7 @@ impl UbootCli {
                         stdout().write_all(&buf).unwrap();
 
                         if history.ends_with(c"<INTERRUPT>".to_bytes()) {
-                            return;
+                            return Ok(());
                         }
 
                         if last.elapsed() > Duration::from_millis(20) {
@@ -63,17 +63,23 @@ impl UbootCli {
                         }
                     }
                 }
-                Err(ref e) if e.kind() == ErrorKind::TimedOut => {}
-                Err(e) => eprintln!("{:?}", e),
+
+                Err(ref e) if e.kind() == ErrorKind::TimedOut => {
+                    continue;
+                }
+                Err(e) => {
+                    return Err(e);
+                }
             }
         }
     }
 
-    fn read_line(&mut self) -> String {
+    fn read_line(&mut self) -> Result<String> {
         let mut line_raw = Vec::new();
         let mut byte = [0; 1];
 
-        while let Ok(n) = self.rx().read(&mut byte) {
+        loop {
+            let n = self.rx().read(&mut byte)?;
             if n == 0 {
                 break;
             }
@@ -90,18 +96,18 @@ impl UbootCli {
         }
 
         if line_raw.is_empty() {
-            return String::new();
+            return Ok(String::new());
         }
 
         let line = String::from_utf8_lossy(&line_raw);
-        line.trim().to_string()
+        Ok(line.trim().to_string())
     }
 
-    pub fn wait_for_reply(&mut self, val: &str) -> String {
+    pub fn wait_for_reply(&mut self, val: &str) -> Result<String> {
         let mut reply = Vec::new();
         let mut buff = [0u8; 1];
         loop {
-            self.rx().read_exact(&mut buff).unwrap();
+            self.rx().read_exact(&mut buff)?;
             reply.push(buff[0]);
             let _ = stdout().write_all(&buff);
 
@@ -109,46 +115,66 @@ impl UbootCli {
                 break;
             }
         }
-        String::from_utf8_lossy(&reply).trim().to_string()
+        Ok(String::from_utf8_lossy(&reply).trim().to_string())
     }
 
-    pub fn cmd_without_reply(&mut self, cmd: &str) {
-        self.tx().write_all(cmd.as_bytes()).unwrap();
-        self.tx().write_all("\r\n".as_bytes()).unwrap();
-        self.tx().flush().unwrap();
+    pub fn cmd_without_reply(&mut self, cmd: &str) -> Result<()> {
+        self.tx().write_all(cmd.as_bytes())?;
+        self.tx().write_all("\r\n".as_bytes())?;
+        self.tx().flush()?;
+        Ok(())
     }
 
-    pub fn cmd(&mut self, cmd: &str) -> String {
-        self.cmd_without_reply(cmd);
+    pub fn cmd(&mut self, cmd: &str) -> Result<String> {
+        self.cmd_without_reply(cmd)?;
         let shell_start;
         loop {
-            let line = self.read_line();
+            let line = self.read_line()?;
             println!("{line}");
             if line.contains(cmd) {
                 shell_start = line.trim().trim_end_matches(cmd).trim().to_string();
                 break;
             }
         }
-        self.wait_for_reply(&shell_start)
+        Ok(self
+            .wait_for_reply(&shell_start)?
             .trim_end_matches(&shell_start)
-            .to_string()
+            .to_string())
     }
 
-    pub fn set_env(&mut self, name: impl Into<String>, value: impl Into<String>) {
-        self.cmd(&format!("setenv {} {}", name.into(), value.into()));
+    pub fn set_env(&mut self, name: impl Into<String>, value: impl Into<String>) -> Result<()> {
+        self.cmd(&format!("setenv {} {}", name.into(), value.into()))?;
+        Ok(())
     }
 
-    pub fn env(&mut self, name: impl Into<String>) -> String {
-        self.cmd(&format!("echo ${}", name.into()))
+    pub fn env(&mut self, name: impl Into<String>) -> Result<String> {
+        let name = name.into();
+        let s = self.cmd(&format!("echo ${}", name))?;
+        if s.is_empty() {
+            return Err(Error::new(
+                ErrorKind::NotFound,
+                format!("env {} not found", name),
+            ));
+        }
+        Ok(s)
     }
 
-    pub fn env_int(&mut self, name: impl Into<String>) -> Option<usize> {
-        let line = self.env(name);
-        parse_int(&line)
+    pub fn env_int(&mut self, name: impl Into<String>) -> Result<usize> {
+        let name = name.into();
+        let line = self.env(&name)?;
+        parse_int(&line).ok_or(Error::new(
+            ErrorKind::InvalidData,
+            format!("env {name} is not a number"),
+        ))
     }
 
-    pub fn loady(&mut self, addr: usize, file: impl Into<String>) {
-        self.cmd_without_reply(&format!("loady {:#x}", addr));
+    pub fn loady(
+        &mut self,
+        addr: usize,
+        file: impl Into<String>,
+        on_progress: impl Fn(usize, usize),
+    ) -> Result<()> {
+        self.cmd_without_reply(&format!("loady {:#x}", addr))?;
 
         let mut p = ymodem::Ymodem::new();
 
@@ -157,30 +183,23 @@ impl UbootCli {
 
         let mut file = File::open(&file).unwrap();
 
-        let size = file.metadata().unwrap().size();
+        let size = file.metadata().unwrap().size() as usize;
 
-        let pb = ProgressBar::new(size);
-        pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
-        .unwrap()
-        .with_key("eta", |state: &ProgressState, w: &mut dyn fmt::Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
-        .progress_chars("#>-"));
+        p.send(self, &mut file, name, size, |p| {
+            on_progress(p, size);
+        })?;
 
-        p.send(self, &mut file, name, size as _, |p| {
-            pb.set_position(p as _);
-        })
-        .unwrap();
-
-        pb.finish_with_message("upload done");
+        Ok(())
     }
 }
 
-impl Read for UbootCli {
+impl Read for UbootShell {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         self.rx().read(buf)
     }
 }
 
-impl Write for UbootCli {
+impl Write for UbootShell {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         self.tx().write(buf)
     }

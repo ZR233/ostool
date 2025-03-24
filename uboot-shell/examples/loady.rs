@@ -1,22 +1,20 @@
 use std::process::{Child, Command, Stdio};
 
-use uboot_shell::UbootCli;
+use uboot_shell::UbootShell;
 
 fn main() {
     let (mut out, mut uboot) = new_uboot();
 
-    uboot.wait_for_shell();
-
-    uboot.loady(0x40200000, "Cargo.toml");
+    // uboot.loady(0x40200000, "Cargo.toml");
 
     println!("finish");
 
-    uboot.wait_for_reply("12345");
+    uboot.wait_for_reply("12345").unwrap();
 
-    out.wait();
+    let _ = out.wait();
 }
 
-fn new_uboot() -> (Child, UbootCli) {
+fn new_uboot() -> (Child, UbootShell) {
     // qemu-system-aarch64 -machine virt -cpu cortex-a57 -nographic -bios assets/u-boot.bin
     let mut out = Command::new("qemu-system-aarch64")
         .args([
@@ -36,5 +34,5 @@ fn new_uboot() -> (Child, UbootCli) {
     let stdin = out.stdin.take().unwrap();
     let stdout = out.stdout.take().unwrap();
 
-    (out, UbootCli::new(stdin, stdout))
+    (out, UbootShell::new(stdin, stdout).unwrap())
 }

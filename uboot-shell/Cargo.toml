@@ -2,11 +2,17 @@
 name = "uboot-shell"
 version = "0.1.0"
 edition = "2024"
+description = "A crate for communicating with u-boot"
+authors = ["周睿 <zrufo747@outlook.com>"]
+license = "MIT"
+keywords = ["u-boot", "shell", "embedded"]
+categories = ["os", "embedded", "development-tools"]
+repository = "https://github.com/ZR233/ostool/ostool"
 
 [dependencies]
 anyhow = { version = "1", features = ["backtrace"] }
-indicatif = "0.17"
 
 [dev-dependencies]
 ntest = "*"
 serialport = "4.6"
+indicatif = "0.17"
