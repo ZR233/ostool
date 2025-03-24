@@ -39,7 +39,7 @@ fn main() {
 
 fn new_uboot() -> UbootShell {
     let port = "/dev/ttyUSB0";
-    let baud = 115200;
+    // let baud = 115200;
     let baud = 1500000;
 
     let rx = serialport::new(port, baud)
