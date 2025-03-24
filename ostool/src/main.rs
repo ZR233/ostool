@@ -6,6 +6,7 @@ use colored::Colorize;
 use project::Project;
 use step::{CargoTestPrepare, Compile, Qemu, Step, Tftp, Uboot, UbootConfig};
 
+mod cmd;
 mod config;
 mod env;
 mod os;
@@ -14,7 +15,7 @@ mod shell;
 mod step;
 mod ui;
 
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
     #[arg(short, long)]
@@ -23,11 +24,12 @@ struct Cli {
     command: SubCommands,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand)]
 enum SubCommands {
     Build,
     Run(RunArgs),
     CargoTest(TestArgs),
+    Defconfig(cmd::defconfig::Cmd),
 }
 #[derive(Args, Debug)]
 struct RunArgs {
@@ -83,7 +85,6 @@ fn main() -> Result<()> {
             project.config_with_file().unwrap();
             steps.push(Compile::new_boxed(false));
         }
-
         SubCommands::CargoTest(args) => {
             project.is_print_cmd = false;
 
@@ -127,6 +128,9 @@ fn main() -> Result<()> {
                     keep_run = true;
                 }
             };
+        }
+        SubCommands::Defconfig(cmd) => {
+            cmd.run(&mut project);
         }
     }
 

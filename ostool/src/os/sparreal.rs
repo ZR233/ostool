@@ -8,7 +8,7 @@ use colored::Colorize;
 
 use crate::{
     config::{
-        compile::{CargoBuild, Compile, LogLevel},
+        compile::{BuildSystem, CargoBuild, Compile, LogLevel},
         qemu::Qemu,
         ProjectConfig,
     },
@@ -55,7 +55,7 @@ impl OsConfig for Sparreal {
         ProjectConfig {
             compile: Compile {
                 target,
-                cargo: Some(CargoBuild {
+                build: BuildSystem::Cargo(CargoBuild {
                     kernel_bin_name: None,
                     package,
                     log_level: LogLevel::Debug,
@@ -63,7 +63,6 @@ impl OsConfig for Sparreal {
                     env: BTreeMap::new(),
                     features: Vec::new(),
                 }),
-                custom: None,
             },
             qemu: Qemu {
                 machine: Some("virt".to_string()),

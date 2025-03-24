@@ -10,7 +10,7 @@ use anyhow::Result;
 use cargo_metadata::{Metadata, Package};
 
 use crate::{
-    config::ProjectConfig,
+    config::{compile::BuildSystem, ProjectConfig},
     os::new_config,
     shell::{check_porgram, metadata, Shell},
 };
@@ -120,16 +120,15 @@ impl Project {
     }
 
     pub fn package_metadata(&self) -> Package {
-        self.cargo_metadata()
-            .packages
-            .into_iter()
-            .find(|one| one.name == self.config_ref().compile.cargo.as_ref().unwrap().package)
-            .unwrap_or_else(|| {
-                panic!(
-                    "Package {} not found!",
-                    self.config_ref().compile.cargo.as_ref().unwrap().package
-                )
-            })
+        if let BuildSystem::Cargo(config) = &self.config_ref().compile.build {
+            self.cargo_metadata()
+                .packages
+                .into_iter()
+                .find(|one| one.name == config.package)
+                .unwrap_or_else(|| panic!("Package {} not found!", config.package))
+        } else {
+            panic!("build system not supported")
+        }
     }
 
     pub fn package_dependencies(&self) -> Vec<String> {
@@ -137,8 +136,8 @@ impl Project {
         meta.dependencies.into_iter().map(|dep| dep.name).collect()
     }
 
-    pub fn set_binaries(&mut self, elf: PathBuf, bin: PathBuf) {
-        self.elf_path = Some(elf);
+    pub fn set_binaries(&mut self, elf: Option<PathBuf>, bin: PathBuf) {
+        self.elf_path = elf;
         self.bin_path = Some(bin);
         if matches!(self.arch.unwrap(), Arch::X86_64) {
             self.to_load_kernel = self.elf_path.clone();
