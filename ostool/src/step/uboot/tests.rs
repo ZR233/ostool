@@ -1,7 +1,4 @@
-use std::{
-    path::{Path, PathBuf},
-    process::{Command, Stdio},
-};
+use std::process::{Command, Stdio};
 
 #[test]
 fn test_cmd() {

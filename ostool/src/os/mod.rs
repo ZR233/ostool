@@ -23,7 +23,6 @@ pub trait OsConfig {
 
 pub fn new_config(workdir: &Path) -> ProjectConfig {
     let os = Sparreal::new_box(workdir).unwrap_or_else(|| Custom::new_box(workdir));
-
     os.new_config()
 }
 
