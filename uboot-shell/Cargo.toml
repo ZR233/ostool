@@ -13,6 +13,6 @@ repository = "https://github.com/ZR233/ostool/ostool"
 anyhow = { version = "1", features = ["backtrace"] }
 
 [dev-dependencies]
-ntest = "*"
+ntest = "0.9"
 serialport = "4.6"
 indicatif = "0.17"
