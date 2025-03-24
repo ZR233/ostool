@@ -1,6 +1,6 @@
 [package]
 name = "uboot-shell"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "A crate for communicating with u-boot"
 authors = ["周睿 <zrufo747@outlook.com>"]
@@ -10,7 +10,7 @@ categories = ["os", "embedded", "development-tools"]
 repository = "https://github.com/ZR233/ostool/ostool"
 
 [dependencies]
-anyhow = { version = "1", features = ["backtrace"] }
+
 
 [dev-dependencies]
 ntest = "0.9"
