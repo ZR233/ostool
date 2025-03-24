@@ -835,6 +835,7 @@ dependencies = [
  "serialport",
  "tftpd",
  "toml",
+ "uboot-shell",
 ]
 
 [[package]]
