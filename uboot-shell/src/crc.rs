@@ -24,7 +24,6 @@ const CRC16_TAB: &[u16] = &[
     0x2e93, 0x3eb2, 0x0ed1, 0x1ef0,
 ];
 
-
 pub fn crc16_ccitt(mut cksum: u16, buf: &[u8]) -> u16 {
     for &byte in buf {
         cksum = CRC16_TAB[((cksum >> 8) ^ byte as u16) as usize] ^ (cksum << 8);
