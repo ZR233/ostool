@@ -227,8 +227,8 @@ impl Step for Uboot {
             println!("$loadaddr not found");
 
             let loadaddr = uboot
-                .env_int("kernel_addr_r")
-                .expect("kernel_addr_r not found");
+                .env_int("kernel_addr_c")
+                .expect("kernel_addr_c not found");
 
             println!("$loadaddr set to {:#x}", loadaddr);
 
@@ -240,13 +240,12 @@ impl Step for Uboot {
         let mut fdt_addr = loadaddr + kernel_size + 0x100000;
         fdt_addr = (fdt_addr + 0xFFF) & !0xFFF;
 
-        if let Ok(addr) = uboot.env_int("fdt_addr") {
+        if let Ok(addr) = uboot.env_int("fdt_addr_r") {
             fdt_addr = addr;
-        } else {
-            uboot
-                .set_env("fdt_addr", format!("{:#x}", fdt_addr))
-                .unwrap();
         }
+        uboot
+            .set_env("fdt_addr", format!("{:#x}", fdt_addr))
+            .unwrap();
 
         uboot.set_env("autoload", "no").unwrap();
 
