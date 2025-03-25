@@ -20,6 +20,8 @@ ArceOS为例
 ostool defconfig
 ```
 
+`.project.toml`: 
+
 ```toml
 [compile]
 target = "aarch64-unknown-none"
