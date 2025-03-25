@@ -3,7 +3,7 @@ use std::fs;
 use byte_unit::Byte;
 
 use crate::{
-    config::compile::{CargoBuild, CustomBuild},
+    config::compile::{BuildSystem, CargoBuild, CustomBuild},
     project::Project,
     shell::Shell,
     step::Step,
@@ -78,8 +78,6 @@ impl Compile {
 
         let elf = project.out_dir().join(&config.package);
 
-        project.elf_path = Some(elf.clone());
-
         let _ = std::fs::remove_file("target/kernel.elf");
 
         println!("copying {} to target/kernel.elf", elf.display());
@@ -87,18 +85,24 @@ impl Compile {
         let _ = std::fs::remove_file("target/kernel.elf");
         std::fs::copy(&elf, "target/kernel.elf").unwrap();
 
-        project
-            .shell("rust-objcopy")
-            .args(["--strip-all", "-O", "binary"])
-            .arg(&elf)
-            .arg(&bin_path)
-            .exec(project.is_print_cmd)
-            .unwrap();
+        if config.kernel_is_bin {
+            project
+                .shell("rust-objcopy")
+                .args(["--strip-all", "-O", "binary"])
+                .arg(&elf)
+                .arg(&bin_path)
+                .exec(project.is_print_cmd)
+                .unwrap();
 
-        let img_size = std::fs::metadata(&bin_path).unwrap().len();
+            project.kernel = Some(bin_path);
+        } else {
+            project.kernel = Some(elf);
+        }
+
+        let img_size = std::fs::metadata(project.kernel.as_ref().unwrap())
+            .unwrap()
+            .len();
         println!("kernel image size: {:#}", Byte::from_u64(img_size));
-
-        project.set_binaries(elf, bin_path);
 
         Ok(())
     }
@@ -121,12 +125,16 @@ impl Compile {
             p.exec(project.is_print_cmd).unwrap();
         }
 
-        let _ = fs::create_dir("target");
-        let _ = std::fs::remove_file("target/kernel.elf");
+        let target_dir = project.workspace_root().join("target");
 
-        let elf = config.elf.clone();
+        let _ = fs::create_dir(&target_dir);
 
-        std::fs::copy(&elf, "target/kernel.elf").unwrap();
+        let elf_file = target_dir.join("kernel.elf");
+        let _ = std::fs::remove_file(&elf_file);
+
+        if let Some(ref elf) = config.elf {
+            std::fs::copy(elf, elf_file).unwrap();
+        }
 
         project.out_dir = Some(
             project
@@ -140,35 +148,26 @@ impl Compile {
 
         let bin_path = project.out_dir().join("kernel.bin");
 
-        project
-            .shell("rust-objcopy")
-            .args(["--strip-all", "-O", "binary"])
-            .arg(&elf)
-            .arg(&bin_path)
-            .exec(project.is_print_cmd)
-            .unwrap();
+        let _ = std::fs::copy(config.kernel, &bin_path);
 
         let img_size = std::fs::metadata(&bin_path).unwrap().len();
         println!("kernel image size: {:#}", Byte::from_u64(img_size));
 
-        project.set_binaries(elf.into(), bin_path);
+        project.kernel = Some(bin_path);
     }
 }
 
 impl Step for Compile {
     fn run(&mut self, project: &mut Project) -> anyhow::Result<()> {
-        if let Some(config) = project.config_ref().compile.cargo.clone() {
-            self.run_cargo(project, config)?;
-
-            return Ok(());
+        match project.config_ref().compile.build.clone() {
+            BuildSystem::Cargo(cargo_build) => {
+                self.run_cargo(project, cargo_build)?;
+                Ok(())
+            }
+            BuildSystem::Custom(custom_build) => {
+                self.run_custom(project, custom_build);
+                Ok(())
+            }
         }
-
-        if let Some(config) = project.config_ref().compile.custom.clone() {
-            self.run_custom(project, config);
-
-            return Ok(());
-        }
-
-        panic!("配置文件错误，请删除 .project.toml 文件后重试")
     }
 }

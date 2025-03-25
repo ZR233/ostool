@@ -2,11 +2,16 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Compile {
     pub target: String,
-    pub cargo: Option<CargoBuild>,
-    pub custom: Option<CustomBuild>,
+    pub build: BuildSystem,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum BuildSystem {
+    Cargo(CargoBuild),
+    Custom(CustomBuild),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -17,12 +22,14 @@ pub struct CargoBuild {
     pub rust_flags: String,
     pub features: Vec<String>,
     pub env: BTreeMap<String, String>,
+    pub kernel_is_bin: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CustomBuild {
     pub shell: Vec<Vec<String>>,
-    pub elf: String,
+    pub elf: Option<String>,
+    pub kernel: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -1,0 +1,27 @@
+[package]
+name = "ostool"
+version = "0.7.0"
+edition = "2021"
+description = "A tool for operating system development"
+authors = ["周睿 <zrufo747@outlook.com>"]
+license = "MIT OR Apache-2.0"
+categories = ["os", "embedded", "development-tools", "config"]
+repository = "https://github.com/ZR233/ostool/ostool"
+
+[dependencies]
+anyhow = { version = "1", features = ["backtrace"] }
+toml = "0.8"
+serde = { version = "1", features = ["derive"] }
+colored = "3"
+clap = { version = "4", features = ["derive"] }
+byte-unit = "5.1"
+serialport = "4.6"
+network-interface = "2"
+tftpd = "0.3"
+serde_json = "1"
+object = "0.36"
+cargo_metadata = "0.19"
+ratatui = "0.29"
+crossterm = "0.28"
+indicatif = "0.17"
+uboot-shell = { version = "0.1", path = "../uboot-shell" }

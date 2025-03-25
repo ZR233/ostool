@@ -1,16 +1,17 @@
 use std::{
     ffi::OsStr,
     fs,
-    io::Write,
     path::{Path, PathBuf},
     process::Command,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::Result;
 use cargo_metadata::{Metadata, Package};
+use colored::Colorize;
 
 use crate::{
-    config::ProjectConfig,
+    config::{compile::BuildSystem, ProjectConfig},
     os::new_config,
     shell::{check_porgram, metadata, Shell},
 };
@@ -20,10 +21,8 @@ pub struct Project {
     workdir: PathBuf,
     pub config: Option<ProjectConfig>,
     pub arch: Option<Arch>,
-    pub bin_path: Option<PathBuf>,
-    pub elf_path: Option<PathBuf>,
     pub out_dir: Option<PathBuf>,
-    pub to_load_kernel: Option<PathBuf>,
+    pub kernel: Option<PathBuf>,
     pub is_print_cmd: bool,
 }
 
@@ -38,17 +37,32 @@ impl Project {
 
     pub fn config_with_file(&mut self) -> Result<()> {
         let meta = metadata(self.workdir());
-
         let config_path = meta.workspace_root.as_std_path().join(".project.toml");
-
         let config;
         if !config_path.try_exists()? {
             config = new_config(self.workdir());
-            let config_str = toml::to_string(&config).unwrap();
-            let mut file = fs::File::create(&config_path).unwrap();
-            file.write_all(config_str.as_bytes()).unwrap();
+            config.save(&config_path);
         } else {
-            config = toml::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
+            let content = fs::read_to_string(&config_path).unwrap();
+            config = toml::from_str(&content).unwrap_or_else(|_| {
+                let old = format!(
+                    ".project.toml.bk.{}",
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs()
+                );
+                let old = meta.workspace_root.as_std_path().join(old);
+                println!(
+                    "{}",
+                    format!("config error, generate new, save old to: {}", old.display()).yellow()
+                );
+                let _ = fs::rename(&config_path, &old);
+
+                let config = new_config(self.workdir());
+                config.save(&config_path);
+                config
+            });
         }
         self.arch = Some(Arch::from_target(&config.compile.target).unwrap());
         self.config = Some(config);
@@ -120,31 +134,20 @@ impl Project {
     }
 
     pub fn package_metadata(&self) -> Package {
-        self.cargo_metadata()
-            .packages
-            .into_iter()
-            .find(|one| one.name == self.config_ref().compile.cargo.as_ref().unwrap().package)
-            .unwrap_or_else(|| {
-                panic!(
-                    "Package {} not found!",
-                    self.config_ref().compile.cargo.as_ref().unwrap().package
-                )
-            })
+        if let BuildSystem::Cargo(config) = &self.config_ref().compile.build {
+            self.cargo_metadata()
+                .packages
+                .into_iter()
+                .find(|one| one.name == config.package)
+                .unwrap_or_else(|| panic!("Package {} not found!", config.package))
+        } else {
+            panic!("build system not supported")
+        }
     }
 
     pub fn package_dependencies(&self) -> Vec<String> {
         let meta = self.package_metadata();
         meta.dependencies.into_iter().map(|dep| dep.name).collect()
-    }
-
-    pub fn set_binaries(&mut self, elf: PathBuf, bin: PathBuf) {
-        self.elf_path = Some(elf);
-        self.bin_path = Some(bin);
-        if matches!(self.arch.unwrap(), Arch::X86_64) {
-            self.to_load_kernel = self.elf_path.clone();
-        } else {
-            self.to_load_kernel = self.bin_path.clone();
-        }
     }
 }
 

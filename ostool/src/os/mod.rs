@@ -3,12 +3,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use arceos::ArceOS;
 use sparreal::Sparreal;
 
 use crate::{
     config::{
-        compile::{CargoBuild, Compile, LogLevel},
+        compile::{BuildSystem, CargoBuild, Compile, LogLevel},
         qemu::Qemu,
         ProjectConfig,
     },
@@ -16,7 +15,6 @@ use crate::{
     ui::shell_select,
 };
 
-pub mod arceos;
 pub mod sparreal;
 
 pub trait OsConfig {
@@ -24,10 +22,7 @@ pub trait OsConfig {
 }
 
 pub fn new_config(workdir: &Path) -> ProjectConfig {
-    let os = ArceOS::new_box(workdir)
-        .or_else(|| Sparreal::new_box(workdir))
-        .unwrap_or_else(|| Custom::new_box(workdir));
-
+    let os = Sparreal::new_box(workdir).unwrap_or_else(|| Custom::new_box(workdir));
     os.new_config()
 }
 
@@ -62,15 +57,15 @@ impl OsConfig for Custom {
         ProjectConfig {
             compile: Compile {
                 target,
-                cargo: Some(CargoBuild {
+                build: BuildSystem::Cargo(CargoBuild {
                     kernel_bin_name: None,
                     package,
                     log_level: LogLevel::Debug,
                     rust_flags: String::new(),
                     env: BTreeMap::new(),
                     features: Vec::new(),
+                    kernel_is_bin: true,
                 }),
-                custom: None,
             },
             qemu: Qemu {
                 machine: Some("virt".to_string()),

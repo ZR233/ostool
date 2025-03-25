@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-use compile::Compile;
+use compile::{BuildSystem, Compile, CustomBuild};
 use qemu::Qemu;
 use serde::{Deserialize, Serialize};
 
@@ -19,7 +19,14 @@ pub struct ProjectConfig {
 impl ProjectConfig {
     pub fn new(arch: Arch) -> Self {
         Self {
-            compile: Compile::default(),
+            compile: Compile {
+                target: String::new(),
+                build: BuildSystem::Custom(CustomBuild {
+                    shell: vec![],
+                    elf: None,
+                    kernel: String::new(),
+                }),
+            },
             qemu: Qemu::new_default(arch),
             uboot: None,
         }
