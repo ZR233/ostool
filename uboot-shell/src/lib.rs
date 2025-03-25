@@ -84,6 +84,8 @@ impl UbootShell {
                 break;
             }
 
+            stdout().write_all(&byte).unwrap();
+
             if byte[0] == b'\r' {
                 continue;
             }
@@ -118,24 +120,29 @@ impl UbootShell {
         Ok(String::from_utf8_lossy(&reply).trim().to_string())
     }
 
-    pub fn cmd_without_reply(&mut self, cmd: &str) -> Result<()> {
+    pub fn cmd_without_reply(&mut self, cmd: &str, want_echo: bool) -> Result<String> {
         self.tx().write_all(cmd.as_bytes())?;
         self.tx().write_all("\r\n".as_bytes())?;
         self.tx().flush()?;
-        Ok(())
-    }
 
-    pub fn cmd(&mut self, cmd: &str) -> Result<String> {
-        self.cmd_without_reply(cmd)?;
+        if !want_echo {
+            return Ok(String::new());
+        }
+
         let shell_start;
         loop {
             let line = self.read_line()?;
-            println!("{line}");
             if line.contains(cmd) {
                 shell_start = line.trim().trim_end_matches(cmd).trim().to_string();
                 break;
             }
         }
+        Ok(shell_start)
+    }
+
+    pub fn cmd(&mut self, cmd: &str) -> Result<String> {
+        let shell_start = self.cmd_without_reply(cmd, true)?;
+
         Ok(self
             .wait_for_reply(&shell_start)?
             .trim_end_matches(&shell_start)
@@ -171,14 +178,14 @@ impl UbootShell {
     pub fn loady(
         &mut self,
         addr: usize,
-        file: impl Into<String>,
+        file: impl Into<PathBuf>,
         on_progress: impl Fn(usize, usize),
-    ) -> Result<()> {
-        self.cmd_without_reply(&format!("loady {:#x}", addr))?;
+    ) -> Result<String> {
+        let shell_start = self.cmd_without_reply(&format!("loady {:#x}", addr,), true)?;
 
         let mut p = ymodem::Ymodem::new();
 
-        let file = PathBuf::from(file.into());
+        let file = file.into();
         let name = file.file_name().unwrap().to_str().unwrap();
 
         let mut file = File::open(&file).unwrap();
@@ -189,7 +196,10 @@ impl UbootShell {
             on_progress(p, size);
         })?;
 
-        Ok(())
+        Ok(self
+            .wait_for_reply(&shell_start)?
+            .trim_end_matches(&shell_start)
+            .to_string())
     }
 }
 

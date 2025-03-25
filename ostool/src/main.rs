@@ -90,7 +90,6 @@ fn main() -> Result<()> {
 
             steps.push(CargoTestPrepare::new_boxed(args.elf, args.uboot));
             if args.uboot {
-                steps.push(Tftp::new_boxed());
                 steps.push(Uboot::new_boxed(true));
             } else {
                 steps.push(Qemu::new_boxed(
@@ -112,7 +111,6 @@ fn main() -> Result<()> {
                 }
                 RunSubCommands::Uboot => {
                     steps.push(Compile::new_boxed(false));
-                    steps.push(Tftp::new_boxed());
 
                     let config = project.config.as_mut().unwrap();
                     if config.uboot.is_none() {

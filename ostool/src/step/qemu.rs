@@ -79,7 +79,7 @@ impl Step for Qemu {
             self.cmd.arg(cpu);
         }
         self.cmd.arg("-kernel");
-        self.cmd.arg(project.to_load_kernel.as_ref().unwrap());
+        self.cmd.arg(project.kernel.as_ref().unwrap());
 
         if self.is_check_test {
             let is_ok = Arc::new(AtomicBool::new(false));

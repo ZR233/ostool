@@ -78,8 +78,6 @@ impl Compile {
 
         let elf = project.out_dir().join(&config.package);
 
-        project.elf_path = Some(elf.clone());
-
         let _ = std::fs::remove_file("target/kernel.elf");
 
         println!("copying {} to target/kernel.elf", elf.display());
@@ -87,18 +85,24 @@ impl Compile {
         let _ = std::fs::remove_file("target/kernel.elf");
         std::fs::copy(&elf, "target/kernel.elf").unwrap();
 
-        project
-            .shell("rust-objcopy")
-            .args(["--strip-all", "-O", "binary"])
-            .arg(&elf)
-            .arg(&bin_path)
-            .exec(project.is_print_cmd)
-            .unwrap();
+        if config.kernel_is_bin {
+            project
+                .shell("rust-objcopy")
+                .args(["--strip-all", "-O", "binary"])
+                .arg(&elf)
+                .arg(&bin_path)
+                .exec(project.is_print_cmd)
+                .unwrap();
 
-        let img_size = std::fs::metadata(&bin_path).unwrap().len();
+            project.kernel = Some(bin_path);
+        } else {
+            project.kernel = Some(elf);
+        }
+
+        let img_size = std::fs::metadata(project.kernel.as_ref().unwrap())
+            .unwrap()
+            .len();
         println!("kernel image size: {:#}", Byte::from_u64(img_size));
-
-        project.set_binaries(Some(elf), bin_path);
 
         Ok(())
     }
@@ -144,12 +148,12 @@ impl Compile {
 
         let bin_path = project.out_dir().join("kernel.bin");
 
-        let _ = std::fs::copy(config.bin, &bin_path);
+        let _ = std::fs::copy(config.kernel, &bin_path);
 
         let img_size = std::fs::metadata(&bin_path).unwrap().len();
         println!("kernel image size: {:#}", Byte::from_u64(img_size));
 
-        project.set_binaries(config.elf.map(|m| m.into()), bin_path);
+        project.kernel = Some(bin_path);
     }
 }
 

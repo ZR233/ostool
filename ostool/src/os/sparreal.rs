@@ -62,6 +62,7 @@ impl OsConfig for Sparreal {
                     rust_flags: "".to_string(),
                     env: BTreeMap::new(),
                     features: Vec::new(),
+                    kernel_is_bin: true,
                 }),
             },
             qemu: Qemu {

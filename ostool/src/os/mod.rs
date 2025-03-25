@@ -64,6 +64,7 @@ impl OsConfig for Custom {
                     rust_flags: String::new(),
                     env: BTreeMap::new(),
                     features: Vec::new(),
+                    kernel_is_bin: true,
                 }),
             },
             qemu: Qemu {

@@ -1395,6 +1395,7 @@ dependencies = [
 name = "uboot-shell"
 version = "0.1.1"
 dependencies = [
+ "colored",
  "indicatif",
  "ntest",
  "serialport",

@@ -59,7 +59,7 @@ impl Ymodem {
         on_progress: impl Fn(usize),
     ) -> Result<()> {
         self.wait_for_start(dev)?;
-        println!();
+        println!("Sending file: {name}");
 
         self.send_header(dev, name, size)?;
 

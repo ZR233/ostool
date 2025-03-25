@@ -24,7 +24,7 @@ impl ProjectConfig {
                 build: BuildSystem::Custom(CustomBuild {
                     shell: vec![],
                     elf: None,
-                    bin: String::new(),
+                    kernel: String::new(),
                 }),
             },
             qemu: Qemu::new_default(arch),

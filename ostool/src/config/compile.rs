@@ -22,13 +22,14 @@ pub struct CargoBuild {
     pub rust_flags: String,
     pub features: Vec<String>,
     pub env: BTreeMap<String, String>,
+    pub kernel_is_bin: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CustomBuild {
     pub shell: Vec<Vec<String>>,
     pub elf: Option<String>,
-    pub bin: String,
+    pub kernel: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

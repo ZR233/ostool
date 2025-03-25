@@ -1,7 +1,6 @@
 use std::{
     ffi::OsStr,
     fs,
-    io::Write,
     path::{Path, PathBuf},
     process::Command,
     time::{SystemTime, UNIX_EPOCH},
@@ -22,10 +21,8 @@ pub struct Project {
     workdir: PathBuf,
     pub config: Option<ProjectConfig>,
     pub arch: Option<Arch>,
-    pub bin_path: Option<PathBuf>,
-    pub elf_path: Option<PathBuf>,
     pub out_dir: Option<PathBuf>,
-    pub to_load_kernel: Option<PathBuf>,
+    pub kernel: Option<PathBuf>,
     pub is_print_cmd: bool,
 }
 
@@ -151,16 +148,6 @@ impl Project {
     pub fn package_dependencies(&self) -> Vec<String> {
         let meta = self.package_metadata();
         meta.dependencies.into_iter().map(|dep| dep.name).collect()
-    }
-
-    pub fn set_binaries(&mut self, elf: Option<PathBuf>, bin: PathBuf) {
-        self.elf_path = elf;
-        self.bin_path = Some(bin);
-        if matches!(self.arch.unwrap(), Arch::X86_64) {
-            self.to_load_kernel = self.elf_path.clone();
-        } else {
-            self.to_load_kernel = self.bin_path.clone();
-        }
     }
 }
 

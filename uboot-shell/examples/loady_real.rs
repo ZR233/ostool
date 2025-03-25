@@ -9,6 +9,9 @@ use uboot_shell::UbootShell;
 
 fn main() {
     println!("wait for uboot");
+    // let file = "/home/zhourui/rk3568-firefly-roc-pc-se.dtb";
+    let file = "target/tmp.bin";
+
     let mut uboot = new_uboot();
 
     // let addr = uboot.env_int("kernel_addr_r").unwrap();
@@ -21,7 +24,7 @@ fn main() {
         .progress_chars("#>-"));
 
     uboot
-        .loady(addr, "target/tmp.bin", |r, a| {
+        .loady(addr, file, |r, a| {
             pb.set_length(a as _);
             pb.set_position(r as _);
         })
