@@ -1,12 +1,40 @@
 # ostool
 
-Rust开发OS的工具集
+Rust开发OS的工具集，可以方便的通过 Qemu 和 U-Boot 启动。
 
 ## 使用
 
 ```shell
 cargo install ostool
 ostool --help
+```
+
+### 配置文件
+
+ArceOS为例
+
+进入工作目录
+
+```shell
+# 生成默认配置文件
+ostool defconfig
+```
+
+```toml
+[compile]
+target = "aarch64-unknown-none"
+
+[compile.build.Custom]
+# 编译命令，可多条
+shell = [["make ARCH=aarch64 A=examples/helloworld FEATURES=page-alloc-4g"]]
+# 要启动的内核
+kernel = "examples/helloworld/helloworld_aarch64-qemu-virt.bin"
+
+[qemu]
+machine = "virt"
+cpu = "cortex-a57"
+graphic = false
+args = ""
 ```
 
 ### Qemu启动
@@ -39,8 +67,8 @@ $remoteHost = "{ip}"
 $username = "{name}"
 $remotePath = "/home/arceos/"
 $makeCommand = "make A=examples/helloworld PLATFORM=aarch64-phytium-pi "
-$remoteFile = "$remotePath/examples/helloworld/helloworld_aarch64-phytium-pi.elf"
-$localTargetFile = "./target/kernel_raw.elf"
+$remoteFile = "$remotePath/examples/helloworld/helloworld_aarch64-phytium-pi.bin"
+$localTargetFile = "./target/kernel_raw.bin"
 
 # 使用 SSH 连接到远程服务器并执行命令
 ssh "$username@$remoteHost" "cd $remotePath;. ~/.profile;$makeCommand"
@@ -73,13 +101,13 @@ else {
 [compile]
 target = "aarch64-unknown-none-softfloat"
 
-[compile.custom]
+[compile.build.Custom]
 shell = [
     [
         "pwsh -f ./remote_build.ps1",
     ]
 ]
-elf = "target/kernel_raw.elf"
+kernel = "target/kernel_raw.bin"
 
 [qemu]
 machine = "virt"
@@ -90,6 +118,5 @@ args = "-smp 2"
 [uboot]
 serial = "COM3"
 baud_rate = 115200
-net = "以太网"
-dtb_file = "tools\\phytium_pi\\phytiumpi_firefly.dtb"
+dtb_file = "tools/phytium_pi/phytiumpi_firefly.dtb"
 ```
