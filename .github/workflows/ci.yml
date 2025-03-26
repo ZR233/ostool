@@ -16,8 +16,11 @@ jobs:
       matrix:
         rust-toolchain: [stable, nightly]
         targets: [x86_64-unknown-linux-gnu]
+        
     steps:
     - uses: actions/checkout@v4
+    - name: Install qemu-system
+      run: sudo apt update && sudo apt install qemu-system -y 
     - uses: dtolnay/rust-toolchain@nightly
       with:
         toolchain: ${{ matrix.rust-toolchain }}
