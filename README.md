@@ -1,5 +1,7 @@
 # ostool
 
+[![Check, Build and Test](https://github.com/ZR233/ostool/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ZR233/ostool/actions/workflows/ci.yml)
+
 Rust开发OS的工具集，可以方便的通过 Qemu 和 U-Boot 启动。
 
 ## 使用
