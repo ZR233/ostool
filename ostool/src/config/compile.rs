@@ -27,7 +27,7 @@ pub struct CargoBuild {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CustomBuild {
-    pub shell: Vec<Vec<String>>,
+    pub shell: Vec<String>,
     pub elf: Option<String>,
     pub kernel: String,
 }

@@ -28,7 +28,7 @@ target = "aarch64-unknown-none"
 
 [compile.build.Custom]
 # 编译命令，可多条
-shell = [["make ARCH=aarch64 A=examples/helloworld FEATURES=page-alloc-4g"]]
+shell = ["make ARCH=aarch64 A=examples/helloworld FEATURES=page-alloc-4g"]
 # 要启动的内核
 kernel = "examples/helloworld/helloworld_aarch64-qemu-virt.bin"
 
@@ -105,9 +105,7 @@ target = "aarch64-unknown-none-softfloat"
 
 [compile.build.Custom]
 shell = [
-    [
-        "pwsh -f ./remote_build.ps1",
-    ]
+    "pwsh -f ./remote_build.ps1",
 ]
 kernel = "target/kernel_raw.bin"
 
