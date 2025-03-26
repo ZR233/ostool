@@ -1,7 +1,6 @@
 use std::{
     fs::File,
     io::*,
-    os::unix::fs::MetadataExt,
     path::PathBuf,
     time::{Duration, Instant},
 };
@@ -190,7 +189,7 @@ impl UbootShell {
 
         let mut file = File::open(&file).unwrap();
 
-        let size = file.metadata().unwrap().size() as usize;
+        let size = file.metadata().unwrap().len() as usize;
 
         p.send(self, &mut file, name, size, |p| {
             on_progress(p, size);
