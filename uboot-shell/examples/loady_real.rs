@@ -9,8 +9,9 @@ use uboot_shell::UbootShell;
 
 fn main() {
     println!("wait for uboot");
-    // let file = "/home/zhourui/rk3568-firefly-roc-pc-se.dtb";
-    let file = "target/tmp.bin";
+
+    // dd if=/dev/zero of=target/test.txt bs=1k count=258
+    let file = "target/test.txt";
 
     let mut uboot = new_uboot();
 
@@ -32,6 +33,15 @@ fn main() {
     pb.finish_with_message("upload done");
     println!("finish");
 
+    uboot
+        .loady(addr, file, |r, a| {
+            pb.set_length(a as _);
+            pb.set_position(r as _);
+        })
+        .unwrap();
+    pb.finish_with_message("upload done");
+    println!("finish2");
+
     loop {
         let mut buf = [0; 1];
         if uboot.rx.as_mut().unwrap().read_exact(&mut buf).is_ok() {
@@ -42,11 +52,11 @@ fn main() {
 
 fn new_uboot() -> UbootShell {
     let port = "/dev/ttyUSB0";
-    // let baud = 115200;
-    let baud = 1500000;
+    let baud = 115200;
+    // let baud = 1500000;
 
     let rx = serialport::new(port, baud)
-        .timeout(Duration::from_millis(300))
+        .timeout(Duration::from_millis(3000))
         .open()
         .map_err(|e| format!("无法打开串口: {:?}", e))
         .unwrap();

@@ -17,11 +17,8 @@ pub struct Ymodem {
 }
 
 impl Ymodem {
-    pub fn new() -> Self {
-        Self {
-            crc_mode: true,
-            blk: 0,
-        }
+    pub fn new(crc_mode: bool) -> Self {
+        Self { crc_mode, blk: 0 }
     }
 
     fn nak(&self) -> u8 {
@@ -58,21 +55,19 @@ impl Ymodem {
         size: usize,
         on_progress: impl Fn(usize),
     ) -> Result<()> {
-        self.wait_for_start(dev)?;
         println!("Sending file: {name}");
 
         self.send_header(dev, name, size)?;
 
         let mut buff = [0u8; 1024];
-        let mut blk = 0;
 
         while let Ok(n) = file.read(&mut buff) {
             if n == 0 {
                 break;
             }
             self.send_blk(dev, &buff[..n], EOF, false)?;
-            blk += 1;
-            on_progress(blk * 1024);
+
+            on_progress(self.blk as usize * 1024);
         }
 
         dev.write_all(&[EOT])?;
@@ -152,7 +147,11 @@ impl Ymodem {
 
         self.wait_ack(dev)?;
 
-        self.blk += 1;
+        if self.blk == u8::MAX {
+            self.blk = 0;
+        } else {
+            self.blk += 1;
+        }
 
         Ok(())
     }

@@ -110,7 +110,6 @@ impl UbootShell {
         loop {
             self.rx().read_exact(&mut buff)?;
             reply.push(buff[0]);
-            let _ = stdout().write_all(&buff);
 
             if reply.ends_with(val.as_bytes()) {
                 break;
@@ -181,8 +180,8 @@ impl UbootShell {
         on_progress: impl Fn(usize, usize),
     ) -> Result<String> {
         let shell_start = self.cmd_without_reply(&format!("loady {:#x}", addr,), true)?;
-
-        let mut p = ymodem::Ymodem::new();
+        let crc = self.wait_for_load_crc()?;
+        let mut p = ymodem::Ymodem::new(crc);
 
         let file = file.into();
         let name = file.file_name().unwrap().to_str().unwrap();
@@ -199,6 +198,24 @@ impl UbootShell {
             .wait_for_reply(&shell_start)?
             .trim_end_matches(&shell_start)
             .to_string())
+    }
+
+    fn wait_for_load_crc(&mut self) -> Result<bool> {
+        let mut reply = Vec::new();
+        let mut buff = [0u8; 1];
+        loop {
+            self.rx().read_exact(&mut buff)?;
+            reply.push(buff[0]);
+            let _ = stdout().write_all(&buff);
+
+            if reply.ends_with(b"C") {
+                return Ok(true);
+            }
+            let res = String::from_utf8_lossy(&reply);
+            if res.contains("try 'help'") {
+                panic!("{}", res);
+            }
+        }
     }
 }
 
