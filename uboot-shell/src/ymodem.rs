@@ -14,11 +14,16 @@ const CRC: u8 = 0x43;
 pub struct Ymodem {
     crc_mode: bool,
     blk: u8,
+    retries: usize,
 }
 
 impl Ymodem {
     pub fn new(crc_mode: bool) -> Self {
-        Self { crc_mode, blk: 0 }
+        Self {
+            crc_mode,
+            blk: 0,
+            retries: 10,
+        }
     }
 
     fn nak(&self) -> u8 {
@@ -128,24 +133,36 @@ impl Ymodem {
             p = SOH;
         }
         let blk = if last { 0 } else { self.blk };
+        let mut err = None;
+        loop {
+            if self.retries == 0 {
+                return Err(err.unwrap_or(Error::new(ErrorKind::BrokenPipe, "retry too much")));
+            }
 
-        dev.write_all(&[p, blk, !blk])?;
+            dev.write_all(&[p, blk, !blk])?;
 
-        let mut buf = vec![pad; len];
-        buf[..data.len()].copy_from_slice(data);
+            let mut buf = vec![pad; len];
+            buf[..data.len()].copy_from_slice(data);
 
-        dev.write_all(&buf)?;
+            dev.write_all(&buf)?;
 
-        if self.crc_mode {
-            let chsum = crc16_ccitt(0, &buf);
-            let crc1 = (chsum >> 8) as u8;
-            let crc2 = (chsum & 0xff) as u8;
+            if self.crc_mode {
+                let chsum = crc16_ccitt(0, &buf);
+                let crc1 = (chsum >> 8) as u8;
+                let crc2 = (chsum & 0xff) as u8;
 
-            dev.write_all(&[crc1, crc2])?;
+                dev.write_all(&[crc1, crc2])?;
+            }
+            dev.flush()?;
+
+            match self.wait_ack(dev) {
+                Ok(_) => break,
+                Err(e) => {
+                    err = Some(e);
+                    self.retries -= 1;
+                }
+            }
         }
-        dev.flush()?;
-
-        self.wait_ack(dev)?;
 
         if self.blk == u8::MAX {
             self.blk = 0;
