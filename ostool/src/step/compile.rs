@@ -132,7 +132,9 @@ impl Compile {
         let _ = std::fs::remove_file(&elf_file);
 
         if let Some(ref elf) = config.elf {
-            std::fs::copy(elf, elf_file).unwrap();
+            if !elf.trim().is_empty() {
+                std::fs::copy(elf, elf_file).unwrap();
+            }
         }
 
         project.out_dir = Some(
@@ -146,6 +148,8 @@ impl Compile {
         let _ = std::fs::create_dir_all(project.out_dir());
 
         let bin_path = project.out_dir().join("kernel.bin");
+
+        println!("copy {} to {}", config.kernel, bin_path.display());
 
         let _ = std::fs::copy(config.kernel, &bin_path);
 

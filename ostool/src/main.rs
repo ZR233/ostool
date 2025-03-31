@@ -9,7 +9,6 @@ use step::{CargoTestPrepare, Compile, Qemu, Step, Tftp, Uboot, UbootConfig};
 mod cmd;
 mod config;
 mod env;
-mod os;
 mod project;
 mod shell;
 mod step;
