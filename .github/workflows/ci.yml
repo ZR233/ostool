@@ -14,18 +14,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust-toolchain: [stable, nightly]
+        rust-toolchain: [stable]
         targets: [x86_64-unknown-linux-gnu]
         
     steps:
     - uses: actions/checkout@v4
-    - name: Install qemu-system
-      run: sudo apt update && sudo apt install qemu-system -y 
     - uses: dtolnay/rust-toolchain@nightly
       with:
         toolchain: ${{ matrix.rust-toolchain }}
-        components: rust-src, clippy, rustfmt
+        components: clippy, rustfmt
         targets: ${{ matrix.targets }}
+    - uses: Swatinem/rust-cache@v2
+    - uses: ./.github/workflows/actions/setup-qemu
+      with:
+        qemu-version: 9.2.1
     - name: Install lib libudev-dev
       run: sudo apt install libudev-dev -y
     - name: Check rust version

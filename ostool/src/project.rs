@@ -12,7 +12,6 @@ use colored::Colorize;
 
 use crate::{
     config::{compile::BuildSystem, ProjectConfig},
-    os::new_config,
     shell::{check_porgram, metadata, Shell},
 };
 
@@ -40,7 +39,7 @@ impl Project {
         let config_path = meta.workspace_root.as_std_path().join(".project.toml");
         let config;
         if !config_path.try_exists()? {
-            config = new_config(self.workdir());
+            config = ProjectConfig::new_by_ui(self.workdir());
             config.save(&config_path);
         } else {
             let content = fs::read_to_string(&config_path).unwrap();
@@ -59,7 +58,7 @@ impl Project {
                 );
                 let _ = fs::rename(&config_path, &old);
 
-                let config = new_config(self.workdir());
+                let config = ProjectConfig::new_by_ui(self.workdir());
                 config.save(&config_path);
                 config
             });
@@ -177,7 +176,7 @@ impl Arch {
         .to_string()
     }
 
-    fn from_target(target: &str) -> Result<Arch> {
+    pub fn from_target(target: &str) -> Result<Arch> {
         if target.contains("aarch64") {
             return Ok(Arch::Aarch64);
         }
