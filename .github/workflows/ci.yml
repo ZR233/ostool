@@ -25,9 +25,8 @@ jobs:
         components: clippy, rustfmt
         targets: ${{ matrix.targets }}
     - uses: Swatinem/rust-cache@v2
-    - uses: ./.github/workflows/actions/setup-qemu
-      with:
-        qemu-version: 9.2.1
+    - name: Install qemu
+      run: sudo apt install qemu-system-aarch64 -y
     - name: Install lib libudev-dev
       run: sudo apt install libudev-dev -y
     - name: Check rust version
