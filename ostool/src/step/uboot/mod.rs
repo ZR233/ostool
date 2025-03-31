@@ -227,8 +227,8 @@ impl Step for Uboot {
             println!("$loadaddr not found");
 
             let loadaddr = uboot
-                .env_int("kernel_addr_c")
-                .expect("kernel_addr_c not found");
+                .env_int("kernel_addr_r")
+                .expect("kernel_addr_r not found");
 
             println!("$loadaddr set to {:#x}", loadaddr);
 
