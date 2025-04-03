@@ -56,6 +56,8 @@ impl Step for CargoTestPrepare {
         project.arch = Some(arch.into());
         project.out_dir = PathBuf::from(&self.elf).parent().map(|p| p.to_path_buf());
 
+        let target_dir = project.workspace_root().join("target");
+
         let test_name = Path::new(&self.elf).file_stem().unwrap();
 
         let mut config = ProjectConfig::new(project.arch.unwrap());
@@ -66,6 +68,10 @@ impl Step for CargoTestPrepare {
             .join(format!("{}.bin", test_name.to_string_lossy()));
 
         let elf_path = project.out_dir().join("test.elf");
+
+        let target_elf = target_dir.join("kernel.elf");
+        let _ = std::fs::remove_file(&target_elf);
+        let _ = fs::copy(&self.elf, &target_elf);
 
         let _ = fs::remove_file(&elf_path);
         let _ = fs::copy(&self.elf, &elf_path);
