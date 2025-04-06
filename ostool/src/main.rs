@@ -1,20 +1,20 @@
-use std::{env::current_dir, path::PathBuf};
+use std::{env::current_dir, path::PathBuf, thread::sleep, time::Duration};
 
 use anyhow::Result;
 use clap::*;
 use colored::Colorize;
 use project::Project;
-use step::{CargoTestPrepare, Compile, Qemu, Step, Uboot, UbootConfig};
+use step::{CargoTestPrepare, Compile, Qemu, Step, Tftp, Uboot, UbootConfig};
 
+mod cmd;
 mod config;
 mod env;
-mod os;
 mod project;
 mod shell;
 mod step;
 mod ui;
 
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
     #[arg(short, long)]
@@ -23,11 +23,12 @@ struct Cli {
     command: SubCommands,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand)]
 enum SubCommands {
     Build,
     Run(RunArgs),
     CargoTest(TestArgs),
+    Defconfig(cmd::defconfig::Cmd),
 }
 #[derive(Args, Debug)]
 struct RunArgs {
@@ -39,6 +40,7 @@ struct RunArgs {
 enum RunSubCommands {
     Qemu(QemuArgs),
     Uboot,
+    Tftp,
 }
 
 #[derive(Args, Debug, Default)]
@@ -65,10 +67,12 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     let workdir = cli
         .workdir
-        .map(|w| PathBuf::from(w))
+        .map(PathBuf::from)
         .unwrap_or(current_dir().unwrap());
 
     env::prepere_deps();
+
+    let mut keep_run = false;
 
     let mut project = Project::new(workdir);
     project.prepere_deps();
@@ -80,7 +84,6 @@ fn main() -> Result<()> {
             project.config_with_file().unwrap();
             steps.push(Compile::new_boxed(false));
         }
-
         SubCommands::CargoTest(args) => {
             project.is_print_cmd = false;
 
@@ -99,6 +102,7 @@ fn main() -> Result<()> {
         }
         SubCommands::Run(run_args) => {
             project.config_with_file().unwrap();
+
             match run_args.command {
                 RunSubCommands::Qemu(args) => {
                     steps.push(Compile::new_boxed(args.debug));
@@ -115,13 +119,27 @@ fn main() -> Result<()> {
 
                     steps.push(Uboot::new_boxed(false));
                 }
+                RunSubCommands::Tftp => {
+                    steps.push(Compile::new_boxed(false));
+                    steps.push(Tftp::new_boxed());
+                    keep_run = true;
+                }
             };
+        }
+        SubCommands::Defconfig(cmd) => {
+            cmd.run(&mut project);
         }
     }
 
     for step in &mut steps {
         if let Err(skip) = step.run(&mut project) {
             println!("{}", format!("warn: {}", skip).yellow());
+        }
+    }
+
+    if keep_run {
+        loop {
+            sleep(Duration::from_secs(1));
         }
     }
 

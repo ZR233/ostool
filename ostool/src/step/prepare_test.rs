@@ -3,12 +3,14 @@ use crate::{
     project::{Arch, Project},
     shell::Shell,
 };
+use colored::Colorize;
 use object::{Architecture, Object};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use super::{Step, UbootConfig};
@@ -54,6 +56,8 @@ impl Step for CargoTestPrepare {
         project.arch = Some(arch.into());
         project.out_dir = PathBuf::from(&self.elf).parent().map(|p| p.to_path_buf());
 
+        let target_dir = project.workspace_root().join("target");
+
         let test_name = Path::new(&self.elf).file_stem().unwrap();
 
         let mut config = ProjectConfig::new(project.arch.unwrap());
@@ -64,6 +68,10 @@ impl Step for CargoTestPrepare {
             .join(format!("{}.bin", test_name.to_string_lossy()));
 
         let elf_path = project.out_dir().join("test.elf");
+
+        let target_elf = target_dir.join("kernel.elf");
+        let _ = std::fs::remove_file(&target_elf);
+        let _ = fs::copy(&self.elf, &target_elf);
 
         let _ = fs::remove_file(&elf_path);
         let _ = fs::copy(&self.elf, &elf_path);
@@ -98,7 +106,30 @@ impl Step for CargoTestPrepare {
                 let s = toml::to_string(&uboot_config).unwrap();
                 fs::write(&config_user, s).unwrap();
             } else {
-                uboot_config = toml::from_str(&fs::read_to_string(&config_user).unwrap()).unwrap();
+                uboot_config = match toml::from_str(&fs::read_to_string(&config_user).unwrap()) {
+                    Ok(c) => c,
+                    _ => {
+                        let old = format!(
+                            ".bare-test.toml.bk.{}",
+                            SystemTime::now()
+                                .duration_since(UNIX_EPOCH)
+                                .unwrap()
+                                .as_secs()
+                        );
+                        let old = project.workdir().join(old);
+                        println!(
+                            "{}",
+                            format!("config error, generate new, save old to: {}", old.display())
+                                .yellow()
+                        );
+                        let _ = fs::rename(&config_user, &old);
+
+                        let config = UbootConfig::config_by_select();
+                        let s = toml::to_string(&config).unwrap();
+                        fs::write(&config_user, s).unwrap();
+                        config
+                    }
+                };
             }
             config.uboot = Some(uboot_config);
         }
@@ -114,7 +145,7 @@ impl Step for CargoTestPrepare {
             }
         }
         project.config = Some(config);
-        project.set_binaries(elf_path, bin_path);
+        project.kernel = Some(bin_path);
 
         Ok(())
     }

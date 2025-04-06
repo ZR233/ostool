@@ -57,7 +57,13 @@ impl Shell for Command {
 
         let stdout = BufReader::new(child.stdout.take().unwrap());
         for line in stdout.lines() {
-            let line = line.expect("Failed to read line");
+            let line = match line {
+                Ok(l) => l,
+                Err(e) => {
+                    println!("stdout: {:?}", e);
+                    continue;
+                }
+            };
             // 解析输出为UTF-8
             println!("{}", line);
             on_line(&line)?;

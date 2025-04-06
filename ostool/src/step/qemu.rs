@@ -33,45 +33,6 @@ impl Qemu {
             cmd: Command::new("ls"),
         })
     }
-
-    #[allow(unused)]
-    #[cfg(target_os = "windows")]
-    fn cmd_windows_env(&mut self) {
-        use std::{
-            collections::HashMap,
-            ffi::{OsStr, OsString},
-            path::PathBuf,
-        };
-
-        let env = self.cmd.get_envs().collect::<HashMap<_, _>>();
-        let mut mysys2_root = PathBuf::from("C:\\msys64");
-        if let Some(p) = std::env::var_os("MSYS2_ROOT") {
-            mysys2_root = PathBuf::from(p);
-        }
-
-        let mut path = env
-            .get(OsStr::new("PATH"))
-            .unwrap_or(&None)
-            .unwrap_or_default()
-            .to_os_string();
-        if !path.is_empty() {
-            path.push(";");
-        }
-
-        let ucrt64 = mysys2_root.join("ucrt64/bin");
-
-        if ucrt64.join("qemu-system-x86_64.exe").exists() {
-            path.push(OsString::from(ucrt64));
-        }
-
-        let mingw64 = mysys2_root.join("mingw64/bin");
-
-        if mingw64.join("qemu-system-x86_64.exe").exists() {
-            path.push(mingw64);
-        }
-
-        self.cmd.env("PATH", path);
-    }
 }
 
 impl Step for Qemu {
@@ -90,9 +51,6 @@ impl Step for Qemu {
             let _ = fs::remove_file("target/qemu.dtb");
             self.machine = format!("{},dumpdtb=target/qemu.dtb", self.machine);
         }
-
-        // #[cfg(target_os = "windows")]
-        // self.cmd_windows_env();
 
         if !project.config_ref().qemu.graphic {
             self.cmd.arg("-nographic");
@@ -121,7 +79,7 @@ impl Step for Qemu {
             self.cmd.arg(cpu);
         }
         self.cmd.arg("-kernel");
-        self.cmd.arg(project.to_load_kernel.as_ref().unwrap());
+        self.cmd.arg(project.kernel.as_ref().unwrap());
 
         if self.is_check_test {
             let is_ok = Arc::new(AtomicBool::new(false));
