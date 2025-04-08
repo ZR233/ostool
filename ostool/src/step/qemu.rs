@@ -1,19 +1,15 @@
 use std::{
     fs,
-    process::{exit, Command},
+    process::{Command, exit},
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
 };
 
 use colored::Colorize;
 
-use crate::{
-    project::{Arch, Project},
-    shell::Shell,
-    QemuArgs,
-};
+use crate::{QemuArgs, project::Project, shell::Shell};
 
 use super::Step;
 
@@ -39,11 +35,10 @@ impl Step for Qemu {
     fn run(&mut self, project: &mut Project) -> anyhow::Result<()> {
         self.cmd = project.shell(project.arch.unwrap().qemu_program());
 
-        if matches!(project.arch, Some(Arch::X86_64)) {
-            self.machine = "q35".to_string();
-        }
+        let mut config = project.config_ref().qemu.clone();
+        config.set_default_by_arch(project.arch.unwrap());
 
-        if let Some(m) = project.config_ref().qemu.machine.as_ref() {
+        if let Some(m) = config.machine.as_ref() {
             self.machine = m.to_string();
         }
 
@@ -52,14 +47,12 @@ impl Step for Qemu {
             self.machine = format!("{},dumpdtb=target/qemu.dtb", self.machine);
         }
 
-        if !project.config_ref().qemu.graphic {
+        if !config.graphic {
             self.cmd.arg("-nographic");
         }
         self.cmd.args(["-machine", &self.machine]);
 
-        let more_args = project
-            .config_ref()
-            .qemu
+        let more_args = config
             .args
             .split(" ")
             .map(|o| o.trim())
@@ -74,7 +67,7 @@ impl Step for Qemu {
             self.cmd.args(["-s", "-S"]);
         }
 
-        if let Some(cpu) = &project.config_ref().qemu.cpu {
+        if let Some(cpu) = &config.cpu {
             self.cmd.arg("-cpu");
             self.cmd.arg(cpu);
         }
