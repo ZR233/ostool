@@ -11,8 +11,8 @@ use cargo_metadata::{Metadata, Package};
 use colored::Colorize;
 
 use crate::{
-    config::{compile::BuildSystem, ProjectConfig},
-    shell::{check_porgram, metadata, Shell},
+    config::{ProjectConfig, compile::BuildSystem},
+    shell::{Shell, check_porgram, metadata},
 };
 
 #[derive(Default)]

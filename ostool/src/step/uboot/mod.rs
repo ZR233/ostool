@@ -183,10 +183,14 @@ impl Step for Uboot {
                     boot_cmd_base = format!("{boot_cmd_base}dhcp;");
                 }
                 boot_cmd = if !fdtfile.is_empty() {
-                    format!("{boot_cmd_base}tftp $loadaddr {ip_string}:$bootfile;tftp $fdt_addr {ip_string}:$fdtfile;fdt addr $fdt_addr;booti $loadaddr - $fdt_addr")
+                    format!(
+                        "{boot_cmd_base}tftp $loadaddr {ip_string}:$bootfile;tftp $fdt_addr {ip_string}:$fdtfile;fdt addr $fdt_addr;booti $loadaddr - $fdt_addr"
+                    )
                 } else {
                     println!("DTB file not provided");
-                    format!("{boot_cmd_base}tftp $loadaddr {ip_string}:$bootfile;dcache flush;go $loadaddr")
+                    format!(
+                        "{boot_cmd_base}tftp $loadaddr {ip_string}:$bootfile;dcache flush;go $loadaddr"
+                    )
                 };
             }
             None => {
@@ -274,20 +278,22 @@ impl Step for Uboot {
         if !self.is_check_test {
             let mut port_tx = uboot.tx.take().unwrap();
 
-            thread::spawn(move || loop {
-                if let Ok(Event::Key(key)) = event::read() {
-                    if matches!(key.kind, event::KeyEventKind::Release) {
-                        match key.code {
-                            KeyCode::Char(ch) => {
-                                port_tx.write_all(&[ch as u8]).unwrap();
+            thread::spawn(move || {
+                loop {
+                    if let Ok(Event::Key(key)) = event::read() {
+                        if matches!(key.kind, event::KeyEventKind::Release) {
+                            match key.code {
+                                KeyCode::Char(ch) => {
+                                    port_tx.write_all(&[ch as u8]).unwrap();
+                                }
+                                KeyCode::Backspace => {
+                                    port_tx.write_all(&[127]).unwrap();
+                                }
+                                KeyCode::Enter => {
+                                    port_tx.write_all(b"\r\n").unwrap();
+                                }
+                                _ => {}
                             }
-                            KeyCode::Backspace => {
-                                port_tx.write_all(&[127]).unwrap();
-                            }
-                            KeyCode::Enter => {
-                                port_tx.write_all(b"\r\n").unwrap();
-                            }
-                            _ => {}
                         }
                     }
                 }
