@@ -1,5 +1,5 @@
 use crate::{
-    config::{qemu::Qemu, ProjectConfig},
+    config::{ProjectConfig, qemu::Qemu},
     project::{Arch, Project},
     shell::Shell,
 };
@@ -15,7 +15,7 @@ use std::{
 
 use super::{Step, UbootConfig};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 struct Config {
     qemu: Option<Qemu>,
 }
@@ -85,7 +85,7 @@ impl Step for CargoTestPrepare {
             .exec(project.is_print_cmd)
             .unwrap();
 
-        config.qemu = Qemu::new_default(project.arch.unwrap());
+        config.qemu = Qemu::default();
 
         let config_path = project.workdir().join("bare-test.toml");
 
@@ -95,6 +95,12 @@ impl Step for CargoTestPrepare {
             if let Some(q) = test_config.qemu.clone() {
                 config.qemu = q;
             }
+        } else {
+            let test_config = Config {
+                qemu: Some(config.qemu.clone()),
+            };
+            let s = toml::to_string_pretty(&test_config).unwrap();
+            fs::write(&config_path, s).unwrap();
         }
 
         let config_user = project.workdir().join(".bare-test.toml");
