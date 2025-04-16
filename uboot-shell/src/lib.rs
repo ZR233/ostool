@@ -5,12 +5,21 @@ use std::{
     time::{Duration, Instant},
 };
 
+use colored::Colorize;
+
 mod crc;
 mod ymodem;
+
+macro_rules! trace {
+    ($($arg:tt)*) => {{
+        println!("\r\n{}", &std::fmt::format(format_args!($($arg)*)).bright_black());
+    }};
+}
 
 pub struct UbootShell {
     pub tx: Option<Box<dyn Write + Send>>,
     pub rx: Option<Box<dyn Read + Send>>,
+    perfix: String,
 }
 
 impl UbootShell {
@@ -19,8 +28,10 @@ impl UbootShell {
         let mut s = Self {
             tx: Some(Box::new(tx)),
             rx: Some(Box::new(rx)),
+            perfix: "".to_string(),
         };
         s.wait_for_shell()?;
+        trace!("shell ready, perfix: `{}`", s.perfix);
         Ok(s)
     }
 
@@ -45,14 +56,18 @@ impl UbootShell {
                     if n == 1 {
                         let ch = buf[0];
                         if ch == b'\n' && history.last() != Some(&b'\r') {
-                            stdout().write_all(b"\r").unwrap();
+                            print_raw(b"\r");
                             history.push(b'\r');
                         }
                         history.push(ch);
 
-                        stdout().write_all(&buf).unwrap();
+                        print_raw(&buf);
 
                         if history.ends_with(c"<INTERRUPT>".to_bytes()) {
+                            let line = history.split(|n| *n == b'\n').next_back().unwrap();
+                            let s = String::from_utf8_lossy(line);
+                            self.perfix = s.trim().replace("<INTERRUPT>", "").trim().to_string();
+
                             return Ok(());
                         }
 
@@ -83,7 +98,7 @@ impl UbootShell {
                 break;
             }
 
-            stdout().write_all(&byte).unwrap();
+            print_raw(&byte);
 
             if byte[0] == b'\r' {
                 continue;
@@ -107,44 +122,36 @@ impl UbootShell {
     pub fn wait_for_reply(&mut self, val: &str) -> Result<String> {
         let mut reply = Vec::new();
         let mut buff = [0u8; 1];
+
+        trace!("wait for `{}`", val);
         loop {
             self.rx().read_exact(&mut buff)?;
             reply.push(buff[0]);
+            print_raw(&buff);
 
             if reply.ends_with(val.as_bytes()) {
                 break;
             }
         }
-        Ok(String::from_utf8_lossy(&reply).trim().to_string())
+        Ok(String::from_utf8_lossy(&reply)
+            .trim()
+            .trim_end_matches(&self.perfix)
+            .to_string())
     }
 
-    pub fn cmd_without_reply(&mut self, cmd: &str, want_echo: bool) -> Result<String> {
+    pub fn cmd_without_reply(&mut self, cmd: &str) -> Result<()> {
         self.tx().write_all(cmd.as_bytes())?;
         self.tx().write_all("\r\n".as_bytes())?;
         self.tx().flush()?;
-
-        if !want_echo {
-            return Ok(String::new());
-        }
-
-        let shell_start;
-        loop {
-            let line = self.read_line()?;
-            if line.contains(cmd) {
-                shell_start = line.trim().trim_end_matches(cmd).trim().to_string();
-                break;
-            }
-        }
-        Ok(shell_start)
+        self.wait_for_reply(cmd)?;
+        trace!("cmd ok");
+        Ok(())
     }
 
     pub fn cmd(&mut self, cmd: &str) -> Result<String> {
-        let shell_start = self.cmd_without_reply(cmd, true)?;
-
-        Ok(self
-            .wait_for_reply(&shell_start)?
-            .trim_end_matches(&shell_start)
-            .to_string())
+        self.cmd_without_reply(cmd)?;
+        let perfix = self.perfix.clone();
+        self.wait_for_reply(&perfix)
     }
 
     pub fn set_env(&mut self, name: impl Into<String>, value: impl Into<String>) -> Result<()> {
@@ -179,7 +186,7 @@ impl UbootShell {
         file: impl Into<PathBuf>,
         on_progress: impl Fn(usize, usize),
     ) -> Result<String> {
-        let shell_start = self.cmd_without_reply(&format!("loady {:#x}", addr,), true)?;
+        self.cmd_without_reply(&format!("loady {:#x}", addr,))?;
         let crc = self.wait_for_load_crc()?;
         let mut p = ymodem::Ymodem::new(crc);
 
@@ -193,11 +200,8 @@ impl UbootShell {
         p.send(self, &mut file, name, size, |p| {
             on_progress(p, size);
         })?;
-
-        Ok(self
-            .wait_for_reply(&shell_start)?
-            .trim_end_matches(&shell_start)
-            .to_string())
+        let perfix = self.perfix.clone();
+        self.wait_for_reply(&perfix)
     }
 
     fn wait_for_load_crc(&mut self) -> Result<bool> {
@@ -243,4 +247,8 @@ fn parse_int(line: &str) -> Option<usize> {
         radix = 16;
     }
     u64::from_str_radix(line, radix).ok().map(|o| o as _)
+}
+
+fn print_raw(buff: &[u8]) {
+    stdout().write_all(buff).unwrap();
 }
