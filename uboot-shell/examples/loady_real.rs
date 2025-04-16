@@ -1,8 +1,4 @@
-use std::{
-    fmt,
-    io::{Write, stdout},
-    time::Duration,
-};
+use std::{fmt, time::Duration};
 
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use uboot_shell::UbootShell;
@@ -41,19 +37,12 @@ fn main() {
         .unwrap();
     pb.finish_with_message("upload done");
     println!("finish2");
-
-    loop {
-        let mut buf = [0; 1];
-        if uboot.rx.as_mut().unwrap().read_exact(&mut buf).is_ok() {
-            stdout().write_all(&buf).unwrap();
-        }
-    }
 }
 
 fn new_uboot() -> UbootShell {
     let port = "/dev/ttyUSB0";
-    let baud = 115200;
-    // let baud = 1500000;
+    // let baud = 115200;
+    let baud = 1500000;
 
     let rx = serialport::new(port, baud)
         .timeout(Duration::from_millis(3000))

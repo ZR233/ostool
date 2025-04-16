@@ -5,11 +5,9 @@ use uboot_shell::UbootShell;
 fn main() {
     let (mut out, mut uboot) = new_uboot();
 
-    // uboot.loady(0x40200000, "Cargo.toml");
+    uboot.loady(0x40200000, "Cargo.toml", |r, a| {});
 
     println!("finish");
-
-    uboot.wait_for_reply("12345").unwrap();
 
     let _ = out.wait();
 }

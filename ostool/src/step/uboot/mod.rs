@@ -273,7 +273,7 @@ impl Step for Uboot {
         }
         sleep(Duration::from_millis(500));
         println!("boot up");
-        uboot.cmd_without_reply(&boot_cmd, false).unwrap();
+        uboot.cmd_without_reply(&boot_cmd).unwrap();
 
         if !self.is_check_test {
             let mut port_tx = uboot.tx.take().unwrap();
