@@ -151,7 +151,14 @@ impl Step for CargoTestPrepare {
             }
         }
         project.config = Some(config);
-        project.kernel = Some(bin_path);
+
+        let kernel = if matches!(project.arch, Some(Arch::X86_64)) {
+            elf_path.clone()
+        } else {
+            bin_path.clone()
+        };
+
+        project.kernel = Some(kernel);
 
         Ok(())
     }
