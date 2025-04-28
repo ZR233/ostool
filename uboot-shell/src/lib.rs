@@ -44,47 +44,50 @@ impl UbootShell {
     }
 
     fn wait_for_shell(&mut self) -> Result<()> {
-        let mut buf = [0u8; 1];
         let mut history: Vec<u8> = Vec::new();
         const CTRL_C: u8 = 0x03;
 
         let mut last = Instant::now();
         let mut is_interrupt_found = false;
         let mut is_shell_ok = false;
+        const INT_STR: &str = "<INTERRUPT>";
+        const INT: &[u8] = INT_STR.as_bytes();
 
+        trace!("wait for `{INT_STR}`");
         loop {
-            match self.rx().read(&mut buf) {
-                Ok(n) => {
-                    if n == 1 {
-                        let ch = buf[0];
-                        if ch == b'\n' && history.last() != Some(&b'\r') {
-                            print_raw(b"\r");
-                            history.push(b'\r');
-                        }
-                        history.push(ch);
+            match self.read_byte() {
+                Ok(ch) => {
+                    if ch == b'\n' && history.last() != Some(&b'\r') {
+                        print_raw(b"\r");
+                        history.push(b'\r');
+                    }
+                    history.push(ch);
 
-                        print_raw(&buf);
+                    print_raw(&[ch]);
 
-                        if history.ends_with(c"<INTERRUPT>".to_bytes()) && !is_interrupt_found {
-                            let line = history.split(|n| *n == b'\n').next_back().unwrap();
-                            let s = String::from_utf8_lossy(line);
-                            self.perfix = s.trim().replace("<INTERRUPT>", "").trim().to_string();
-                            is_interrupt_found = true;
-                            let _ = self.tx().write_all("testshell\r\n".as_bytes());
-                        }
+                    if history.ends_with(INT) && !is_interrupt_found {
+                        let line = history.split(|n| *n == b'\n').next_back().unwrap();
+                        let s = String::from_utf8_lossy(line);
+                        self.perfix = s.trim().replace(INT_STR, "").trim().to_string();
+                        is_interrupt_found = true;
+                        trace!("clear");
+                        let _ = self.rx().read_to_end(&mut vec![]);
+                        trace!("test shell");
+                        let ret = self.tx().write_all("testshell\r\n".as_bytes());
+                        trace!("test shell ret {:?}", ret);
+                    }
 
-                        if is_interrupt_found && history.ends_with("\'help\'".as_bytes()) {
-                            is_shell_ok = true;
-                        }
+                    if is_interrupt_found && history.ends_with("\'help\'".as_bytes()) {
+                        is_shell_ok = true;
+                    }
 
-                        if is_shell_ok && history.ends_with(self.perfix.as_bytes()) {
-                            return Ok(());
-                        }
+                    if is_shell_ok && history.ends_with(self.perfix.as_bytes()) {
+                        return Ok(());
+                    }
 
-                        if last.elapsed() > Duration::from_millis(20) && !is_interrupt_found {
-                            let _ = self.tx().write_all(&[CTRL_C]);
-                            last = Instant::now();
-                        }
+                    if last.elapsed() > Duration::from_millis(20) && !is_interrupt_found {
+                        let _ = self.tx().write_all(&[CTRL_C]);
+                        last = Instant::now();
                     }
                 }
 
@@ -98,46 +101,38 @@ impl UbootShell {
         }
     }
 
-    // fn read_line(&mut self) -> Result<String> {
-    //     let mut line_raw = Vec::new();
-    //     let mut byte = [0; 1];
+    fn read_byte(&mut self) -> Result<u8> {
+        let mut buff = [0u8; 1];
+        let time_out = Duration::from_secs(5);
+        let start = Instant::now();
 
-    //     loop {
-    //         let n = self.rx().read(&mut byte)?;
-    //         if n == 0 {
-    //             break;
-    //         }
-
-    //         print_raw(&byte);
-
-    //         if byte[0] == b'\r' {
-    //             continue;
-    //         }
-
-    //         if byte[0] == b'\n' {
-    //             break;
-    //         }
-
-    //         line_raw.push(byte[0]);
-    //     }
-
-    //     if line_raw.is_empty() {
-    //         return Ok(String::new());
-    //     }
-
-    //     let line = String::from_utf8_lossy(&line_raw);
-    //     Ok(line.trim().to_string())
-    // }
+        loop {
+            match self.rx().read_exact(&mut buff) {
+                Ok(_) => return Ok(buff[0]),
+                Err(e) => {
+                    if e.kind() == ErrorKind::TimedOut {
+                        if start.elapsed() > time_out {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::TimedOut,
+                                "Timeout",
+                            ));
+                        }
+                    } else {
+                        return Err(e);
+                    }
+                }
+            }
+        }
+    }
 
     pub fn wait_for_reply(&mut self, val: &str) -> Result<String> {
         let mut reply = Vec::new();
-        let mut buff = [0u8; 1];
 
         trace!("wait for `{}`", val);
         loop {
-            self.rx().read_exact(&mut buff)?;
-            reply.push(buff[0]);
-            print_raw(&buff);
+            let byte = self.read_byte()?;
+            reply.push(byte);
+            print_raw(&[byte]);
 
             if reply.ends_with(val.as_bytes()) {
                 break;
@@ -216,11 +211,10 @@ impl UbootShell {
 
     fn wait_for_load_crc(&mut self) -> Result<bool> {
         let mut reply = Vec::new();
-        let mut buff = [0u8; 1];
         loop {
-            self.rx().read_exact(&mut buff)?;
-            reply.push(buff[0]);
-            let _ = stdout().write_all(&buff);
+            let byte = self.read_byte()?;
+            reply.push(byte);
+            print_raw(&[byte]);
 
             if reply.ends_with(b"C") {
                 return Ok(true);

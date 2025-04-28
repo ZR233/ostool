@@ -1,11 +1,23 @@
-use std::process::{Child, Command, Stdio};
+use std::{
+    io::Read,
+    net::TcpStream,
+    process::{Child, Command, Stdio},
+    sync::atomic::AtomicU32,
+    time::Duration,
+};
 
 use ntest::timeout;
 use uboot_shell::UbootShell;
 
+static PORT: AtomicU32 = AtomicU32::new(10000);
+
 fn new_uboot() -> (Child, UbootShell) {
+    let port = PORT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
     // qemu-system-aarch64 -machine virt -cpu cortex-a57 -nographic -bios assets/u-boot.bin
     let mut out = Command::new("qemu-system-aarch64")
+        .arg("-serial")
+        .arg(format!("tcp::{port},server,nowait"))
         .args([
             "-machine",
             "virt",
@@ -16,14 +28,26 @@ fn new_uboot() -> (Child, UbootShell) {
             "../assets/u-boot.bin",
         ])
         .stdout(Stdio::piped())
-        .stdin(Stdio::piped())
         .spawn()
         .unwrap();
 
-    let stdin = out.stdin.take().unwrap();
     let stdout = out.stdout.take().unwrap();
+    let mut buff = vec![];
+    for i in stdout.bytes() {
+        buff.push(i.unwrap());
+        if String::from_utf8_lossy(&buff).contains("qemu") {
+            break;
+        }
+    }
 
-    (out, UbootShell::new(stdin, stdout).unwrap())
+    let tx = TcpStream::connect(format!("127.0.0.1:{port}")).unwrap();
+
+    tx.set_read_timeout(Some(Duration::from_millis(300)))
+        .unwrap();
+
+    let rx = tx.try_clone().unwrap();
+
+    (out, UbootShell::new(tx, rx).unwrap())
 }
 
 #[test]

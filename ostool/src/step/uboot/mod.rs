@@ -208,7 +208,7 @@ impl Step for Uboot {
             .len() as usize;
 
         let rx = serialport::new(&config.serial, config.baud_rate as _)
-            .timeout(Duration::from_millis(3000))
+            .timeout(Duration::from_millis(200))
             .open()
             .map_err(|e| format!("无法打开串口 {}: {:?}", config.serial, e))
             .unwrap();
@@ -222,7 +222,7 @@ impl Step for Uboot {
         );
 
         println!("等待 U-Boot 启动...");
-        let mut uboot = UbootShell::new(tx, rx).unwrap();
+        let mut uboot = UbootShell::new(tx, UbootRx(rx)).unwrap();
 
         println!();
         println!("{}", "Uboot shell ok".green());
@@ -372,4 +372,32 @@ fn uboot_load(uboot: &mut UbootShell, addr: usize, file: impl Into<PathBuf>) {
 
     println!("{}", res);
     println!("send ok");
+}
+
+struct UbootRx(Box<dyn Read + Send>);
+
+impl Read for UbootRx {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.0.read(buf)
+    }
+
+    fn read_to_end(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
+        let mut b = [0u8; 1];
+        let mut n = 0;
+        loop {
+            match self.0.read(&mut b) {
+                Ok(n2) => {
+                    n += n2;
+                    buf.push(b[0]);
+                }
+                Err(e) => {
+                    if e.kind() == io::ErrorKind::TimedOut {
+                        return Ok(n);
+                    } else {
+                        return Err(e);
+                    }
+                }
+            }
+        }
+    }
 }
