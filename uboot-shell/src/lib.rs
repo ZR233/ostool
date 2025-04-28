@@ -49,6 +49,8 @@ impl UbootShell {
         const CTRL_C: u8 = 0x03;
 
         let mut last = Instant::now();
+        let mut is_interrupt_found = false;
+        let mut is_shell_ok = false;
 
         loop {
             match self.rx().read(&mut buf) {
@@ -63,15 +65,23 @@ impl UbootShell {
 
                         print_raw(&buf);
 
-                        if history.ends_with(c"<INTERRUPT>".to_bytes()) {
+                        if history.ends_with(c"<INTERRUPT>".to_bytes()) && !is_interrupt_found {
                             let line = history.split(|n| *n == b'\n').next_back().unwrap();
                             let s = String::from_utf8_lossy(line);
                             self.perfix = s.trim().replace("<INTERRUPT>", "").trim().to_string();
+                            is_interrupt_found = true;
+                            let _ = self.tx().write_all("testshell\r\n".as_bytes());
+                        }
 
+                        if is_interrupt_found && history.ends_with("\'help\'".as_bytes()) {
+                            is_shell_ok = true;
+                        }
+
+                        if is_shell_ok && history.ends_with(self.perfix.as_bytes()) {
                             return Ok(());
                         }
 
-                        if last.elapsed() > Duration::from_millis(20) {
+                        if last.elapsed() > Duration::from_millis(20) && !is_interrupt_found {
                             let _ = self.tx().write_all(&[CTRL_C]);
                             last = Instant::now();
                         }
