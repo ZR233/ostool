@@ -98,36 +98,36 @@ impl UbootShell {
         }
     }
 
-    fn read_line(&mut self) -> Result<String> {
-        let mut line_raw = Vec::new();
-        let mut byte = [0; 1];
+    // fn read_line(&mut self) -> Result<String> {
+    //     let mut line_raw = Vec::new();
+    //     let mut byte = [0; 1];
 
-        loop {
-            let n = self.rx().read(&mut byte)?;
-            if n == 0 {
-                break;
-            }
+    //     loop {
+    //         let n = self.rx().read(&mut byte)?;
+    //         if n == 0 {
+    //             break;
+    //         }
 
-            print_raw(&byte);
+    //         print_raw(&byte);
 
-            if byte[0] == b'\r' {
-                continue;
-            }
+    //         if byte[0] == b'\r' {
+    //             continue;
+    //         }
 
-            if byte[0] == b'\n' {
-                break;
-            }
+    //         if byte[0] == b'\n' {
+    //             break;
+    //         }
 
-            line_raw.push(byte[0]);
-        }
+    //         line_raw.push(byte[0]);
+    //     }
 
-        if line_raw.is_empty() {
-            return Ok(String::new());
-        }
+    //     if line_raw.is_empty() {
+    //         return Ok(String::new());
+    //     }
 
-        let line = String::from_utf8_lossy(&line_raw);
-        Ok(line.trim().to_string())
-    }
+    //     let line = String::from_utf8_lossy(&line_raw);
+    //     Ok(line.trim().to_string())
+    // }
 
     pub fn wait_for_reply(&mut self, val: &str) -> Result<String> {
         let mut reply = Vec::new();
