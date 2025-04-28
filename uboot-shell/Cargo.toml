@@ -1,6 +1,6 @@
 [package]
 name = "uboot-shell"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2024"
 description = "A crate for communicating with u-boot"
 authors = ["周睿 <zrufo747@outlook.com>"]
