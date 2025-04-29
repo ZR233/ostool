@@ -145,13 +145,24 @@ impl Step for Uboot {
         let mut env_map = HashMap::new();
 
         if let Some(dtb) = PathBuf::from(&config.dtb_file).file_name() {
-            let dtb_name = dtb.to_str().unwrap().to_string();
+            if !dtb.is_empty() {
+                let dtb_name = dtb.to_str().unwrap().to_string();
 
-            fdtfile = dtb_name.to_string();
+                fdtfile = dtb_name.to_string();
 
-            let ftp_dtb = out_dir.join(&dtb_name);
+                let ftp_dtb = out_dir.join(&dtb_name);
 
-            let _ = fs::copy(&config.dtb_file, ftp_dtb);
+                let _ = fs::remove_file(&ftp_dtb);
+
+                fs::copy(&config.dtb_file, &ftp_dtb).unwrap_or_else(|e| {
+                    panic!(
+                        "Copy {} to {} failed: {}",
+                        &config.dtb_file,
+                        ftp_dtb.display(),
+                        e
+                    )
+                });
+            }
         }
 
         match &config.net {
