@@ -2,6 +2,7 @@ use std::{
     fs::File,
     io::*,
     path::PathBuf,
+    sync::Mutex,
     time::{Duration, Instant},
 };
 
@@ -254,5 +255,22 @@ fn parse_int(line: &str) -> Option<usize> {
 }
 
 fn print_raw(buff: &[u8]) {
+    #[cfg(target_os = "windows")]
+    print_raw_win(buff);
+    #[cfg(not(target_os = "windows"))]
     stdout().write_all(buff).unwrap();
+}
+
+fn print_raw_win(buff: &[u8]) {
+    static PRINT_BUFF: Mutex<Vec<u8>> = Mutex::new(Vec::new());
+
+    let mut g = PRINT_BUFF.lock().unwrap();
+
+    g.extend_from_slice(buff);
+
+    if g.ends_with(b'\n') {
+        let s = String::from_utf8_lossy(&g[..]).trim();
+        println!("{}", s);
+        g.clear();
+    }
 }
