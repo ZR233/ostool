@@ -261,6 +261,7 @@ fn print_raw(buff: &[u8]) {
     stdout().write_all(buff).unwrap();
 }
 
+#[cfg(target_os = "windows")]
 fn print_raw_win(buff: &[u8]) {
     static PRINT_BUFF: Mutex<Vec<u8>> = Mutex::new(Vec::new());
 
