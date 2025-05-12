@@ -268,7 +268,7 @@ fn print_raw_win(buff: &[u8]) {
 
     g.extend_from_slice(buff);
 
-    if g.ends_with(b'\n') {
+    if g.ends_with(b"\n") {
         let s = String::from_utf8_lossy(&g[..]).trim();
         println!("{}", s);
         g.clear();
