@@ -217,6 +217,7 @@ impl Step for Uboot {
         let kernel_size = fs::metadata(project.kernel.as_ref().unwrap())
             .unwrap()
             .len() as usize;
+        println!("内核大小：{kernel_size:#x}");
 
         let rx = serialport::new(&config.serial, config.baud_rate as _)
             .timeout(Duration::from_millis(200))
@@ -252,7 +253,7 @@ impl Step for Uboot {
             loadaddr
         });
 
-        let mut fdt_addr = loadaddr + kernel_size + 0x100000;
+        let mut fdt_addr = loadaddr + kernel_size + 0xF00000;
         fdt_addr = (fdt_addr + 0xFFF) & !0xFFF;
 
         if let Ok(addr) = uboot.env_int("fdt_addr_r") {
