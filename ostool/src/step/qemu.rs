@@ -1,10 +1,6 @@
 use std::{
     fs,
     process::{Command, exit},
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
 };
 
 use colored::Colorize;
