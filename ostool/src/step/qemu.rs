@@ -75,23 +75,19 @@ impl Step for Qemu {
         self.cmd.arg(project.kernel.as_ref().unwrap());
 
         if self.is_check_test {
-            let is_ok = Arc::new(AtomicBool::new(false));
-            let is_ok2 = is_ok.clone();
             self.cmd
                 .exec_with_lines(project.is_print_cmd, move |line| {
                     if line.contains("All tests passed") {
-                        is_ok2.store(true, Ordering::SeqCst);
+                        println!("{}", "Test passed!".green());
+                        exit(0);
+                    }
+                    if line.contains("Test failed") {
+                        println!("{}", "Test failed!".red());
+                        exit(1);
                     }
                     Ok(())
                 })
                 .unwrap();
-            if !is_ok.load(Ordering::SeqCst) {
-                println!("{}", "Test failed!".red());
-                exit(1);
-            } else {
-                println!("{}", "Test passed!".green());
-                exit(0);
-            }
         } else {
             self.cmd
                 .exec(project.is_print_cmd)
