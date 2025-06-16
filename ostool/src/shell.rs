@@ -3,7 +3,7 @@ use std::{
     ffi::{OsStr, OsString},
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::{Child, Command, Stdio},
 };
 
 use anyhow::Result;
@@ -16,10 +16,10 @@ pub trait Shell {
     fn exec_with_lines(
         &mut self,
         is_print_cmd: bool,
-        on_line: impl Fn(&str) -> Result<()>,
+        on_line: impl Fn(&str, &mut Child) -> Result<()>,
     ) -> Result<()>;
     fn exec(&mut self, is_print_cmd: bool) -> Result<()> {
-        self.exec_with_lines(is_print_cmd, |_| Ok(()))
+        self.exec_with_lines(is_print_cmd, |_, _| Ok(()))
     }
 }
 
@@ -27,7 +27,7 @@ impl Shell for Command {
     fn exec_with_lines(
         &mut self,
         is_print_cmd: bool,
-        on_line: impl Fn(&str) -> Result<()>,
+        on_line: impl Fn(&str, &mut Child) -> Result<()>,
     ) -> Result<()> {
         let mut paths = vec![];
 
@@ -66,7 +66,7 @@ impl Shell for Command {
             };
             // 解析输出为UTF-8
             println!("{}", line);
-            on_line(&line)?;
+            on_line(&line, &mut child)?;
         }
 
         let out = child.wait_with_output()?;
