@@ -88,6 +88,9 @@ impl Step for Qemu {
             if !is_ok.load(Ordering::SeqCst) {
                 println!("{}", "Test failed!".red());
                 exit(1);
+            } else {
+                println!("{}", "Test passed!".green());
+                exit(0);
             }
         } else {
             self.cmd
