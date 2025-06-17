@@ -38,10 +38,10 @@ impl ProjectConfig {
         let target = targets[select].clone();
         let mut build = BuildSystem::new_by_ui(workdir);
         let arch = Arch::from_target(&target).unwrap();
-        if let BuildSystem::Cargo(args) = &mut build
-            && matches!(arch, Arch::Riscv64 | Arch::Aarch64)
-        {
-            args.kernel_is_bin = true;
+        if let BuildSystem::Cargo(args) = &mut build {
+            if matches!(arch, Arch::Riscv64 | Arch::Aarch64) {
+                args.kernel_is_bin = true;
+            }
         }
 
         Self {
