@@ -1,6 +1,6 @@
 [package]
 name = "ostool"
-version = "0.7.22"
+version = "0.7.23"
 edition = "2024"
 description = "A tool for operating system development"
 authors = ["周睿 <zrufo747@outlook.com>"]

@@ -36,8 +36,13 @@ impl ProjectConfig {
         let targets = get_rustup_targets().unwrap();
         let select = shell_select("select target:", &targets);
         let target = targets[select].clone();
-        let build = BuildSystem::new_by_ui(workdir);
+        let mut build = BuildSystem::new_by_ui(workdir);
         let arch = Arch::from_target(&target).unwrap();
+        if let BuildSystem::Cargo(args) = &mut build
+            && matches!(arch, Arch::Riscv64 | Arch::Aarch64)
+        {
+            args.kernel_is_bin = true;
+        }
 
         Self {
             compile: Compile { target, build },
