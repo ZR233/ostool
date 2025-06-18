@@ -2,7 +2,6 @@ use std::{
     fs::File,
     io::*,
     path::PathBuf,
-    sync::Mutex,
     time::{Duration, Instant},
 };
 

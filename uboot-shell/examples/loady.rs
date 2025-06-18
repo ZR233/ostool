@@ -10,7 +10,7 @@ use uboot_shell::UbootShell;
 fn main() {
     let (mut out, mut uboot) = new_uboot();
 
-    uboot.loady(0x40200000, "Cargo.toml", |r, a| {}).unwrap();
+    uboot.loady(0x40200000, "Cargo.toml", |_r, _a| {}).unwrap();
 
     println!("finish");
     let _ = out.kill();
