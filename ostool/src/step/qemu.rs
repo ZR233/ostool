@@ -78,7 +78,7 @@ impl Step for Qemu {
             let test_success_clone = test_success.clone();
 
             self.cmd
-                .exec_with_lines(project.is_print_cmd, move |line, child| {
+                .exec_with_lines(project.is_print_cmd, move |line, _child| {
                     if line.contains("All tests passed") {
                         println!("{}", "Test passed!".green());
                         {
@@ -89,8 +89,6 @@ impl Step for Qemu {
                         // 启动一个线程，1秒后强制退出
                         thread::spawn(move || {
                             thread::sleep(Duration::from_secs(1));
-                            child.kill().expect("Failed to kill child process");
-                            child.wait().expect("Failed to wait for child process");
                             exit(0);
                         });
                     }
@@ -104,8 +102,6 @@ impl Step for Qemu {
                         // 启动一个线程，1秒后强制退出
                         thread::spawn(move || {
                             thread::sleep(Duration::from_secs(1));
-                            child.kill().expect("Failed to kill child process");
-                            child.wait().expect("Failed to wait for child process");
                             exit(1);
                         });
                     }
