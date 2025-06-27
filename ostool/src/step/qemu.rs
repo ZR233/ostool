@@ -1,6 +1,9 @@
 use std::{
     fs,
     process::{Command, exit},
+    sync::{Arc, Mutex},
+    thread,
+    time::Duration,
 };
 
 use colored::Colorize;
@@ -71,23 +74,50 @@ impl Step for Qemu {
         self.cmd.arg(project.kernel.as_ref().unwrap());
 
         if self.is_check_test {
+            let test_success = Arc::new(Mutex::new(false));
+            let test_success_clone = test_success.clone();
+
             self.cmd
                 .exec_with_lines(project.is_print_cmd, move |line, child| {
                     if line.contains("All tests passed") {
                         println!("{}", "Test passed!".green());
-                        let _ = child.kill();
-                        let _ = child.wait();
-                        exit(0);
+                        {
+                            let mut finished = test_success_clone.lock().unwrap();
+                            *finished = true;
+                        }
+
+                        // 启动一个线程，1秒后强制退出
+                        thread::spawn(move || {
+                            thread::sleep(Duration::from_secs(1));
+                            child.kill().expect("Failed to kill child process");
+                            child.wait().expect("Failed to wait for child process");
+                            exit(0);
+                        });
                     }
                     if line.contains("Test failed") {
                         println!("{}", "Test failed!".red());
-                        let _ = child.kill();
-                        let _ = child.wait();
-                        exit(1);
+                        {
+                            let mut finished = test_success_clone.lock().unwrap();
+                            *finished = true;
+                        }
+
+                        // 启动一个线程，1秒后强制退出
+                        thread::spawn(move || {
+                            thread::sleep(Duration::from_secs(1));
+                            child.kill().expect("Failed to kill child process");
+                            child.wait().expect("Failed to wait for child process");
+                            exit(1);
+                        });
                     }
                     Ok(())
                 })
                 .unwrap();
+
+            if test_success.lock().unwrap().clone() {
+                exit(0);
+            } else {
+                exit(1);
+            }
         } else {
             self.cmd
                 .exec(project.is_print_cmd)
