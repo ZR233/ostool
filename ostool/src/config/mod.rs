@@ -1,4 +1,7 @@
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use compile::{BuildSystem, Compile, CustomBuild};
 use qemu::Qemu;
@@ -14,6 +17,7 @@ pub struct ProjectConfig {
     pub compile: Compile,
     pub qemu: Qemu,
     pub uboot: Option<UbootConfig>,
+    pub include: Option<Vec<PathBuf>>,
 }
 
 impl ProjectConfig {
@@ -29,6 +33,7 @@ impl ProjectConfig {
             },
             qemu: Qemu::new_default(arch),
             uboot: None,
+            include: None,
         }
     }
 
@@ -48,6 +53,7 @@ impl ProjectConfig {
             compile: Compile { target, build },
             qemu: Qemu::new_default(arch),
             uboot: None,
+            include: None,
         }
     }
 

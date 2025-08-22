@@ -27,6 +27,7 @@ struct Cli {
 enum SubCommands {
     Build,
     Run(RunArgs),
+    BoardTest,
     CargoTest(TestArgs),
     Defconfig(cmd::defconfig::Cmd),
 }
@@ -99,6 +100,13 @@ fn main() -> Result<()> {
                     true,
                 ));
             }
+        }
+        SubCommands::BoardTest => {
+            project.board_test_config().unwrap();
+            steps.push(Compile::new_boxed(false));
+
+            let config = project.config.as_mut().unwrap();
+            steps.push(Uboot::new_boxed(false));
         }
         SubCommands::Run(run_args) => {
             project.config_with_file().unwrap();

@@ -13,6 +13,7 @@ use colored::Colorize;
 use crate::{
     config::{ProjectConfig, compile::BuildSystem},
     shell::{Shell, check_porgram, metadata},
+    step::UbootConfig,
 };
 
 #[derive(Default)]
@@ -63,6 +64,42 @@ impl Project {
                 config
             });
         }
+        self.arch = Some(Arch::from_target(&config.compile.target).unwrap());
+        self.config = Some(config);
+        Ok(())
+    }
+
+    pub fn board_test_config(&mut self) -> Result<()> {
+        let meta = metadata(self.workdir());
+        let config_path = meta.workspace_root.as_std_path().join(".project.toml");
+        let board_toml_path = meta.workspace_root.as_std_path().join(".board.toml");
+
+        let mut config: ProjectConfig;
+        if !config_path.try_exists()? {
+            panic!(".project.toml file not found!");
+        } else {
+            let content = fs::read_to_string(&config_path).unwrap();
+            config = toml::from_str(&content).expect(".project.toml file not found!!");
+
+            config.include = Some(vec![board_toml_path.clone()]);
+            if let Some(include_files) = &config.include {
+                for board_toml in include_files {
+                    if board_toml_path.exists() {
+                        let board_content = fs::read_to_string(&board_toml_path).unwrap();
+                        let board_config: UbootConfig =
+                            toml::from_str(&board_content).expect(".board.toml file not found!");
+                        // Merge the board-specific settings into the UbootConfig
+                        config.uboot = Some(board_config);
+                    } else {
+                        println!(
+                            "Warning: Include file does not exist: {}",
+                            board_toml_path.display()
+                        );
+                    }
+                }
+            }
+        }
+
         self.arch = Some(Arch::from_target(&config.compile.target).unwrap());
         self.config = Some(config);
         Ok(())
