@@ -1,20 +1,30 @@
+#[macro_use]
+extern crate log;
+
 use std::{
     fs::File,
     io::*,
     path::PathBuf,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
     time::{Duration, Instant},
 };
-
-use colored::Colorize;
 
 mod crc;
 mod ymodem;
 
-macro_rules! trace {
+macro_rules! dbg {
     ($($arg:tt)*) => {{
-        println!("\r\n{}", &std::fmt::format(format_args!($($arg)*)).bright_black());
+        debug!("$ {}", &std::fmt::format(format_args!($($arg)*)));
     }};
 }
+
+const CTRL_C: u8 = 0x03;
+const INT_STR: &str = "<INTERRUPT>";
+const INT: &[u8] = INT_STR.as_bytes();
 
 pub struct UbootShell {
     pub tx: Option<Box<dyn Write + Send>>,
@@ -31,7 +41,7 @@ impl UbootShell {
             perfix: "".to_string(),
         };
         s.wait_for_shell()?;
-        trace!("shell ready, perfix: `{}`", s.perfix);
+        debug!("shell ready, perfix: `{}`", s.perfix);
         Ok(s)
     }
 
@@ -43,51 +53,41 @@ impl UbootShell {
         self.tx.as_mut().unwrap()
     }
 
-    fn wait_for_shell(&mut self) -> Result<()> {
+    fn wait_for_interrupt(&mut self) -> Result<Vec<u8>> {
+        let mut tx = self.tx.take().unwrap();
+
+        let ok = Arc::new(AtomicBool::new(false));
+
+        let tx_handle = thread::spawn({
+            let ok = ok.clone();
+            move || {
+                while !ok.load(Ordering::Acquire) {
+                    let _ = tx.write_all(&[CTRL_C]);
+                    thread::sleep(Duration::from_millis(20));
+                }
+                tx
+            }
+        });
         let mut history: Vec<u8> = Vec::new();
-        const CTRL_C: u8 = 0x03;
-
-        let mut last = Instant::now();
-        let mut is_interrupt_found = false;
-        let mut is_shell_ok = false;
-        const INT_STR: &str = "<INTERRUPT>";
-        const INT: &[u8] = INT_STR.as_bytes();
-
-        trace!("wait for `{INT_STR}`");
+        let mut interrupt_line: Vec<u8> = Vec::new();
+        debug!("wait for interrupt");
         loop {
             match self.read_byte() {
                 Ok(ch) => {
-                    if ch == b'\n' && history.last() != Some(&b'\r') {
-                        print_raw(b"\r");
-                        history.push(b'\r');
-                    }
                     history.push(ch);
 
-                    print_raw(&[ch]);
-
-                    if history.ends_with(INT) && !is_interrupt_found {
-                        let line = history.split(|n| *n == b'\n').next_back().unwrap();
-                        let s = String::from_utf8_lossy(line);
-                        self.perfix = s.trim().replace(INT_STR, "").trim().to_string();
-                        is_interrupt_found = true;
-                        trace!("clear");
-                        let _ = self.rx().read_to_end(&mut vec![]);
-                        trace!("test shell");
-                        let ret = self.tx().write_all("testshell\r\n".as_bytes());
-                        trace!("test shell ret {:?}", ret);
-                    }
-
-                    if is_interrupt_found && history.ends_with("\'help\'".as_bytes()) {
-                        is_shell_ok = true;
-                    }
-
-                    if is_shell_ok && history.ends_with(self.perfix.as_bytes()) {
-                        return Ok(());
-                    }
-
-                    if last.elapsed() > Duration::from_millis(20) && !is_interrupt_found {
-                        let _ = self.tx().write_all(&[CTRL_C]);
-                        last = Instant::now();
+                    if history.last() == Some(&b'\n') {
+                        let line = history.trim_ascii_end();
+                        dbg!("{}", String::from_utf8_lossy(line));
+                        let it = line.ends_with(INT);
+                        if it {
+                            interrupt_line.extend_from_slice(line);
+                        }
+                        history.clear();
+                        if it {
+                            ok.store(true, Ordering::Release);
+                            break;
+                        }
                     }
                 }
 
@@ -99,6 +99,24 @@ impl UbootShell {
                 }
             }
         }
+
+        self.tx = Some(tx_handle.join().unwrap());
+
+        Ok(interrupt_line)
+    }
+
+    fn clear_shell(&mut self) -> Result<()> {
+        let _ = self.read_to_end(&mut vec![]);
+        Ok(())
+    }
+
+    fn wait_for_shell(&mut self) -> Result<()> {
+        let mut line = self.wait_for_interrupt()?;
+        debug!("got {}", String::from_utf8_lossy(&line));
+        line.resize(line.len() - INT.len(), 0);
+        self.perfix = String::from_utf8_lossy(&line).to_string();
+        self.clear_shell()?;
+        Ok(())
     }
 
     fn read_byte(&mut self) -> Result<u8> {
@@ -127,14 +145,19 @@ impl UbootShell {
 
     pub fn wait_for_reply(&mut self, val: &str) -> Result<String> {
         let mut reply = Vec::new();
-
-        trace!("wait for `{}`", val);
+        let mut display = Vec::new();
+        debug!("wait for `{}`", val);
         loop {
             let byte = self.read_byte()?;
             reply.push(byte);
-            print_raw(&[byte]);
+            display.push(byte);
+            if byte == b'\n' {
+                dbg!("{}", String::from_utf8_lossy(&display).trim_end());
+                display.clear();
+            }
 
             if reply.ends_with(val.as_bytes()) {
+                dbg!("{}", String::from_utf8_lossy(&display).trim_end());
                 break;
             }
         }
@@ -149,7 +172,7 @@ impl UbootShell {
         self.tx().write_all("\r\n".as_bytes())?;
         self.tx().flush()?;
         self.wait_for_reply(cmd)?;
-        trace!("cmd ok");
+        debug!("cmd ok");
         Ok(())
     }
 
@@ -262,6 +285,7 @@ fn print_raw(buff: &[u8]) {
 
 #[cfg(target_os = "windows")]
 fn print_raw_win(buff: &[u8]) {
+    use std::sync::Mutex;
     static PRINT_BUFF: Mutex<Vec<u8>> = Mutex::new(Vec::new());
 
     let mut g = PRINT_BUFF.lock().unwrap();
