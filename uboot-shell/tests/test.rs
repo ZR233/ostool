@@ -55,11 +55,6 @@ fn new_uboot() -> (Child, UbootShell) {
 #[test]
 #[timeout(5000)]
 fn test_shell() {
-    env_logger::builder()
-        .is_test(true)
-        .filter_level(log::LevelFilter::Trace)
-        .init();
-
     let (mut out, _uboot) = new_uboot();
     info!("test_shell ok");
     let _ = out.kill();
@@ -95,11 +90,6 @@ fn test_setenv() {
 #[test]
 #[timeout(5000)]
 fn test_env() {
-    env_logger::builder()
-        .is_test(true)
-        .filter_level(log::LevelFilter::Debug)
-        .init();
-
     with_uboot(|uboot| {
         uboot.set_env("fdt_addr", "0x40000000").unwrap();
         info!("set fdt_addr ok");
