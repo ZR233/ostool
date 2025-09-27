@@ -169,17 +169,24 @@ impl UbootShell {
 
     pub fn cmd_without_reply(&mut self, cmd: &str) -> Result<()> {
         self.tx().write_all(cmd.as_bytes())?;
-        self.tx().write_all("\r\n".as_bytes())?;
+        self.tx().write_all("\n".as_bytes())?;
         self.tx().flush()?;
-        self.wait_for_reply(cmd)?;
-        debug!("cmd ok");
+        // self.wait_for_reply(cmd)?;
+        // debug!("cmd ok");
         Ok(())
     }
 
     pub fn cmd(&mut self, cmd: &str) -> Result<String> {
+        info!("cmd: {cmd}");
         self.cmd_without_reply(cmd)?;
         let perfix = self.perfix.clone();
-        self.wait_for_reply(&perfix)
+        let res = self
+            .wait_for_reply(&perfix)?
+            .trim_end()
+            .trim_end_matches(self.perfix.as_str().trim())
+            .trim_end()
+            .to_string();
+        Ok(res)
     }
 
     pub fn set_env(&mut self, name: impl Into<String>, value: impl Into<String>) -> Result<()> {
@@ -190,18 +197,25 @@ impl UbootShell {
     pub fn env(&mut self, name: impl Into<String>) -> Result<String> {
         let name = name.into();
         let s = self.cmd(&format!("echo ${}", name))?;
-        if s.is_empty() {
-            return Err(Error::new(
+        let sp = s
+            .split("\n")
+            .filter(|s| !s.trim().is_empty())
+            .collect::<Vec<_>>();
+        let s = sp
+            .last()
+            .ok_or(Error::new(
                 ErrorKind::NotFound,
                 format!("env {} not found", name),
-            ));
-        }
+            ))?
+            .to_string();
         Ok(s)
     }
 
     pub fn env_int(&mut self, name: impl Into<String>) -> Result<usize> {
         let name = name.into();
         let line = self.env(&name)?;
+        debug!("env {name} = {line}");
+
         parse_int(&line).ok_or(Error::new(
             ErrorKind::InvalidData,
             format!("env {name} is not a number"),
