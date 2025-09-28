@@ -969,7 +969,7 @@ checksum = "d75b0bedcc4fe52caa0e03d9f1151a323e4aa5e2d78ba3580400cd3c9e2bc4bc"
 
 [[package]]
 name = "ostool"
-version = "0.7.25"
+version = "0.7.26"
 dependencies = [
  "anyhow",
  "byte-unit",
@@ -977,7 +977,9 @@ dependencies = [
  "clap",
  "colored",
  "crossterm 0.29.0",
+ "env_logger",
  "indicatif 0.17.11",
+ "log",
  "network-interface",
  "object",
  "ratatui",

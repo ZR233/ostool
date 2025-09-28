@@ -65,6 +65,11 @@ struct QemuArgs {
 }
 
 fn main() -> Result<()> {
+    env_logger::builder()
+        .format_module_path(false)
+        .filter_level(log::LevelFilter::Info)
+        .init();
+
     let cli = Cli::parse();
     let workdir = cli
         .workdir
