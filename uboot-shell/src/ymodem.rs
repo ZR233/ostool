@@ -60,19 +60,20 @@ impl Ymodem {
         size: usize,
         on_progress: impl Fn(usize),
     ) -> Result<()> {
-        println!("Sending file: {name}");
+        info!("Sending file: {name}");
 
         self.send_header(dev, name, size)?;
 
         let mut buff = [0u8; 1024];
+        let mut send_size = 0;
 
         while let Ok(n) = file.read(&mut buff) {
             if n == 0 {
                 break;
             }
             self.send_blk(dev, &buff[..n], EOF, false)?;
-
-            on_progress(self.blk as usize * 1024);
+            send_size += n;
+            on_progress(send_size);
         }
 
         dev.write_all(&[EOT])?;

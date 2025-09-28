@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-use log::{debug, info};
+use log::info;
 use uboot_shell::UbootShell;
 
 fn main() {
@@ -12,11 +12,9 @@ fn main() {
 
     let (mut out, mut uboot) = new_uboot();
 
-    uboot
-        .loady(0x40200000, "Cargo.toml", |r, a| {
-            debug!("{r}/{a}");
-        })
-        .unwrap();
+    uboot.set_env("fdt_addr", "0x40000000").unwrap();
+    info!("set fdt_addr ok");
+    assert_eq!(uboot.env_int("fdt_addr").unwrap(), 0x40000000);
 
     info!("finish");
     let _ = out.kill();

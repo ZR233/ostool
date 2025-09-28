@@ -1,18 +1,20 @@
 [package]
-name = "uboot-shell"
-version = "0.1.9"
-edition = "2024"
-description = "A crate for communicating with u-boot"
 authors = ["周睿 <zrufo747@outlook.com>"]
-license = "MIT"
-keywords = ["u-boot", "shell", "embedded"]
 categories = ["os", "embedded", "development-tools"]
+description = "A crate for communicating with u-boot"
+edition = "2024"
+keywords = ["u-boot", "shell", "embedded"]
+license = "MIT"
+name = "uboot-shell"
 repository = "https://github.com/ZR233/ostool/ostool"
+version = "0.1.10"
 
 [dependencies]
 colored = "3"
+log = "0.4"
 
 [dev-dependencies]
+indicatif = "0.18"
 ntest = "0.9"
 serialport = "4.6"
-indicatif = "0.17"
+env_logger = "0.11"
