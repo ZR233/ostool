@@ -4,6 +4,7 @@ use std::{
     io::{self, Read, Write},
     path::PathBuf,
     process::exit,
+    sync::atomic::fence,
     thread::{self, sleep},
     time::Duration,
 };
@@ -238,6 +239,7 @@ impl Step for Uboot {
 
         println!();
         println!("{}", "Uboot shell ok".green());
+        sleep(Duration::from_millis(500));
 
         let loadaddr = uboot.env_int("loadaddr").unwrap_or_else(|_e| {
             println!("$loadaddr not found");
