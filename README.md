@@ -39,6 +39,9 @@ machine = "virt"
 cpu = "cortex-a57"
 graphic = false
 args = ""
+
+# 可选：包含其他配置文件（如 .board.toml）
+include = [".board.toml"]
 ```
 
 ### Qemu启动
@@ -59,6 +62,30 @@ sudo setcap cap_net_bind_service=+eip $(which ostool)
 
 ```shell
 ostool run uboot
+```
+
+### 测试
+
+ostool 现在支持统一的测试命令，兼容 cargo test：
+
+```shell
+# 标准测试（使用 .project.toml 配置）
+ostool test
+
+# Board 测试（使用 .board.toml 配置）
+ostool test --board
+
+# Cargo test 兼容模式
+ostool test --elf target/x86_64-unknown-none/debug/test_binary
+
+# U-Boot 测试
+ostool test --uboot
+
+# 不运行，只编译
+ostool test --no-run
+
+# 传递 cargo test 参数
+ostool test -- --test my_test --nocapture
 ```
 
 ### 远程构建示例
@@ -122,3 +149,21 @@ serial = "COM3"
 baud_rate = 115200
 dtb_file = "tools/phytium_pi/phytiumpi_firefly.dtb"
 ```
+
+### Board 配置文件
+
+可以创建 `.board.toml` 文件来定义特定硬件板的配置：
+
+```toml
+# .board.toml - 板级特定配置
+[uboot]
+serial = "/dev/ttyUSB0"
+baud_rate = 115200
+dtb_file = "board.dtb"
+
+[net]
+interface = "eth0"
+ip = "192.168.1.100"
+```
+
+当使用 `ostool test --board` 时，会自动加载并合并 `.board.toml` 中的配置。

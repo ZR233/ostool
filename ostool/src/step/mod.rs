@@ -2,14 +2,14 @@ use crate::project::Project;
 use anyhow::Result;
 
 mod compile;
-mod prepare_test;
 mod qemu;
+mod test_prepare;
 mod tftp;
 mod uboot;
 
 pub use compile::*;
-pub use prepare_test::*;
 pub use qemu::*;
+pub use test_prepare::*;
 pub use tftp::*;
 pub use uboot::*;
 

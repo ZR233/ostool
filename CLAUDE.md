@@ -52,22 +52,25 @@ The project uses Rust 2024 edition and requires `rust-objcopy` and `llvm-tools-p
 
 **Main CLI (`ostool/src/main.rs`):**
 - Entry point with clap-based command parsing
-- Commands: `build`, `run qemu`, `run uboot`, `run tftp`, `cargo-test`, `board-test`, `defconfig`
+- Commands: `build`, `run qemu`, `run uboot`, `run tftp`, `test`, `defconfig`
+- Unified `test` command replaces `cargo-test` and `board-test` with cargo test compatibility
 
 **Project Management (`ostool/src/project.rs`):**
 - `Project` struct manages workspace, configuration, and build metadata
-- Handles `.project.toml` configuration files
+- Unified configuration loading via `ConfigLoader` with support for includes
 - Supports multiple architectures: aarch64, riscv64, x86_64
+
+**Configuration (`ostool/src/config/`):**
+- `ConfigLoader` provides unified configuration loading with inheritance
+- `ProjectConfig` stores compile, Qemu, and U-Boot settings
+- Supports multiple build systems: Cargo, Custom shell commands
+- Configuration files use TOML format with `include` support for .board.toml files
 
 **Step System (`ostool/src/step/`):**
 - `Step` trait defines build pipeline operations
-- Concrete steps: `Compile`, `Qemu`, `Uboot`, `Tftp`, `CargoTestPrepare`
+- Concrete steps: `Compile`, `Qemu`, `Uboot`, `Tftp`, `TestPrepare`
+- Unified `TestPrepare` handles both cargo test and manual testing
 - Each step can be executed sequentially in the pipeline
-
-**Configuration (`ostool/src/config/`):**
-- `ProjectConfig` stores compile, Qemu, and U-Boot settings
-- Supports multiple build systems: Cargo, Custom shell commands
-- Configuration files use TOML format
 
 **U-Boot Shell Library (`uboot-shell/`):**
 - Handles serial communication with U-Boot
@@ -76,7 +79,7 @@ The project uses Rust 2024 edition and requires `rust-objcopy` and `llvm-tools-p
 
 ### Configuration File Format
 
-`.project.toml` structure:
+**Main `.project.toml` structure:**
 ```toml
 [compile]
 target = "aarch64-unknown-none"
@@ -93,6 +96,16 @@ graphic = false
 [uboot]
 serial = "COM3"
 baud_rate = 115200
+
+# Include board-specific configuration
+include = [".board.toml"]
+```
+
+**Board-specific `.board.toml` (optional):**
+```toml
+[uboot]
+serial = "/dev/ttyUSB0"
+dtb_file = "board.dtb"
 ```
 
 ### Key Design Patterns

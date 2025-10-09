@@ -1,19 +1,15 @@
 use std::{
     ffi::OsStr,
-    fs,
     path::{Path, PathBuf},
     process::Command,
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::Result;
 use cargo_metadata::{Metadata, Package};
-use colored::Colorize;
 
 use crate::{
-    config::{ProjectConfig, compile::BuildSystem},
+    config::{ProjectConfig, compile::BuildSystem, loader::{ConfigLoader, ConfigMode}},
     shell::{Shell, check_porgram, metadata},
-    step::UbootConfig,
 };
 
 #[derive(Default)]
@@ -36,75 +32,22 @@ impl Project {
     }
 
     pub fn config_with_file(&mut self) -> Result<()> {
-        let meta = metadata(self.workdir());
-        let config_path = meta.workspace_root.as_std_path().join(".project.toml");
-        let config;
-        if !config_path.try_exists()? {
-            config = ProjectConfig::new_by_ui(self.workdir());
-            config.save(&config_path);
-        } else {
-            let content = fs::read_to_string(&config_path).unwrap();
-            config = toml::from_str(&content).unwrap_or_else(|_| {
-                let old = format!(
-                    ".project.toml.bk.{}",
-                    SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs()
-                );
-                let old = meta.workspace_root.as_std_path().join(old);
-                println!(
-                    "{}",
-                    format!("config error, generate new, save old to: {}", old.display()).yellow()
-                );
-                let _ = fs::rename(&config_path, &old);
+        self.load_config(ConfigMode::Normal)
+    }
 
-                let config = ProjectConfig::new_by_ui(self.workdir());
-                config.save(&config_path);
-                config
-            });
-        }
+    pub fn test_config(&mut self, elf_path: Option<String>, board_mode: bool) -> Result<()> {
+        self.load_config(ConfigMode::Test { elf_path, board_mode })
+    }
+
+    fn load_config(&mut self, mode: ConfigMode) -> Result<()> {
+        let loader = ConfigLoader::new(self.workdir())?;
+        let config = loader.load_config(mode)?;
         self.arch = Some(Arch::from_target(&config.compile.target).unwrap());
         self.config = Some(config);
         Ok(())
     }
 
-    pub fn board_test_config(&mut self) -> Result<()> {
-        let meta = metadata(self.workdir());
-        let config_path = meta.workspace_root.as_std_path().join(".project.toml");
-        let board_toml_path = meta.workspace_root.as_std_path().join(".board.toml");
-
-        let mut config: ProjectConfig;
-        if !config_path.try_exists()? {
-            panic!(".project.toml file not found!");
-        } else {
-            let content = fs::read_to_string(&config_path).unwrap();
-            config = toml::from_str(&content).expect(".project.toml file not found!!");
-
-            config.include = Some(vec![board_toml_path.clone()]);
-            if let Some(include_files) = &config.include {
-                for board_toml in include_files {
-                    if board_toml_path.exists() {
-                        let board_content = fs::read_to_string(&board_toml_path).unwrap();
-                        let board_config: UbootConfig =
-                            toml::from_str(&board_content).expect(".board.toml file not found!");
-                        // Merge the board-specific settings into the UbootConfig
-                        config.uboot = Some(board_config);
-                    } else {
-                        println!(
-                            "Warning: Include file does not exist: {}",
-                            board_toml_path.display()
-                        );
-                    }
-                }
-            }
-        }
-
-        self.arch = Some(Arch::from_target(&config.compile.target).unwrap());
-        self.config = Some(config);
-        Ok(())
-    }
-
+    
     pub fn config_ref(&self) -> &ProjectConfig {
         self.config.as_ref().unwrap()
     }

@@ -11,6 +11,7 @@ use crate::{project::Arch, shell::get_rustup_targets, step::UbootConfig, ui::she
 
 pub mod compile;
 pub mod qemu;
+pub mod loader;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProjectConfig {
