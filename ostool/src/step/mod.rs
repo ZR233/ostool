@@ -15,4 +15,5 @@ pub use uboot::*;
 
 pub trait Step {
     fn run(&mut self, project: &mut Project) -> Result<()>;
+    fn is_debug(&self) -> bool { false }
 }

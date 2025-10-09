@@ -110,7 +110,7 @@ impl ConfigLoader {
         Ok(())
     }
 
-    fn merge_config(&self, base: &mut ProjectConfig, overlay: &ProjectConfig) {
+    pub fn merge_config(&self, base: &mut ProjectConfig, overlay: &ProjectConfig) {
         // Simple merge strategy - overlay takes precedence
         if !overlay.compile.target.is_empty() {
             base.compile.target = overlay.compile.target.clone();

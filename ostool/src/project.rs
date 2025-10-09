@@ -130,7 +130,7 @@ impl Project {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Arch {
     Aarch64,
     Riscv64,

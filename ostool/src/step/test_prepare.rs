@@ -37,8 +37,8 @@ impl From<Architecture> for Arch {
 
 /// Unified test preparation step that handles both cargo test and manual testing
 pub struct TestPrepare {
-    elf: Option<String>,
-    uboot: bool,
+    pub elf: Option<String>,
+    pub uboot: bool,
 }
 
 impl TestPrepare {
