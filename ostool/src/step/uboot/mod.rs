@@ -241,6 +241,16 @@ impl Step for Uboot {
         println!("{}", "Uboot shell ok".green());
         sleep(Duration::from_millis(500));
 
+        if config.net.is_some() {
+            if let Ok(output) = uboot.cmd("net list") {
+                let device_list = output.strip_prefix("net list").unwrap_or(&output).trim();
+
+                if device_list.is_empty() {
+                    let _ = uboot.cmd_without_reply("bootdev hunt ethernet");
+                }
+            }
+        }
+
         let loadaddr = uboot.env_int("loadaddr").unwrap_or_else(|_e| {
             println!("$loadaddr not found");
 
