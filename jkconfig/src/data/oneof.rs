@@ -13,6 +13,35 @@ pub struct OneOf {
     pub default_index: Option<usize>,
 }
 
+impl OneOf {
+    pub fn selected(&self) -> Option<&ElementType> {
+        self.selected_index.and_then(|idx| self.variants.get(idx))
+    }
+
+    pub fn get_by_key(&self, key: &str) -> Option<ElementType> {
+        if let Some(v) = self.selected() {
+            if v.key() == key {
+                return Some(v.clone());
+            }
+
+            match v {
+                ElementType::Menu(menu) => {
+                    if let Some(v) = menu.get_by_key(key) {
+                        return Some(v);
+                    }
+                }
+                ElementType::OneOf(val) => {
+                    if let Some(v) = val.get_by_key(key) {
+                        return Some(v);
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+}
+
 impl Deref for OneOf {
     type Target = ElementBase;
 

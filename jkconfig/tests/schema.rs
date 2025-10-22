@@ -47,6 +47,11 @@ fn test_object() {
     let menu = MenuRoot::try_from(schema.as_value()).unwrap();
 
     println!("Generated MenuRoot: \n{:#?}", menu);
+
+    println!(
+        "AnimalEnum element: \n{:#?}",
+        menu.get_by_key("animal").unwrap()
+    );
 }
 
 /***
