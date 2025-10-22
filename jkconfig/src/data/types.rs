@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::data::{menu::Menu, oneof::OneOf};
+use crate::data::{item::Item, menu::Menu, oneof::OneOf};
 
 #[derive(Debug, Clone, Default)]
 pub struct ElementBase {
@@ -55,7 +55,7 @@ impl ElementBase {
 pub enum ElementType {
     Menu(Menu),
     OneOf(OneOf),
-    // Other element types can be added here
+    Item(Item), // Other element types can be added here
 }
 
 impl Deref for ElementType {
@@ -65,6 +65,7 @@ impl Deref for ElementType {
         match self {
             ElementType::Menu(menu) => &menu.base,
             ElementType::OneOf(one_of) => &one_of.base,
+            ElementType::Item(item) => &item.base,
         }
     }
 }
@@ -74,6 +75,7 @@ impl DerefMut for ElementType {
         match self {
             ElementType::Menu(menu) => &mut menu.base,
             ElementType::OneOf(one_of) => &mut one_of.base,
+            ElementType::Item(item) => &mut item.base,
         }
     }
 }

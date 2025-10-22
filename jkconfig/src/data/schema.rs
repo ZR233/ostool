@@ -1,12 +1,9 @@
-use std::{
-    collections::HashSet,
-    ops::Deref,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashSet, ops::Deref, path::PathBuf};
 
 use serde_json::Value;
 
 use crate::data::{
+    item::{Item, ItemType},
     menu::{Menu, MenuRoot},
     oneof::OneOf,
     types::{ElementBase, ElementType},
@@ -78,17 +75,7 @@ impl WalkContext {
     }
 
     fn description(&self) -> Result<Option<String>, SchemaError> {
-        let desc = self
-            .get("description")
-            .map(|d| {
-                d.as_str()
-                    .map(String::from)
-                    .ok_or(SchemaError::SchemaConversionError {
-                        path: self.path.clone(),
-                        reason: "description is not a string".into(),
-                    })
-            })
-            .transpose()?;
+        let desc = self.get_str("description")?.map(String::from);
         Ok(desc)
     }
 
@@ -160,7 +147,69 @@ impl WalkContext {
         if let Some(one_of) = self.as_oneof(is_required)? {
             return Ok(Some(ElementType::OneOf(one_of)));
         }
-        // Handle other ElementType variants here
+
+        if let Some(item) = self.as_item(is_required)? {
+            return Ok(Some(item));
+        }
+        Ok(None)
+    }
+
+    fn _as_item(
+        &self,
+        ty_str: &str,
+        is_required: bool,
+    ) -> Result<Option<ElementType>, SchemaError> {
+        match ty_str {
+            "string" | "number" | "integer" | "boolean" => {
+                // Create Item based on type
+                // Placeholder implementation
+                let item = Item {
+                    base: ElementBase::new(&self.path, self.description()?, is_required),
+                    item_type: match ty_str {
+                        "string" => ItemType::String {
+                            value: None,
+                            default: None,
+                        },
+                        "number" => ItemType::Number {
+                            value: None,
+                            default: None,
+                        },
+                        "integer" => ItemType::Integer {
+                            value: None,
+                            default: None,
+                        },
+                        "boolean" => ItemType::Boolean {
+                            value: false,
+                            default: false,
+                        },
+                        _ => unreachable!(),
+                    },
+                };
+                return Ok(Some(ElementType::Item(item)));
+            }
+            _ => {}
+        }
+
+        Ok(None)
+    }
+
+    fn as_item(&self, is_required: bool) -> Result<Option<ElementType>, SchemaError> {
+        if let Some(ty) = self.get("type") {
+            if let Some(type_array) = ty.as_array() {
+                // Handle multiple types (e.g., ["string", "null"])
+                // For simplicity, we will just take the first type here
+                if let Some(first_type) = type_array.first()
+                    && let Some(ty_str) = first_type.as_str()
+                {
+                    return self._as_item(ty_str, is_required);
+                }
+            }
+
+            if let Some(ty_str) = ty.as_str() {
+                return self._as_item(ty_str, is_required);
+            }
+        }
+
         Ok(None)
     }
 }

@@ -1,7 +1,6 @@
 use jkconfig::data::menu::MenuRoot;
 use schemars::{JsonSchema, schema_for};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 // Use Animal structures from other test file
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -12,7 +11,7 @@ pub struct Cat {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Dog {
-    pub c: f32,
+    pub c: Option<f32>,
     pub d: bool,
     pub l: Legs,
 }
