@@ -26,6 +26,10 @@ impl MenuRoot {
     pub fn update_by_value(&mut self, value: &Value) -> Result<(), SchemaError> {
         self.menu.update_from_value(value)
     }
+
+    pub fn as_json(&self)-> Value {
+        &self.menu.as_json()
+    }
 }
 
 impl Debug for MenuRoot {

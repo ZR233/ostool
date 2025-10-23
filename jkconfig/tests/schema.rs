@@ -3,26 +3,26 @@ use schemars::{JsonSchema, schema_for};
 use serde::{Deserialize, Serialize};
 
 // Use Animal structures from other test file
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 pub struct Cat {
     pub a: usize,
     pub b: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 pub struct Dog {
     pub c: Option<f32>,
     pub d: bool,
     pub l: Legs,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 pub enum Legs {
     Four,
     Two,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 /// 动物类型
 /// Cat 或 Dog 的枚举
 pub enum AnimalEnum {
@@ -32,7 +32,7 @@ pub enum AnimalEnum {
     Duck { h: bool },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 struct AnimalObject {
     animal: AnimalEnum,
 }
@@ -80,6 +80,12 @@ fn test_value() {
     menu.update_by_value(&value).unwrap();
 
     println!("Updated MenuRoot: \n{:#?}", menu);
+
+    let actual_value = menu.as_json();
+
+    let actual: AnimalObject = serde_json::from_value(actual_value).unwrap();
+
+    assert_eq!(origin.animal, actual.animal);
 }
 
 #[test]
@@ -98,7 +104,11 @@ fn test_value_normal_case() {
     });
 
     let result = menu.update_by_value(&dog_value);
-    assert!(result.is_ok(), "Normal case should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Normal case should succeed: {:?}",
+        result.err()
+    );
 }
 
 #[test]
@@ -119,7 +129,11 @@ fn test_value_type_mismatch() {
     let result = menu.update_by_value(&bad_value);
     assert!(result.is_err());
     match &result {
-        Err(jkconfig::data::schema::SchemaError::TypeMismatch { path, expected, actual: _ }) => {
+        Err(jkconfig::data::schema::SchemaError::TypeMismatch {
+            path,
+            expected,
+            actual: _,
+        }) => {
             assert!(path.contains("animal.Dog.d"));
             assert_eq!(expected, "boolean");
         }
@@ -199,7 +213,11 @@ fn test_value_integer_type_mismatch() {
     let result = menu.update_by_value(&cat_value);
     assert!(result.is_err());
     match result.err().unwrap() {
-        jkconfig::data::schema::SchemaError::TypeMismatch { path, expected, actual } => {
+        jkconfig::data::schema::SchemaError::TypeMismatch {
+            path,
+            expected,
+            actual,
+        } => {
             assert!(path.contains("animal.Cat.a"));
             assert_eq!(expected, "integer");
         }
