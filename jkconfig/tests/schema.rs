@@ -319,129 +319,73 @@ mod menu_root_get_mut_by_key_tests {
     }
 
     #[test]
-    /// 测试空字符串键
-    fn test_get_mut_by_key_empty_string() {
+    /// 测试有效路径（应返回Some的情况）
+    fn test_get_mut_by_key_valid_paths() {
         let mut menu = create_test_menu_root();
 
-        let result = menu.get_mut_by_key("");
+        // 测试确认存在的有效路径
+        let valid_paths = vec![
+            ("animal", "top-level field"),
+        ];
 
-        assert!(result.is_none(), "Empty string key should return None");
-    }
-
-    #[test]
-    /// 测试单点路径（根级别的简单字段）
-    fn test_get_mut_by_key_single_field() {
-        let mut menu = create_test_menu_root();
-
-        let result = menu.get_mut_by_key("animal");
-
-        assert!(result.is_some(), "Valid top-level key 'animal' should return Some");
-    }
-
-    #[test]
-    /// 测试简单有效路径（两层嵌套）
-    fn test_get_mut_by_key_simple_path() {
-        let mut menu = create_test_menu_root();
-
-        let result = menu.get_mut_by_key("animal");
-
-        assert!(result.is_some(), "Valid path 'animal' should return Some");
-    }
-
-    #[test]
-    /// 测试不存在的键路径
-    fn test_get_mut_by_key_nonexistent_path() {
-        let mut menu = create_test_menu_root();
-
-        let result = menu.get_mut_by_key("nonexistent.path");
-
-        assert!(result.is_none(), "Nonexistent path should return None");
-    }
-
-    #[test]
-    /// 测试开头点号的路径
-    fn test_get_mut_by_key_leading_dot() {
-        let mut menu = create_test_menu_root();
-
-        let result = menu.get_mut_by_key(".animal");
-
-        assert!(result.is_none(), "Path starting with dot should return None");
-    }
-
-    #[test]
-    /// 测试结尾点号的路径
-    fn test_get_mut_by_key_trailing_dot() {
-        let mut menu = create_test_menu_root();
-
-        let result = menu.get_mut_by_key("animal.");
-
-        assert!(result.is_none(), "Path ending with dot should return None");
-    }
-
-    #[test]
-    /// 测试连续点号的路径
-    fn test_get_mut_by_key_consecutive_dots() {
-        let mut menu = create_test_menu_root();
-
-        let result = menu.get_mut_by_key("animal..Dog");
-
-        assert!(result.is_none(), "Path with consecutive dots should return None");
-    }
-
-    #[test]
-    /// 测试深层嵌套路径（基于实际存在的路径）
-    fn test_get_mut_by_key_deep_nesting() {
-        let mut menu = create_test_menu_root();
-
-        // 测试一个可能存在的深层路径
-        let result = menu.get_mut_by_key("animal.Cat.a");
-
-        // 如果深层路径不存在，至少animal应该存在
-        if result.is_none() {
-            let result2 = menu.get_mut_by_key("animal");
-            assert!(result2.is_some(), "At least 'animal' path should return Some");
-        } else {
-            assert!(result.is_some(), "Valid deep nested path should return Some");
+        for (path, description) in valid_paths {
+            let result = menu.get_mut_by_key(path);
+            assert!(result.is_some(), "{} should return Some", description);
         }
     }
 
     #[test]
-    /// 测试特殊字符处理
-    fn test_get_mut_by_key_special_characters() {
+    /// 参数化测试：各种应返回None的边界条件
+    fn test_get_mut_by_key_none_cases() {
         let mut menu = create_test_menu_root();
 
-        let result = menu.get_mut_by_key("animal-Dog@c");
+        let test_cases = vec![
+            ("", "empty string key"),
+            ("nonexistent.path", "nonexistent path"),
+            (".animal", "path starting with dot"),
+            ("animal.", "path ending with dot"),
+            ("animal..Dog", "path with consecutive dots"),
+            ("animal-Dog@c", "path with special characters"),
+            ("animal.动物.c", "path with unicode characters"),
+            ("...", "path with only dots"),
+            ("animal..c", "path with empty field in middle"),
+        ];
 
-        assert!(result.is_none(), "Path with special characters should return None");
+        for (input, description) in test_cases {
+            let result = menu.get_mut_by_key(input);
+            assert!(result.is_none(), "{} should return None", description);
+        }
     }
 
     #[test]
-    /// 测试Unicode字符支持
-    fn test_get_mut_by_key_unicode_characters() {
+    /// 测试深层嵌套路径
+    fn test_get_mut_by_key_deep_nesting() {
         let mut menu = create_test_menu_root();
 
-        let result = menu.get_mut_by_key("animal.动物.c");
+        // 测试可能存在的深层路径和不存在路径的边界情况
+        let deep_path_cases = vec![
+            ("animal.Cat.a", "Cat variant deep path"),
+            ("animal.Dog.c", "Dog variant deep path"),
+            ("animal.Duck.h", "Duck variant deep path"),
+        ];
 
-        assert!(result.is_none(), "Path with Unicode characters should return None");
-    }
+        let mut has_any_success = false;
 
-    #[test]
-    /// 测试只有点号的路径
-    fn test_get_mut_by_key_only_dots() {
-        let mut menu = create_test_menu_root();
+        for (path, _description) in deep_path_cases {
+            let result = menu.get_mut_by_key(path);
+            if result.is_some() {
+                has_any_success = true;
+                break; // 如果找到有效路径，测试通过
+            }
+        }
 
-        let result = menu.get_mut_by_key("...");
+        // 至少应该能够访问animal顶层路径
+        let animal_result = menu.get_mut_by_key("animal");
+        assert!(animal_result.is_some(), "Top-level 'animal' path should be accessible");
 
-        assert!(result.is_none(), "Path with only dots should return None");
-    }
-
-    #[test]
-    /// 测试空字段在路径中间
-    fn test_get_mut_by_key_empty_field_in_middle() {
-        let mut menu = create_test_menu_root();
-
-        let result = menu.get_mut_by_key("animal..c");
-
-        assert!(result.is_none(), "Path with empty field in middle should return None");
+        // 如果深层路径都不存在，这也是合理的行为（取决于OneOf的当前状态）
+        if !has_any_success {
+            println!("Note: All deep paths returned None, which may be expected depending on OneOf state");
+        }
     }
 }
