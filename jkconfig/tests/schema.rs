@@ -3,26 +3,26 @@ use schemars::{JsonSchema, schema_for};
 use serde::{Deserialize, Serialize};
 
 // Use Animal structures from other test file
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct Cat {
     pub a: usize,
     pub b: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct Dog {
     pub c: Option<f32>,
     pub d: bool,
     pub l: Legs,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub enum Legs {
     Four,
     Two,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 /// 动物类型
 /// Cat 或 Dog 的枚举
 pub enum AnimalEnum {
@@ -32,7 +32,7 @@ pub enum AnimalEnum {
     Duck { h: bool },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 struct AnimalObject {
     animal: AnimalEnum,
 }

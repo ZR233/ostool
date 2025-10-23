@@ -168,6 +168,38 @@ impl ItemType {
 }
 
 impl Item {
+    pub fn as_json(&self) -> Value {
+        match &self.item_type {
+            ItemType::String { value, .. } => {
+                match value {
+                    Some(v) => Value::String(v.clone()),
+                    None => Value::Null,
+                }
+            }
+            ItemType::Number { value, .. } => {
+                match value {
+                    Some(v) => Value::Number(serde_json::Number::from_f64(*v).unwrap_or(serde_json::Number::from(0))),
+                    None => Value::Null,
+                }
+            }
+            ItemType::Integer { value, .. } => {
+                match value {
+                    Some(v) => Value::Number(serde_json::Number::from(*v)),
+                    None => Value::Null,
+                }
+            }
+            ItemType::Boolean { value, .. } => {
+                Value::Bool(*value)
+            }
+            ItemType::Enum(enum_item) => {
+                match enum_item.value_str() {
+                    Some(v) => Value::String(v.to_string()),
+                    None => Value::Null,
+                }
+            }
+        }
+    }
+
     pub fn update_from_value(&mut self, value: &Value) -> Result<(), SchemaError> {
         let path = self.base.key();
         self.item_type.update_from_value(value, &path)

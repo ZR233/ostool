@@ -174,6 +174,30 @@ impl OneOf {
 }
 
 impl OneOf {
+    pub fn as_json(&self) -> Value {
+        if let Some(selected) = self.selected() {
+            match selected {
+                ElementType::Menu(menu) => {
+                    let mut result = serde_json::Map::new();
+                    // For OneOf, the variant name should be the field name from the menu
+                    let variant_name = menu.field_name();
+                    result.insert(variant_name, menu.as_json());
+                    Value::Object(result)
+                }
+                ElementType::Item(item) => {
+                    // For OneOf containing simple items, return the item's value directly
+                    item.as_json()
+                }
+                ElementType::OneOf(nested_oneof) => {
+                    nested_oneof.as_json()
+                }
+            }
+        } else {
+            // If no variant is selected, return null
+            Value::Null
+        }
+    }
+
     pub fn field_name(&self) -> String {
         self.base.field_name()
     }

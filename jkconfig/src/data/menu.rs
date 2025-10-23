@@ -27,8 +27,8 @@ impl MenuRoot {
         self.menu.update_from_value(value)
     }
 
-    pub fn as_json(&self)-> Value {
-        &self.menu.as_json()
+    pub fn as_json(&self) -> Value {
+        self.menu.as_json()
     }
 }
 
@@ -55,6 +55,42 @@ pub struct Menu {
 }
 
 impl Menu {
+    pub fn as_json(&self) -> Value {
+        let mut result = serde_json::Map::new();
+
+        for (child_key, child_element) in &self.children {
+            match child_element {
+                ElementType::Menu(menu) => {
+                    let field_name = menu.field_name();
+                    result.insert(field_name, menu.as_json());
+                }
+                ElementType::Item(item) => {
+                    let field_name = item.base.field_name();
+                    result.insert(field_name, item.as_json());
+                }
+                ElementType::OneOf(oneof) => {
+                    // For OneOf, the as_json() method already generates the correct structure
+                    // with the proper field name, so we should merge its result directly
+                    match oneof.as_json() {
+                        Value::Object(oneof_result) => {
+                            // Merge the OneOf result into our result
+                            for (key, value) in oneof_result {
+                                result.insert(key, value);
+                            }
+                        }
+                        other => {
+                            // For non-object results (like simple strings or null),
+                            // use the child_key as the key
+                            result.insert(child_key.clone(), other);
+                        }
+                    }
+                }
+            }
+        }
+
+        Value::Object(result)
+    }
+
     pub fn get_by_key(&self, key: &str) -> Option<ElementType> {
         if let Some(v) = self.children.get(key) {
             return Some(v.clone());
