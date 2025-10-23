@@ -4,6 +4,8 @@ use cursive::{
     views::{Dialog, DummyView, EditView, LinearLayout, TextView},
 };
 
+use crate::ui::components::refresh::refresh_current_menu;
+
 /// 显示字符串编辑对话框
 pub fn show_string_edit(
     s: &mut Cursive,
@@ -38,6 +40,8 @@ pub fn show_string_edit(
             // TODO: 保存值到 AppData
             s.add_layer(Dialog::info(format!("Set {} = {}", key, value)));
             s.pop_layer();
+            // 刷新菜单显示最新值
+            refresh_current_menu(s);
         })
         .button("Cancel", |s| {
             s.pop_layer();

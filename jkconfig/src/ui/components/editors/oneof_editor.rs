@@ -5,6 +5,7 @@ use cursive::{
 };
 
 use crate::data::oneof::OneOf;
+use crate::ui::components::refresh::refresh_current_menu;
 
 /// 显示 OneOf 选择对话框
 pub fn show_oneof_dialog(s: &mut Cursive, one_of: &OneOf) {
@@ -39,6 +40,8 @@ pub fn show_oneof_dialog(s: &mut Cursive, one_of: &OneOf) {
                 s.add_layer(Dialog::info(format!("Set {} = variant {}", key, idx)));
             }
             s.pop_layer();
+            // 刷新菜单显示最新值
+            refresh_current_menu(s);
         })
         .button("Cancel", |s| {
             s.pop_layer();

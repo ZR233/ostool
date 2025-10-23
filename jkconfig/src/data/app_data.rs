@@ -10,7 +10,7 @@ use crate::data::{menu::MenuRoot, types::ElementType};
 
 pub struct AppData {
     pub root: MenuRoot,
-    pub current_key: String,
+    pub current_key: Vec<String>,
     pub needs_save: bool,
     pub config: PathBuf,
 }
@@ -81,7 +81,7 @@ impl AppData {
 
         Ok(AppData {
             root,
-            current_key: String::new(),
+            current_key: Vec::new(),
             needs_save: false,
             config: init_value_path,
         })
@@ -120,46 +120,31 @@ impl AppData {
         Ok(())
     }
 
-    /// 标记需要保存
-    pub fn mark_dirty(&mut self) {
-        self.needs_save = true;
-    }
-
-    /// 标记为已保存
-    pub fn mark_clean(&mut self) {
-        self.needs_save = false;
-    }
-
-    /// 获取当前路径的父路径
-    pub fn get_parent_path(&self) -> String {
-        if let Some(last_dot) = self.current_key.rfind('.') {
-            self.current_key[..last_dot].to_string()
-        } else {
-            String::new()
-        }
-    }
-
-    /// 导航到指定路径
-    pub fn navigate_to(&mut self, path: &str) {
-        self.current_key = path.to_string();
+    pub fn enter(&mut self, key: &str) {
+        self.current_key.push(key.to_string());
     }
 
     /// 返回上级路径
-    pub fn navigate_back(&mut self) -> bool {
-        if self.current_key.is_empty() {
-            false // 已经在根目录
-        } else {
-            self.current_key = self.get_parent_path();
-            true
+    pub fn navigate_back(&mut self) {
+        if !self.current_key.is_empty() {
+            self.current_key.pop();
         }
     }
 
+    fn key_string(&self) -> String {
+        if self.current_key.is_empty() {
+            return String::new();
+        }
+
+        self.current_key.join(".")
+    }
+
     pub fn current(&self) -> Option<&ElementType> {
-        self.root.get_by_key(&self.current_key)
+        self.root.get_by_key(&self.key_string())
     }
 
     pub fn current_mut(&mut self) -> Option<&mut ElementType> {
-        self.root.get_mut_by_key(&self.current_key)
+        self.root.get_mut_by_key(&self.key_string())
     }
 }
 

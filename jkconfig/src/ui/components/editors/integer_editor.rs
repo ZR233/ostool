@@ -4,6 +4,8 @@ use cursive::{
     views::{Dialog, DummyView, EditView, LinearLayout, TextView},
 };
 
+use crate::ui::components::refresh::refresh_current_menu;
+
 /// 显示整数编辑对话框
 pub fn show_integer_edit(
     s: &mut Cursive,
@@ -38,6 +40,8 @@ pub fn show_integer_edit(
                     // TODO: 保存值到 AppData
                     s.add_layer(Dialog::info(format!("Set {} = {}", key, content)));
                     s.pop_layer();
+                    // 刷新菜单显示最新值
+                    refresh_current_menu(s);
                 }
                 Err(_) => {
                     s.add_layer(Dialog::info("Invalid integer format!"));

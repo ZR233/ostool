@@ -6,11 +6,14 @@ use cursive::{
     views::{Dialog, DummyView, LinearLayout, Panel, SelectView, TextView},
 };
 
-use crate::data::{item::ItemType, types::ElementType};
+use crate::data::{AppData, item::ItemType, menu::Menu, types::ElementType};
 
-use super::editors::{
-    show_enum_select, show_integer_edit, show_number_edit, show_oneof_dialog, show_string_edit,
-    toggle_boolean,
+use super::{
+    editors::{
+        show_enum_select, show_integer_edit, show_number_edit, show_oneof_dialog, show_string_edit,
+        toggle_boolean,
+    },
+    refresh::refresh_current_menu,
 };
 
 /// 创建菜单视图
@@ -54,12 +57,14 @@ pub fn menu_view(title: &str, fields: Vec<ElementType>) -> impl IntoBoxedView {
         .title(title)
         .button("Back (Esc)", |s| {
             s.pop_layer();
+            // 返回后刷新上一级菜单
+            refresh_current_menu(s);
         })
         .full_screen()
 }
 
 /// 格式化项目标签，显示类型和当前值
-fn format_item_label(element: &ElementType) -> StyledString {
+pub fn format_item_label(element: &ElementType) -> StyledString {
     let mut label = StyledString::new();
 
     match element {
@@ -240,14 +245,22 @@ fn on_select(s: &mut Cursive, item: &ElementType) {
     });
 }
 
+fn enter_menu(s: &mut Cursive, menu: &Menu) {
+    if let Some(app) = s.user_data::<AppData>() {
+        app.enter(&menu.field_name());
+    }
+
+    let title = menu.title.clone();
+    let fields = menu.children.values().cloned().collect();
+    s.add_fullscreen_layer(menu_view(&title, fields));
+}
+
 /// 处理项目选择
 fn on_submit(s: &mut Cursive, item: &ElementType) {
     match item {
         ElementType::Menu(menu) => {
             // 进入子菜单
-            let title = menu.title.clone();
-            let fields = menu.children.values().cloned().collect();
-            s.add_fullscreen_layer(menu_view(&title, fields));
+            enter_menu(s, menu);
         }
         ElementType::OneOf(one_of) => {
             // 显示 OneOf 选择对话框

@@ -2,7 +2,7 @@
 extern crate log;
 
 use clap::{Arg, Command};
-use cursive::{Cursive, CursiveExt, views::Dialog};
+use cursive::{Cursive, CursiveExt, event::Key, views::Dialog};
 
 use jkconfig::{data::AppData, ui::components::menu::menu_view};
 
@@ -57,6 +57,7 @@ fn main() -> anyhow::Result<()> {
     siv.add_global_callback('Q', handle_quit);
     siv.add_global_callback('s', handle_save);
     siv.add_global_callback('S', handle_save);
+    siv.add_global_callback(Key::Esc, handle_esc);
 
     siv.add_fullscreen_layer(menu_view(&title, fields));
 
@@ -64,6 +65,10 @@ fn main() -> anyhow::Result<()> {
     siv.run();
 
     Ok(())
+}
+
+fn handle_esc(siv: &mut Cursive) {
+    siv.pop_layer();
 }
 
 /// 处理退出 - Q键
