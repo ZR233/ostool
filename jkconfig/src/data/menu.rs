@@ -19,8 +19,16 @@ pub struct MenuRoot {
 }
 
 impl MenuRoot {
-    pub fn get_by_key(&self, key: &str) -> Option<ElementType> {
-        self.menu.get_by_key(key)
+    pub fn get_by_key(&self, key: &str) -> Option<&ElementType> {
+        let ks = key.split(".").collect::<Vec<_>>();
+        self.menu.get_by_field_path(&ks)
+        // self.menu.get_by_key(key)
+    }
+
+    pub fn get_mut_by_key(&mut self, key: &str) -> Option<&mut ElementType> {
+        // self.menu.get_mut_by_key(key)
+        let ks = key.split(".").collect::<Vec<_>>();
+        self.menu.get_mut_by_field_path(&ks)
     }
 
     pub fn update_by_value(&mut self, value: &Value) -> Result<(), SchemaError> {
@@ -91,9 +99,9 @@ impl Menu {
         Value::Object(result)
     }
 
-    pub fn get_by_key(&self, key: &str) -> Option<ElementType> {
+    pub fn get_by_key(&self, key: &str) -> Option<&ElementType> {
         if let Some(v) = self.children.get(key) {
-            return Some(v.clone());
+            return Some(v);
         }
 
         for v in self.children.values() {
@@ -112,6 +120,46 @@ impl Menu {
             }
         }
         None
+    }
+
+    pub fn get_by_field_path(&self, field_path: &[&str]) -> Option<&ElementType> {
+        if field_path.is_empty() {
+            return None;
+        }
+
+        let first_field = field_path[0];
+
+        let child = self.children.get(first_field)?;
+
+        if field_path.len() == 1 {
+            return Some(child);
+        }
+
+        match child {
+            ElementType::Menu(menu) => menu.get_by_field_path(&field_path[1..]),
+            ElementType::OneOf(oneof) => oneof.get_by_field_path(&field_path[1..]),
+            _ => None,
+        }
+    }
+
+    pub fn get_mut_by_field_path(&mut self, field_path: &[&str]) -> Option<&mut ElementType> {
+        if field_path.is_empty() {
+            return None;
+        }
+
+        let first_field = field_path[0];
+
+        let child = self.children.get_mut(first_field)?;
+
+        if field_path.len() == 1 {
+            return Some(child);
+        }
+
+        match child {
+            ElementType::Menu(menu) => menu.get_mut_by_field_path(&field_path[1..]),
+            ElementType::OneOf(oneof) => oneof.get_mut_by_field_path(&field_path[1..]),
+            _ => None,
+        }
     }
 
     pub fn update_from_value(&mut self, value: &Value) -> Result<(), SchemaError> {

@@ -288,7 +288,7 @@ impl Menu {
         is_required: bool,
     ) -> Result<(), SchemaError> {
         if let Some(val) = walk.as_element_type(is_required)? {
-            self.children.insert(val.key(), val);
+            self.children.insert(val.field_name(), val);
         }
         Ok(())
     }

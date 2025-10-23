@@ -1,8 +1,7 @@
 use std::{
-    alloc::System,
-    fs::{self, File},
+    fs,
     path::{Path, PathBuf},
-    time::{Instant, SystemTime},
+    time::SystemTime,
 };
 
 use anyhow::bail;

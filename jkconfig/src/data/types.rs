@@ -83,6 +83,22 @@ impl DerefMut for ElementType {
 }
 
 impl ElementType {
+    pub fn get_by_key(&self, key: &str) -> Option<&ElementType> {
+        match self {
+            ElementType::Menu(menu) => menu.get_by_key(key),
+            ElementType::OneOf(one_of) => one_of.get_by_key(key),
+            ElementType::Item(_item) => None,
+        }
+    }
+
+    // pub fn get_mut_by_key(&mut self, key: &str) -> Option<&mut ElementType> {
+    //     match self {
+    //         ElementType::Menu(menu) => menu.get_mut_by_key(key),
+    //         ElementType::OneOf(one_of) => one_of.get_mut_by_key(key),
+    //         ElementType::Item(_item) => None,
+    //     }
+    // }
+
     pub fn update_from_value(&mut self, value: &Value) -> Result<(), SchemaError> {
         match self {
             ElementType::Menu(menu) => menu.update_from_value(value),

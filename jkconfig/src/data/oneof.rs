@@ -23,10 +23,15 @@ impl OneOf {
         self.selected_index.and_then(|idx| self.variants.get(idx))
     }
 
-    pub fn get_by_key(&self, key: &str) -> Option<ElementType> {
+    pub fn selected_mut(&mut self) -> Option<&mut ElementType> {
+        self.selected_index
+            .and_then(move |idx| self.variants.get_mut(idx))
+    }
+
+    pub fn get_by_key(&self, key: &str) -> Option<&ElementType> {
         if let Some(v) = self.selected() {
             if v.key() == key {
-                return Some(v.clone());
+                return Some(v);
             }
 
             match v {
@@ -43,6 +48,53 @@ impl OneOf {
                 _ => {}
             }
         }
+        None
+    }
+    pub fn get_by_field_path(&self, field_path: &[&str]) -> Option<&ElementType> {
+        if field_path.is_empty() {
+            return None;
+        }
+
+        let selected = self.selected()?;
+
+        if field_path.len() == 1 {
+            return Some(selected);
+        }
+
+        match selected {
+            ElementType::Menu(menu) => {
+                return menu.get_by_field_path(&field_path[1..]);
+            }
+            ElementType::OneOf(one_of) => {
+                return one_of.get_by_field_path(&field_path[1..]);
+            }
+            _ => {}
+        }
+
+        None
+    }
+
+    pub fn get_mut_by_field_path(&mut self, field_path: &[&str]) -> Option<&mut ElementType> {
+        if field_path.is_empty() {
+            return None;
+        }
+
+        let selected = self.selected_mut()?;
+
+        if field_path.len() == 1 {
+            return Some(selected);
+        }
+
+        match selected {
+            ElementType::Menu(menu) => {
+                return menu.get_mut_by_field_path(&field_path[1..]);
+            }
+            ElementType::OneOf(one_of) => {
+                return one_of.get_mut_by_field_path(&field_path[1..]);
+            }
+            _ => {}
+        }
+
         None
     }
 
@@ -179,9 +231,7 @@ impl OneOf {
             })
         }
     }
-}
 
-impl OneOf {
     pub fn as_json(&self) -> Value {
         if let Some(selected) = self.selected() {
             match selected {
