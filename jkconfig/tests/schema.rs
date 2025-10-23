@@ -82,6 +82,131 @@ fn test_value() {
     println!("Updated MenuRoot: \n{:#?}", menu);
 }
 
+#[test]
+fn test_value_normal_case() {
+    let schema = schema_for!(AnimalObject);
+    let mut menu = MenuRoot::try_from(schema.as_value()).unwrap();
+
+    // Test normal case with correct types
+    let dog_value = serde_json::json!({
+        "animal": {
+            "Dog": {
+                "c": 2.7,
+                "d": false
+            }
+        }
+    });
+
+    let result = menu.update_by_value(&dog_value);
+    assert!(result.is_ok(), "Normal case should succeed: {:?}", result.err());
+}
+
+#[test]
+fn test_value_type_mismatch() {
+    let schema = schema_for!(AnimalObject);
+    let mut menu = MenuRoot::try_from(schema.as_value()).unwrap();
+
+    // Test type mismatch: boolean field receives string
+    let bad_value = serde_json::json!({
+        "animal": {
+            "Dog": {
+                "c": 2.7,
+                "d": "this should be boolean"  // Type mismatch
+            }
+        }
+    });
+
+    let result = menu.update_by_value(&bad_value);
+    assert!(result.is_err());
+    match &result {
+        Err(jkconfig::data::schema::SchemaError::TypeMismatch { path, expected, actual: _ }) => {
+            assert!(path.contains("animal.Dog.d"));
+            assert_eq!(expected, "boolean");
+        }
+        _ => panic!("Expected TypeMismatch error but got: {:?}", result),
+    }
+}
+
+#[test]
+fn test_value_skip_unknown_fields() {
+    let schema = schema_for!(AnimalObject);
+    let mut menu = MenuRoot::try_from(schema.as_value()).unwrap();
+
+    // Test with extra fields that don't exist in schema
+    let value_with_extra = serde_json::json!({
+        "animal": {
+            "Dog": {
+                "c": 1.5,
+                "d": true,
+                "unknown_field": "should be skipped",
+                "another_unknown": 42
+            }
+        },
+        "unknown_top_level": "should be skipped"
+    });
+
+    let result = menu.update_by_value(&value_with_extra);
+    assert!(result.is_ok(), "Should skip unknown fields and succeed");
+}
+
+#[test]
+fn test_value_empty_object() {
+    let schema = schema_for!(AnimalObject);
+    let mut menu = MenuRoot::try_from(schema.as_value()).unwrap();
+
+    // Test with empty object (should skip since no matching fields)
+    let empty_value = serde_json::json!({});
+
+    let result = menu.update_by_value(&empty_value);
+    // This might fail because animal is required, but let's see what happens
+    println!("Empty object result: {:?}", result);
+}
+
+#[test]
+fn test_value_cat_variant() {
+    let schema = schema_for!(AnimalObject);
+    let mut menu = MenuRoot::try_from(schema.as_value()).unwrap();
+
+    // Test Cat variant
+    let cat_value = serde_json::json!({
+        "animal": {
+            "Cat": {
+                "a": 42,
+                "b": "meow"
+            }
+        }
+    });
+
+    let result = menu.update_by_value(&cat_value);
+    assert!(result.is_ok(), "Cat variant should succeed");
+}
+
+#[test]
+fn test_value_integer_type_mismatch() {
+    let schema = schema_for!(AnimalObject);
+    let mut menu = MenuRoot::try_from(schema.as_value()).unwrap();
+
+    // Test integer field receiving float
+    let cat_value = serde_json::json!({
+        "animal": {
+            "Cat": {
+                "a": 3.14,  // Should be integer, not float
+                "b": "test"
+            }
+        }
+    });
+
+    let result = menu.update_by_value(&cat_value);
+    assert!(result.is_err());
+    match result.err().unwrap() {
+        jkconfig::data::schema::SchemaError::TypeMismatch { path, expected, actual } => {
+            assert!(path.contains("animal.Cat.a"));
+            assert_eq!(expected, "integer");
+        }
+        _ => panic!("Expected TypeMismatch error for integer field"),
+    }
+}
+
 /***
 ```json
 Generated JSON Schema:

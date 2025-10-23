@@ -3,7 +3,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::data::{item::Item, menu::Menu, oneof::OneOf};
+use crate::data::{
+    item::Item,
+    menu::Menu,
+    oneof::OneOf,
+    schema::SchemaError,
+};
+
+use serde_json::Value;
 
 #[derive(Debug, Clone, Default)]
 pub struct ElementBase {
@@ -76,6 +83,16 @@ impl DerefMut for ElementType {
             ElementType::Menu(menu) => &mut menu.base,
             ElementType::OneOf(one_of) => &mut one_of.base,
             ElementType::Item(item) => &mut item.base,
+        }
+    }
+}
+
+impl ElementType {
+    pub fn update_from_value(&mut self, value: &Value) -> Result<(), SchemaError> {
+        match self {
+            ElementType::Menu(menu) => menu.update_from_value(value),
+            ElementType::OneOf(one_of) => one_of.update_from_value(value),
+            ElementType::Item(item) => item.update_from_value(value),
         }
     }
 }

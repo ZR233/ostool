@@ -17,6 +17,8 @@ pub enum SchemaError {
     JsonParseError(#[from] serde_json::Error),
     #[error("Schema conversion error at {path:?}: {reason}")]
     SchemaConversionError { path: PathBuf, reason: String },
+    #[error("Type mismatch at path '{path}': expected {expected}, got {actual}")]
+    TypeMismatch { path: String, expected: String, actual: String },
 }
 
 #[derive(Debug, Clone)]
