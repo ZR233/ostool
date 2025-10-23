@@ -204,7 +204,7 @@ fn test_value_integer_type_mismatch() {
     let cat_value = serde_json::json!({
         "animal": {
             "Cat": {
-                "a": 3.14,  // Should be integer, not float
+                "a": 3.2,  // Should be integer, not float
                 "b": "test"
             }
         }
@@ -216,7 +216,7 @@ fn test_value_integer_type_mismatch() {
         jkconfig::data::schema::SchemaError::TypeMismatch {
             path,
             expected,
-            actual,
+            actual: _,
         } => {
             assert!(path.contains("animal.Cat.a"));
             assert_eq!(expected, "integer");
