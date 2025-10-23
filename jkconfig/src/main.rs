@@ -2,12 +2,7 @@
 extern crate log;
 
 use clap::{Arg, Command};
-use cursive::{
-    Cursive, CursiveExt,
-    event::{Event, Key},
-    traits::*,
-    views::Dialog,
-};
+use cursive::{Cursive, CursiveExt, views::Dialog};
 
 use jkconfig::{data::AppData, ui::components::menu::menu_view};
 
