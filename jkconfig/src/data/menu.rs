@@ -56,7 +56,9 @@ impl Menu {
                     }
                 }
                 ElementType::OneOf(oneof) => {
-                     
+                    if let Some(v) = oneof.get_by_key(key) {
+                        return Some(v);
+                    }
                 }
                 _ => {}
             }
