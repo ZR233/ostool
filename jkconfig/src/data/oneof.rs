@@ -28,28 +28,6 @@ impl OneOf {
             .and_then(move |idx| self.variants.get_mut(idx))
     }
 
-    pub fn get_by_key(&self, key: &str) -> Option<&ElementType> {
-        if let Some(v) = self.selected() {
-            if v.key() == key {
-                return Some(v);
-            }
-
-            match v {
-                ElementType::Menu(menu) => {
-                    if let Some(v) = menu.get_by_key(key) {
-                        return Some(v);
-                    }
-                }
-                ElementType::OneOf(val) => {
-                    if let Some(v) = val.get_by_key(key) {
-                        return Some(v);
-                    }
-                }
-                _ => {}
-            }
-        }
-        None
-    }
     pub fn get_by_field_path(&self, field_path: &[&str]) -> Option<&ElementType> {
         if field_path.is_empty() {
             return None;

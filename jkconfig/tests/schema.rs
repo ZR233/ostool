@@ -324,9 +324,7 @@ mod menu_root_get_mut_by_key_tests {
         let mut menu = create_test_menu_root();
 
         // 测试确认存在的有效路径
-        let valid_paths = vec![
-            ("animal", "top-level field"),
-        ];
+        let valid_paths = vec![("animal", "top-level field")];
 
         for (path, description) in valid_paths {
             let result = menu.get_mut_by_key(path);
@@ -381,11 +379,16 @@ mod menu_root_get_mut_by_key_tests {
 
         // 至少应该能够访问animal顶层路径
         let animal_result = menu.get_mut_by_key("animal");
-        assert!(animal_result.is_some(), "Top-level 'animal' path should be accessible");
+        assert!(
+            animal_result.is_some(),
+            "Top-level 'animal' path should be accessible"
+        );
 
         // 如果深层路径都不存在，这也是合理的行为（取决于OneOf的当前状态）
         if !has_any_success {
-            println!("Note: All deep paths returned None, which may be expected depending on OneOf state");
+            println!(
+                "Note: All deep paths returned None, which may be expected depending on OneOf state"
+            );
         }
     }
 }

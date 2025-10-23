@@ -22,7 +22,6 @@ impl MenuRoot {
     pub fn get_by_key(&self, key: &str) -> Option<&ElementType> {
         let ks = key.split(".").collect::<Vec<_>>();
         self.menu.get_by_field_path(&ks)
-        // self.menu.get_by_key(key)
     }
 
     pub fn get_mut_by_key(&mut self, key: &str) -> Option<&mut ElementType> {
@@ -97,29 +96,6 @@ impl Menu {
         }
 
         Value::Object(result)
-    }
-
-    pub fn get_by_key(&self, key: &str) -> Option<&ElementType> {
-        if let Some(v) = self.children.get(key) {
-            return Some(v);
-        }
-
-        for v in self.children.values() {
-            match v {
-                ElementType::Menu(menu) => {
-                    if let Some(v) = menu.get_by_key(key) {
-                        return Some(v);
-                    }
-                }
-                ElementType::OneOf(oneof) => {
-                    if let Some(v) = oneof.get_by_key(key) {
-                        return Some(v);
-                    }
-                }
-                _ => {}
-            }
-        }
-        None
     }
 
     pub fn get_by_field_path(&self, field_path: &[&str]) -> Option<&ElementType> {
