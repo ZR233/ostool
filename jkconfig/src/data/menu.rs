@@ -5,7 +5,12 @@ use std::{
     path::Path,
 };
 
-use crate::data::types::{ElementBase, ElementType};
+use serde_json::Value;
+
+use crate::data::{
+    schema::SchemaError,
+    types::{ElementBase, ElementType},
+};
 
 #[derive(Clone)]
 pub struct MenuRoot {
@@ -17,6 +22,11 @@ pub struct MenuRoot {
 impl MenuRoot {
     pub fn get_by_key(&self, key: &str) -> Option<ElementType> {
         self.menu.get_by_key(key)
+    }
+
+    pub fn update_by_value(&mut self, value: &Value) -> Result<(), SchemaError> {
+        todo!();
+        Ok(())
     }
 }
 

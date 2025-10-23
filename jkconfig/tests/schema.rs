@@ -54,6 +54,34 @@ fn test_object() {
     );
 }
 
+#[test]
+fn test_value() {
+    let schema = schema_for!(AnimalObject);
+
+    let origin = AnimalObject {
+        animal: AnimalEnum::Dog(Dog {
+            c: Some(3.5),
+            d: true,
+            l: Legs::Four,
+        }),
+    };
+
+    let value = schema.as_value();
+
+    println!(
+        "Generated JSON Schema Value: \n{}",
+        serde_json::to_string_pretty(&value).unwrap()
+    );
+
+    let mut menu = MenuRoot::try_from(value).unwrap();
+
+    let value = serde_json::to_value(&origin).unwrap();
+
+    menu.update_by_value(&value).unwrap();
+
+    println!("Updated MenuRoot: \n{:#?}", menu);
+}
+
 /***
 ```json
 Generated JSON Schema:
