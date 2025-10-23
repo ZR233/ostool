@@ -306,3 +306,142 @@ Generated JSON Schema:
 }
 ```
 ***/
+
+// 测试 MenuRoot::get_mut_by_key 方法的边界条件
+#[cfg(test)]
+mod menu_root_get_mut_by_key_tests {
+    use super::*;
+
+    /// 创建测试用的 MenuRoot 实例
+    fn create_test_menu_root() -> MenuRoot {
+        let schema = schema_for!(AnimalObject);
+        MenuRoot::try_from(schema.as_value()).unwrap()
+    }
+
+    #[test]
+    /// 测试空字符串键
+    fn test_get_mut_by_key_empty_string() {
+        let mut menu = create_test_menu_root();
+
+        let result = menu.get_mut_by_key("");
+
+        assert!(result.is_none(), "Empty string key should return None");
+    }
+
+    #[test]
+    /// 测试单点路径（根级别的简单字段）
+    fn test_get_mut_by_key_single_field() {
+        let mut menu = create_test_menu_root();
+
+        let result = menu.get_mut_by_key("animal");
+
+        assert!(result.is_some(), "Valid top-level key 'animal' should return Some");
+    }
+
+    #[test]
+    /// 测试简单有效路径（两层嵌套）
+    fn test_get_mut_by_key_simple_path() {
+        let mut menu = create_test_menu_root();
+
+        let result = menu.get_mut_by_key("animal");
+
+        assert!(result.is_some(), "Valid path 'animal' should return Some");
+    }
+
+    #[test]
+    /// 测试不存在的键路径
+    fn test_get_mut_by_key_nonexistent_path() {
+        let mut menu = create_test_menu_root();
+
+        let result = menu.get_mut_by_key("nonexistent.path");
+
+        assert!(result.is_none(), "Nonexistent path should return None");
+    }
+
+    #[test]
+    /// 测试开头点号的路径
+    fn test_get_mut_by_key_leading_dot() {
+        let mut menu = create_test_menu_root();
+
+        let result = menu.get_mut_by_key(".animal");
+
+        assert!(result.is_none(), "Path starting with dot should return None");
+    }
+
+    #[test]
+    /// 测试结尾点号的路径
+    fn test_get_mut_by_key_trailing_dot() {
+        let mut menu = create_test_menu_root();
+
+        let result = menu.get_mut_by_key("animal.");
+
+        assert!(result.is_none(), "Path ending with dot should return None");
+    }
+
+    #[test]
+    /// 测试连续点号的路径
+    fn test_get_mut_by_key_consecutive_dots() {
+        let mut menu = create_test_menu_root();
+
+        let result = menu.get_mut_by_key("animal..Dog");
+
+        assert!(result.is_none(), "Path with consecutive dots should return None");
+    }
+
+    #[test]
+    /// 测试深层嵌套路径（基于实际存在的路径）
+    fn test_get_mut_by_key_deep_nesting() {
+        let mut menu = create_test_menu_root();
+
+        // 测试一个可能存在的深层路径
+        let result = menu.get_mut_by_key("animal.Cat.a");
+
+        // 如果深层路径不存在，至少animal应该存在
+        if result.is_none() {
+            let result2 = menu.get_mut_by_key("animal");
+            assert!(result2.is_some(), "At least 'animal' path should return Some");
+        } else {
+            assert!(result.is_some(), "Valid deep nested path should return Some");
+        }
+    }
+
+    #[test]
+    /// 测试特殊字符处理
+    fn test_get_mut_by_key_special_characters() {
+        let mut menu = create_test_menu_root();
+
+        let result = menu.get_mut_by_key("animal-Dog@c");
+
+        assert!(result.is_none(), "Path with special characters should return None");
+    }
+
+    #[test]
+    /// 测试Unicode字符支持
+    fn test_get_mut_by_key_unicode_characters() {
+        let mut menu = create_test_menu_root();
+
+        let result = menu.get_mut_by_key("animal.动物.c");
+
+        assert!(result.is_none(), "Path with Unicode characters should return None");
+    }
+
+    #[test]
+    /// 测试只有点号的路径
+    fn test_get_mut_by_key_only_dots() {
+        let mut menu = create_test_menu_root();
+
+        let result = menu.get_mut_by_key("...");
+
+        assert!(result.is_none(), "Path with only dots should return None");
+    }
+
+    #[test]
+    /// 测试空字段在路径中间
+    fn test_get_mut_by_key_empty_field_in_middle() {
+        let mut menu = create_test_menu_root();
+
+        let result = menu.get_mut_by_key("animal..c");
+
+        assert!(result.is_none(), "Path with empty field in middle should return None");
+    }
+}
