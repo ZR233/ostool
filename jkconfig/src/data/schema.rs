@@ -157,6 +157,10 @@ impl WalkContext {
         if let Some(item) = self.as_item(is_required)? {
             return Ok(Some(item));
         }
+
+        if let Some(anyof) = self.as_anyof(is_required)? {
+            return Ok(Some(anyof));
+        }
         Ok(None)
     }
 
@@ -218,6 +222,21 @@ impl WalkContext {
 
         Ok(None)
     }
+
+    fn as_anyof(&self, _is_required: bool) -> Result<Option<ElementType>, SchemaError> {
+        if let Some(one_of) = self.get("anyOf")
+            && let Some(variants) = one_of.as_array()
+        {
+            let var_object = variants[0].clone();
+            let mut walk = self.clone();
+            walk.value = var_object;
+            if let Some(element_type) = walk.as_element_type(false)? {
+                return Ok(Some(element_type));
+            }
+        }
+
+        Ok(None)
+    }
 }
 
 impl TryFrom<&Value> for MenuRoot {
@@ -235,7 +254,7 @@ impl TryFrom<&Value> for MenuRoot {
         Ok(MenuRoot {
             schema_version,
             title,
-            menu,
+            menu: ElementType::Menu(menu),
         })
     }
 }

@@ -15,27 +15,47 @@ use crate::data::{
 pub struct MenuRoot {
     pub schema_version: String,
     pub title: String,
-    pub menu: Menu,
+    pub menu: ElementType,
 }
 
 impl MenuRoot {
+    pub fn menu(&self) -> &Menu {
+        match &self.menu {
+            ElementType::Menu(menu) => menu,
+            _ => panic!("Root element is not a Menu"),
+        }
+    }
+
+    pub fn menu_mut(&mut self) -> &mut Menu {
+        match &mut self.menu {
+            ElementType::Menu(menu) => menu,
+            _ => panic!("Root element is not a Menu"),
+        }
+    }
+
     pub fn get_by_key(&self, key: &str) -> Option<&ElementType> {
+        if key.is_empty() {
+            return Some(&self.menu);
+        }
+
         let ks = key.split(".").collect::<Vec<_>>();
-        self.menu.get_by_field_path(&ks)
+        self.menu().get_by_field_path(&ks)
     }
 
     pub fn get_mut_by_key(&mut self, key: &str) -> Option<&mut ElementType> {
-        // self.menu.get_mut_by_key(key)
+        if key.is_empty() {
+            return Some(&mut self.menu);
+        }
         let ks = key.split(".").collect::<Vec<_>>();
-        self.menu.get_mut_by_field_path(&ks)
+        self.menu_mut().get_mut_by_field_path(&ks)
     }
 
     pub fn update_by_value(&mut self, value: &Value) -> Result<(), SchemaError> {
-        self.menu.update_from_value(value)
+        self.menu_mut().update_from_value(value)
     }
 
     pub fn as_json(&self) -> Value {
-        self.menu.as_json()
+        self.menu().as_json()
     }
 }
 
@@ -47,8 +67,8 @@ impl Debug for MenuRoot {
             .field("path", &self.menu.path)
             .field("help", &self.menu.help)
             .field("is_required", &self.menu.is_required)
-            .field("children", &self.menu.children)
-            .field("is_set", &self.menu.is_set)
+            .field("children", &self.menu().children)
+            .field("is_set", &self.menu().is_set)
             .finish()
     }
 }
