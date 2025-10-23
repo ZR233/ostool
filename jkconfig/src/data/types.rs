@@ -3,12 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::data::{
-    item::Item,
-    menu::Menu,
-    oneof::OneOf,
-    schema::SchemaError,
-};
+use crate::data::{item::Item, menu::Menu, oneof::OneOf, schema::SchemaError};
 
 use serde_json::Value;
 

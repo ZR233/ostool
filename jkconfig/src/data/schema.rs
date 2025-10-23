@@ -18,7 +18,11 @@ pub enum SchemaError {
     #[error("Schema conversion error at {path:?}: {reason}")]
     SchemaConversionError { path: PathBuf, reason: String },
     #[error("Type mismatch at path '{path}': expected {expected}, got {actual}")]
-    TypeMismatch { path: String, expected: String, actual: String },
+    TypeMismatch {
+        path: String,
+        expected: String,
+        actual: String,
+    },
 }
 
 #[derive(Debug, Clone)]

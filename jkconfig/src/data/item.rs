@@ -1,7 +1,4 @@
-use crate::data::{
-    schema::SchemaError,
-    types::ElementBase,
-};
+use crate::data::{schema::SchemaError, types::ElementBase};
 
 use serde_json::Value;
 
@@ -92,77 +89,79 @@ impl EnumItem {
 impl ItemType {
     pub fn update_from_value(&mut self, value: &Value, path: &str) -> Result<(), SchemaError> {
         match self {
-            ItemType::String { value: current_value, .. } => {
-                match value {
-                    Value::String(s) => {
-                        *current_value = Some(s.clone());
+            ItemType::String {
+                value: current_value,
+                ..
+            } => match value {
+                Value::String(s) => {
+                    *current_value = Some(s.clone());
+                    Ok(())
+                }
+                _ => Err(SchemaError::TypeMismatch {
+                    path: path.to_string(),
+                    expected: "string".to_string(),
+                    actual: format!("{}", value),
+                }),
+            },
+            ItemType::Number {
+                value: current_value,
+                ..
+            } => match value {
+                Value::Number(n) => {
+                    if let Some(f) = n.as_f64() {
+                        *current_value = Some(f);
                         Ok(())
+                    } else {
+                        Err(SchemaError::TypeMismatch {
+                            path: path.to_string(),
+                            expected: "number".to_string(),
+                            actual: format!("{}", n),
+                        })
                     }
-                    _ => Err(SchemaError::TypeMismatch {
-                        path: path.to_string(),
-                        expected: "string".to_string(),
-                        actual: format!("{}", value),
-                    }),
                 }
-            }
-            ItemType::Number { value: current_value, .. } => {
-                match value {
-                    Value::Number(n) => {
-                        if let Some(f) = n.as_f64() {
-                            *current_value = Some(f);
-                            Ok(())
-                        } else {
-                            Err(SchemaError::TypeMismatch {
-                                path: path.to_string(),
-                                expected: "number".to_string(),
-                                actual: format!("{}", n),
-                            })
-                        }
-                    }
-                    _ => Err(SchemaError::TypeMismatch {
-                        path: path.to_string(),
-                        expected: "number".to_string(),
-                        actual: format!("{}", value),
-                    }),
-                }
-            }
-            ItemType::Integer { value: current_value, .. } => {
-                match value {
-                    Value::Number(n) => {
-                        if let Some(i) = n.as_i64() {
-                            *current_value = Some(i);
-                            Ok(())
-                        } else {
-                            Err(SchemaError::TypeMismatch {
-                                path: path.to_string(),
-                                expected: "integer".to_string(),
-                                actual: format!("{}", n),
-                            })
-                        }
-                    }
-                    _ => Err(SchemaError::TypeMismatch {
-                        path: path.to_string(),
-                        expected: "integer".to_string(),
-                        actual: format!("{}", value),
-                    }),
-                }
-            }
-            ItemType::Boolean { value: current_value, .. } => {
-                match value {
-                    Value::Bool(b) => {
-                        *current_value = *b;
+                _ => Err(SchemaError::TypeMismatch {
+                    path: path.to_string(),
+                    expected: "number".to_string(),
+                    actual: format!("{}", value),
+                }),
+            },
+            ItemType::Integer {
+                value: current_value,
+                ..
+            } => match value {
+                Value::Number(n) => {
+                    if let Some(i) = n.as_i64() {
+                        *current_value = Some(i);
                         Ok(())
+                    } else {
+                        Err(SchemaError::TypeMismatch {
+                            path: path.to_string(),
+                            expected: "integer".to_string(),
+                            actual: format!("{}", n),
+                        })
                     }
-                    _ => Err(SchemaError::TypeMismatch {
-                        path: path.to_string(),
-                        expected: "boolean".to_string(),
-                        actual: format!("{}", value),
-                    }),
                 }
-            }
-            ItemType::Enum(enum_item) => {
-                enum_item.update_from_value(value, path)
-            }
+                _ => Err(SchemaError::TypeMismatch {
+                    path: path.to_string(),
+                    expected: "integer".to_string(),
+                    actual: format!("{}", value),
+                }),
+            },
+            ItemType::Boolean {
+                value: current_value,
+                ..
+            } => match value {
+                Value::Bool(b) => {
+                    *current_value = *b;
+                    Ok(())
+                }
+                _ => Err(SchemaError::TypeMismatch {
+                    path: path.to_string(),
+                    expected: "boolean".to_string(),
+                    actual: format!("{}", value),
+                }),
+            },
+            ItemType::Enum(enum_item) => enum_item.update_from_value(value, path),
         }
     }
 }
@@ -170,33 +169,25 @@ impl ItemType {
 impl Item {
     pub fn as_json(&self) -> Value {
         match &self.item_type {
-            ItemType::String { value, .. } => {
-                match value {
-                    Some(v) => Value::String(v.clone()),
-                    None => Value::Null,
-                }
-            }
-            ItemType::Number { value, .. } => {
-                match value {
-                    Some(v) => Value::Number(serde_json::Number::from_f64(*v).unwrap_or(serde_json::Number::from(0))),
-                    None => Value::Null,
-                }
-            }
-            ItemType::Integer { value, .. } => {
-                match value {
-                    Some(v) => Value::Number(serde_json::Number::from(*v)),
-                    None => Value::Null,
-                }
-            }
-            ItemType::Boolean { value, .. } => {
-                Value::Bool(*value)
-            }
-            ItemType::Enum(enum_item) => {
-                match enum_item.value_str() {
-                    Some(v) => Value::String(v.to_string()),
-                    None => Value::Null,
-                }
-            }
+            ItemType::String { value, .. } => match value {
+                Some(v) => Value::String(v.clone()),
+                None => Value::Null,
+            },
+            ItemType::Number { value, .. } => match value {
+                Some(v) => Value::Number(
+                    serde_json::Number::from_f64(*v).unwrap_or(serde_json::Number::from(0)),
+                ),
+                None => Value::Null,
+            },
+            ItemType::Integer { value, .. } => match value {
+                Some(v) => Value::Number(serde_json::Number::from(*v)),
+                None => Value::Null,
+            },
+            ItemType::Boolean { value, .. } => Value::Bool(*value),
+            ItemType::Enum(enum_item) => match enum_item.value_str() {
+                Some(v) => Value::String(v.to_string()),
+                None => Value::Null,
+            },
         }
     }
 
