@@ -9,19 +9,15 @@ name = "jkconfig"
 repository = "https://github.com/ZR233/ostool"
 version = "0.1.0"
 
-# [[bin]]
-# name = "jkconfig"
-# path = "src/main.rs"
-
 [dependencies]
 # Cursive TUI framework
-cursive = { version = "0.21", features = ["crossterm-backend"] }
+cursive = {version = "0.21", features = ["crossterm-backend"]}
 
 # Data processing
 anyhow = "1.0"
-serde = { version = "1.0", features = ["derive"] }
+clap = {version = "4.0", features = ["derive"]}
+serde = {version = "1.0", features = ["derive"]}
 serde_json = "1.0"
-clap = { version = "4.0", features = ["derive"] }
 
 toml = "0.9"
 
@@ -32,7 +28,7 @@ thiserror = "2.0"
 log = "0.4"
 
 [dev-dependencies]
+schemars = {version = "1.0.4", features = ["derive"]}
 serde = {version = "1.0", features = ["derive"]}
 tokio-test = "0.4"
 toml = "0.9"
-schemars = {version = "1.0.4", features = ["derive"]}
