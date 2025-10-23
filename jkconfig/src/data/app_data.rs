@@ -121,6 +121,9 @@ impl AppData {
     }
 
     pub fn enter(&mut self, key: &str) {
+        if key.is_empty() {
+            return;
+        }
         self.current_key.push(key.to_string());
     }
 
@@ -131,7 +134,7 @@ impl AppData {
         }
     }
 
-    fn key_string(&self) -> String {
+    pub fn key_string(&self) -> String {
         if self.current_key.is_empty() {
             return String::new();
         }

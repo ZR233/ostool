@@ -4,7 +4,10 @@ extern crate log;
 use clap::{Arg, Command};
 use cursive::{Cursive, CursiveExt, event::Key, views::Dialog};
 
-use jkconfig::{data::AppData, ui::components::menu::menu_view};
+use jkconfig::{
+    data::AppData,
+    ui::{components::menu::menu_view, handle_back, handle_quit},
+};
 
 // mod menu_view;
 // use menu_view::MenuView;
@@ -57,32 +60,15 @@ fn main() -> anyhow::Result<()> {
     siv.add_global_callback('Q', handle_quit);
     siv.add_global_callback('s', handle_save);
     siv.add_global_callback('S', handle_save);
-    siv.add_global_callback(Key::Esc, handle_esc);
+    siv.add_global_callback(Key::Esc, handle_back);
 
-    siv.add_fullscreen_layer(menu_view(&title, fields));
+    // 初始菜单路径为空
+    siv.add_fullscreen_layer(menu_view(&title, "", fields));
 
     // 运行应用
     siv.run();
 
     Ok(())
-}
-
-fn handle_esc(siv: &mut Cursive) {
-    siv.pop_layer();
-}
-
-/// 处理退出 - Q键
-fn handle_quit(siv: &mut Cursive) {
-    siv.add_layer(
-        Dialog::text("Quit without saving?")
-            .title("Quit")
-            .button("Quit", |s| {
-                s.quit();
-            })
-            .button("Back", |s| {
-                s.pop_layer();
-            }),
-    );
 }
 
 /// 处理保存 - S键

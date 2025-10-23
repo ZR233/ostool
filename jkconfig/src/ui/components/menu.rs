@@ -3,21 +3,18 @@ use cursive::{
     theme::{ColorStyle, Effect, Style},
     utils::markup::StyledString,
     view::{IntoBoxedView, Nameable, Resizable, Scrollable},
-    views::{Dialog, DummyView, LinearLayout, Panel, SelectView, TextView},
+    views::{DummyView, LinearLayout, Panel, SelectView, TextView},
 };
 
 use crate::data::{AppData, item::ItemType, menu::Menu, types::ElementType};
 
-use super::{
-    editors::{
-        show_enum_select, show_integer_edit, show_number_edit, show_oneof_dialog, show_string_edit,
-        toggle_boolean,
-    },
-    refresh::refresh_current_menu,
+use super::editors::{
+    show_enum_select, show_integer_edit, show_number_edit, show_oneof_dialog, show_string_edit,
+    toggle_boolean,
 };
 
 /// 创建菜单视图
-pub fn menu_view(title: &str, fields: Vec<ElementType>) -> impl IntoBoxedView {
+pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl IntoBoxedView {
     let mut select = SelectView::new();
     select.set_autojump(true);
 
@@ -29,6 +26,17 @@ pub fn menu_view(title: &str, fields: Vec<ElementType>) -> impl IntoBoxedView {
 
     select.set_on_select(on_select);
 
+    // 创建路径显示面板
+    let path_text = if path.is_empty() {
+        StyledString::styled("Path: / (Root)", ColorStyle::tertiary())
+    } else {
+        let mut styled = StyledString::new();
+        styled.append_styled("Path: ", ColorStyle::secondary());
+        styled.append_styled(path, ColorStyle::tertiary());
+        styled
+    };
+    let path_view = TextView::new(path_text).with_name("path_text");
+
     // 创建帮助信息显示区域
     let help_view = TextView::new(create_help_text()).with_name("help_text");
 
@@ -39,11 +47,15 @@ pub fn menu_view(title: &str, fields: Vec<ElementType>) -> impl IntoBoxedView {
         .fixed_height(5);
 
     // 构建主布局
-    let content = LinearLayout::vertical()
+
+    LinearLayout::vertical()
+        .child(TextView::new(title).center())
+        .child(Panel::new(path_view).full_width())
+        .child(DummyView)
         .child(
             select
                 .on_submit(on_submit)
-                .with_name("main_select")
+                .with_name(path)
                 .scrollable()
                 .full_width()
                 .min_height(10),
@@ -51,16 +63,7 @@ pub fn menu_view(title: &str, fields: Vec<ElementType>) -> impl IntoBoxedView {
         .child(DummyView)
         .child(Panel::new(detail_view).title("Help").full_width())
         .child(DummyView)
-        .child(Panel::new(help_view).full_width());
-
-    Dialog::around(content)
-        .title(title)
-        .button("Back (Esc)", |s| {
-            s.pop_layer();
-            // 返回后刷新上一级菜单
-            refresh_current_menu(s);
-        })
-        .full_screen()
+        .child(Panel::new(help_view).full_width())
 }
 
 /// 格式化项目标签，显示类型和当前值
@@ -245,47 +248,59 @@ fn on_select(s: &mut Cursive, item: &ElementType) {
     });
 }
 
-fn enter_menu(s: &mut Cursive, menu: &Menu) {
+pub fn enter_menu(s: &mut Cursive, menu: &Menu) {
+    let mut path = String::new();
+
     if let Some(app) = s.user_data::<AppData>() {
         app.enter(&menu.field_name());
+        path = app.key_string();
     }
 
     let title = menu.title.clone();
-    let fields = menu.children.values().cloned().collect();
-    s.add_fullscreen_layer(menu_view(&title, fields));
+    let fields: Vec<ElementType> = menu.children.values().cloned().collect();
+
+    s.add_fullscreen_layer(menu_view(&title, &path, fields));
 }
 
-/// 处理项目选择
-fn on_submit(s: &mut Cursive, item: &ElementType) {
-    match item {
-        ElementType::Menu(menu) => {
-            // 进入子菜单
-            enter_menu(s, menu);
-        }
-        ElementType::OneOf(one_of) => {
-            // 显示 OneOf 选择对话框
-            show_oneof_dialog(s, one_of);
-        }
-        ElementType::Item(item) => {
-            // 根据类型显示编辑对话框
-            match &item.item_type {
-                ItemType::Boolean { .. } => {
-                    // Boolean 类型直接切换
-                    toggle_boolean(s, &item.base.key());
-                }
-                ItemType::String { value, default } => {
-                    show_string_edit(s, &item.base.key(), &item.base.title, value, default);
-                }
-                ItemType::Number { value, default } => {
-                    show_number_edit(s, &item.base.key(), &item.base.title, *value, *default);
-                }
-                ItemType::Integer { value, default } => {
-                    show_integer_edit(s, &item.base.key(), &item.base.title, *value, *default);
-                }
-                ItemType::Enum(enum_item) => {
-                    show_enum_select(s, &item.base.key(), &item.base.title, enum_item);
+pub fn enter_key(s: &mut Cursive, key: &str) {
+    if let Some(app) = s.user_data::<AppData>()
+        && let Some(item) = app.root.get_by_key(key).cloned()
+    {
+        match item {
+            ElementType::Menu(menu) => {
+                // 进入子菜单
+                enter_menu(s, &menu);
+            }
+            ElementType::OneOf(one_of) => {
+                // 显示 OneOf 选择对话框
+                show_oneof_dialog(s, &one_of);
+            }
+            ElementType::Item(item) => {
+                // 根据类型显示编辑对话框
+                match &item.item_type {
+                    ItemType::Boolean { .. } => {
+                        // Boolean 类型直接切换
+                        toggle_boolean(s, &item.base.key());
+                    }
+                    ItemType::String { value, default } => {
+                        show_string_edit(s, &item.base.key(), &item.base.title, value, default);
+                    }
+                    ItemType::Number { value, default } => {
+                        show_number_edit(s, &item.base.key(), &item.base.title, *value, *default);
+                    }
+                    ItemType::Integer { value, default } => {
+                        show_integer_edit(s, &item.base.key(), &item.base.title, *value, *default);
+                    }
+                    ItemType::Enum(enum_item) => {
+                        show_enum_select(s, &item.base.key(), &item.base.title, enum_item);
+                    }
                 }
             }
         }
     }
+}
+
+/// 处理项目选择
+fn on_submit(s: &mut Cursive, item: &ElementType) {
+    enter_key(s, &item.key());
 }
