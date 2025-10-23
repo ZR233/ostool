@@ -141,10 +141,10 @@ impl Menu {
                         }
                     }
 
-                    if let Some(child_key) = found_child_key {
-                        if let Some(element) = self.children.get_mut(child_key) {
-                            element.update_from_value(val)?;
-                        }
+                    if let Some(child_key) = found_child_key
+                        && let Some(element) = self.children.get_mut(child_key)
+                    {
+                        element.update_from_value(val)?;
                     }
                     // If key doesn't exist in menu children, skip it as per requirement
                 }

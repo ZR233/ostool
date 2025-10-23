@@ -58,7 +58,7 @@ impl OneOf {
                             // Check if any key in the map matches a child menu's field name
                             for key in map.keys() {
                                 // Look through children to find a matching field name
-                                for (_child_key, child_element) in &menu.children {
+                                for child_element in menu.children.values() {
                                     if let ElementType::Menu(child_menu) = child_element {
                                         // Check if the key matches this child menu's field name
                                         if child_menu.field_name() == *key {
@@ -78,20 +78,30 @@ impl OneOf {
                 }
                 Err(SchemaError::TypeMismatch {
                     path: self.base.key(),
-                    expected: format!("one of: {:?}",
-                        self.variants.iter().filter_map(|v| {
-                            if let ElementType::Menu(menu) = v {
-                                Some(menu.children.iter().filter_map(|(_k, e)| {
-                                    if let ElementType::Menu(child_menu) = e {
-                                        Some(child_menu.field_name())
-                                    } else {
-                                        None
-                                    }
-                                }).collect::<Vec<_>>())
-                            } else {
-                                None
-                            }
-                        }).collect::<Vec<_>>()),
+                    expected: format!(
+                        "one of: {:?}",
+                        self.variants
+                            .iter()
+                            .filter_map(|v| {
+                                if let ElementType::Menu(menu) = v {
+                                    Some(
+                                        menu.children
+                                            .iter()
+                                            .filter_map(|(_k, e)| {
+                                                if let ElementType::Menu(child_menu) = e {
+                                                    Some(child_menu.field_name())
+                                                } else {
+                                                    None
+                                                }
+                                            })
+                                            .collect::<Vec<_>>(),
+                                    )
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                    ),
                     actual: format!("object with keys: {:?}", map.keys().collect::<Vec<_>>()),
                 })
             }
@@ -128,7 +138,7 @@ impl OneOf {
                         let mut matching_field = None;
                         {
                             let menu_clone = menu.clone();
-                            for (_child_key, child_element) in &menu_clone.children {
+                            for child_element in menu_clone.children.values() {
                                 if let ElementType::Menu(child_menu) = child_element {
                                     let field_name = child_menu.field_name();
                                     if map.contains_key(&field_name) {
@@ -140,14 +150,14 @@ impl OneOf {
                         }
 
                         // Second pass: update the matching child
-                        if let Some(field_name) = matching_field {
-                            if let Some(inner_val) = map.get(&field_name) {
-                                for (_child_key_mut, child_element_mut) in &mut menu.children {
-                                    if let ElementType::Menu(child_menu_mut) = child_element_mut {
-                                        if child_menu_mut.field_name() == field_name {
-                                            return child_menu_mut.update_from_value(inner_val);
-                                        }
-                                    }
+                        if let Some(field_name) = matching_field
+                            && let Some(inner_val) = map.get(&field_name)
+                        {
+                            for child_element_mut in menu.children.values_mut() {
+                                if let ElementType::Menu(child_menu_mut) = child_element_mut
+                                    && child_menu_mut.field_name() == field_name
+                                {
+                                    return child_menu_mut.update_from_value(inner_val);
                                 }
                             }
                         }
@@ -159,9 +169,7 @@ impl OneOf {
                         variant.update_from_value(value)
                     }
                 }
-                _ => {
-                    variant.update_from_value(value)
-                }
+                _ => variant.update_from_value(value),
             }
         } else {
             Err(SchemaError::TypeMismatch {
@@ -188,9 +196,7 @@ impl OneOf {
                     // For OneOf containing simple items, return the item's value directly
                     item.as_json()
                 }
-                ElementType::OneOf(nested_oneof) => {
-                    nested_oneof.as_json()
-                }
+                ElementType::OneOf(nested_oneof) => nested_oneof.as_json(),
             }
         } else {
             // If no variant is selected, return null
