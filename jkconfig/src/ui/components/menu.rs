@@ -1,6 +1,6 @@
 use cursive::{
     Cursive,
-    event::Event,
+    event::{Event, Key},
     theme::{ColorStyle, Effect, Style},
     utils::markup::StyledString,
     view::{IntoBoxedView, Nameable, Resizable, Scrollable},
@@ -25,7 +25,7 @@ pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl Into
     select.set_on_submit(on_submit);
     menu_select_flush_fields(&mut select, &fields);
     info!("Created menu view for path: {}", path);
-    let select = select.with_name(menu_select_name);
+    let select = select.with_name(&menu_select_name);
 
     // 创建路径显示面板
     let path_text = if path.is_empty() {
@@ -60,6 +60,7 @@ pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl Into
             .child(Panel::new(help_view).full_width()),
     )
     .on_event(Event::Char('m'), on_change_set)
+    .on_event(Key::Tab, move |s| on_oneof_switch(s, &menu_select_name))
 }
 
 fn on_change_set(s: &mut Cursive) {
@@ -233,6 +234,7 @@ fn create_status_text() -> &'static str {
 
 /// 当选择项改变时更新详细信息
 fn on_select(s: &mut Cursive, item: &ElementType) {
+    info!("Selected item: {}", item.key());
     if let Some(app) = s.user_data::<AppData>() {
         app.select_field = Some(item.clone());
     }
@@ -386,6 +388,27 @@ pub fn enter_key(s: &mut Cursive, key: &str) {
         info!("Entering key: {}, got {}", key, item.key());
         app.enter(key);
         enter_elem(s, &item);
+    }
+}
+
+fn on_oneof_switch(s: &mut Cursive, name: &str) {
+    let mut oneof = None;
+
+    s.call_on_name(name, |view: &mut SelectView<ElementType>| {
+        let selected = view.selection();
+        if let Some(elem) = selected
+            && let ElementType::OneOf(_one_of) = elem.as_ref()
+        {
+            oneof = Some(elem.as_ref().clone());
+        }
+    });
+
+    if let Some(ElementType::OneOf(one_of)) = &oneof {
+        if let Some(app) = s.user_data::<AppData>() {
+            let key = one_of.key();
+            app.enter(&key);
+        }
+        show_oneof_dialog(s, one_of);
     }
 }
 
