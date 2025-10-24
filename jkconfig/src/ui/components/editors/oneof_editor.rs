@@ -1,11 +1,11 @@
 use cursive::{
     Cursive,
+    event::Key,
     view::{Nameable, Resizable},
-    views::{Dialog, DummyView, LinearLayout, SelectView, TextView},
+    views::{Dialog, DummyView, LinearLayout, OnEventView, SelectView, TextView},
 };
 
-use crate::data::oneof::OneOf;
-use crate::ui::components::refresh::refresh_current_menu;
+use crate::{data::oneof::OneOf, ui::handle_back};
 
 /// 显示 OneOf 选择对话框
 pub fn show_oneof_dialog(s: &mut Cursive, one_of: &OneOf) {
@@ -24,28 +24,32 @@ pub fn show_oneof_dialog(s: &mut Cursive, one_of: &OneOf) {
     let key = one_of.base.key();
 
     s.add_layer(
-        Dialog::around(
-            LinearLayout::vertical()
-                .child(TextView::new(format!("Select variant: {}", one_of.title)))
-                .child(DummyView)
-                .child(select.with_name("oneof_select").fixed_height(10)),
+        OnEventView::new(
+            Dialog::around(
+                LinearLayout::vertical()
+                    .child(TextView::new(format!("Select variant: {}", one_of.title)))
+                    .child(DummyView)
+                    .child(select.with_name("oneof_select").fixed_height(10)),
+            )
+            .title("Select One Of")
+            .button("OK", on_ok)
+            .button("Cancel", handle_back),
         )
-        .title("Select One Of")
-        .button("OK", move |s| {
-            let selection = s
-                .call_on_name("oneof_select", |v: &mut SelectView<usize>| v.selection())
-                .unwrap();
-
-            if let Some(idx) = selection {
-                // TODO: 保存值到 AppData
-                s.add_layer(Dialog::info(format!("Set {} = variant {}", key, idx)));
-            }
-            s.pop_layer();
-            // 刷新菜单显示最新值
-            refresh_current_menu(s);
-        })
-        .button("Cancel", |s| {
-            s.pop_layer();
-        }),
+        .on_event(Key::Enter, on_ok),
     );
+}
+
+fn on_ok(s: &mut Cursive) {
+    let selection = s
+        .call_on_name("oneof_select", |v: &mut SelectView<usize>| v.selection())
+        .unwrap();
+
+    if let Some(idx) = selection
+        && let Some(app) = s.user_data::<crate::data::app_data::AppData>()
+        && let Some(current) = app.current_mut()
+        && let crate::data::types::ElementType::OneOf(one_of) = current
+    {
+        one_of.selected_index = Some(*idx);
+        handle_back(s);
+    }
 }

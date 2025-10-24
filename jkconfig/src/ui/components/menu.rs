@@ -99,7 +99,7 @@ pub fn format_item_label(element: &ElementType) -> StyledString {
 
             if let Some(selected) = one_of.selected() {
                 label.append_styled(" = ", Style::from(ColorStyle::secondary()));
-                label.append_styled(&selected.title, ColorStyle::title_secondary());
+                label.append_styled(&selected.struct_name, ColorStyle::title_secondary());
             }
 
             if one_of.is_required {

@@ -4,8 +4,7 @@ use cursive::{
     views::{Dialog, DummyView, LinearLayout, SelectView, TextView},
 };
 
-use crate::data::item::EnumItem;
-use crate::ui::components::refresh::refresh_current_menu;
+use crate::{data::item::EnumItem, ui::handle_back};
 
 /// 显示枚举选择对话框
 pub fn show_enum_select(s: &mut Cursive, key: &str, title: &str, enum_item: &EnumItem) {
@@ -31,20 +30,17 @@ pub fn show_enum_select(s: &mut Cursive, key: &str, title: &str, enum_item: &Enu
         )
         .title("Select Option")
         .button("OK", move |s| {
-            let selection = s
-                .call_on_name("enum_select", |v: &mut SelectView<usize>| v.selection())
-                .unwrap();
+                            s.add_layer(Dialog::info(format!("Set {} = variant ", key)));
+            // let selection = s
+            //     .call_on_name("enum_select", |v: &mut SelectView<usize>| v.selection())
+            //     .unwrap();
 
-            if let Some(idx) = selection {
-                // TODO: 保存值到 AppData
-                s.add_layer(Dialog::info(format!("Set {} = variant {}", key, idx)));
-            }
-            s.pop_layer();
-            // 刷新菜单显示最新值
-            refresh_current_menu(s);
+            // if let Some(idx) = selection {
+            //     // TODO: 保存值到 AppData
+            //     s.add_layer(Dialog::info(format!("Set {} = variant {}", key, idx)));
+            // }
+            handle_back(s);
         })
-        .button("Cancel", |s| {
-            s.pop_layer();
-        }),
+        .button("Cancel", handle_back),
     );
 }
