@@ -1,10 +1,11 @@
 use cursive::{
     Cursive,
+    align::HAlign,
     event::{Event, Key},
     theme::{ColorStyle, Effect, Style},
     utils::markup::StyledString,
     view::{IntoBoxedView, Nameable, Resizable, Scrollable},
-    views::{DummyView, LinearLayout, OnEventView, Panel, SelectView, TextView},
+    views::{Dialog, DummyView, LinearLayout, OnEventView, Panel, SelectView, TextView},
 };
 use log::info;
 
@@ -49,16 +50,10 @@ pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl Into
     };
     let path_view = TextView::new(path_text).with_name("path_text");
 
-    // 创建详细信息显示区域
-    let detail_view = TextView::new(create_status_text())
-        .with_name("detail_text")
-        .scrollable()
-        .fixed_height(8);
-
     // 创建帮助信息显示区域
     let help_view = TextView::new(create_help_text()).with_name("help_text");
 
-    // 构建主布局
+    // 构建主布局 - 使用更灵活的布局来适应窗口大小
     OnEventView::new(
         LinearLayout::vertical()
             .child(DummyView.fixed_height(1))
@@ -66,19 +61,20 @@ pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl Into
             .child(DummyView.fixed_height(1))
             .child(Panel::new(path_view).title("Current Path").full_width())
             .child(DummyView.fixed_height(1))
+            // 列表区域占据大部分空间，自动滚动
             .child(
                 Panel::new(select.scrollable())
                     .title("Items")
                     .full_width()
-                    .min_height(12),
+                    .full_height(), // 使用 full_height 让列表占据剩余空间
             )
             .child(DummyView.fixed_height(1))
-            .child(Panel::new(detail_view).title("Details").full_width())
-            .child(DummyView.fixed_height(1))
+            // 帮助区域固定高度，确保完全显示
             .child(
                 Panel::new(help_view)
                     .title("Keyboard Shortcuts")
-                    .full_width(),
+                    .full_width()
+                    .fixed_height(7), // 固定高度确保按键提示完全显示
             )
             .child(DummyView.fixed_height(1)),
     )
@@ -87,6 +83,8 @@ pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl Into
     .on_event(Key::Tab, on_oneof_switch)
     .on_event(Event::Char('c'), on_clear)
     .on_event(Event::Char('C'), on_clear)
+    .on_event(Event::Char('h'), on_show_help)
+    .on_event(Event::Char('H'), on_show_help)
 }
 
 fn on_clear(s: &mut Cursive) {
@@ -215,78 +213,243 @@ pub fn format_item_label(element: &ElementType) -> StyledString {
 fn create_help_text() -> StyledString {
     let mut text = StyledString::new();
 
-    // 第一行：基本导航
-    text.append_styled("Navigation: ", Style::from(Effect::Underline));
-    text.append_plain("\n  ");
-    text.append_styled(
-        "↑↓/jk",
-        Style::from(Effect::Bold).combine(ColorStyle::tertiary()),
-    );
+    // 紧凑型三行布局
+    // 第一行：导航
+    text.append_styled("▶ ", ColorStyle::tertiary());
+    text.append_styled("↑↓/jk", Style::from(Effect::Bold));
     text.append_plain(" Move  ");
-    text.append_styled(
-        "Enter",
-        Style::from(Effect::Bold).combine(ColorStyle::tertiary()),
-    );
-    text.append_plain(" Select/Edit  ");
-    text.append_styled(
-        "Esc",
-        Style::from(Effect::Bold).combine(ColorStyle::tertiary()),
-    );
-    text.append_plain(" Back\n");
+    text.append_styled("Enter", Style::from(Effect::Bold));
+    text.append_plain(" Select  ");
+    text.append_styled("Esc", Style::from(Effect::Bold));
+    text.append_plain(" Back  ");
+    text.append_styled("H", Style::from(Effect::Bold));
+    text.append_plain(" Help\n");
 
-    // 第二行：编辑操作
-    text.append_styled("Actions: ", Style::from(Effect::Underline));
-    text.append_plain("\n  ");
-    text.append_styled(
-        "C",
-        Style::from(Effect::Bold).combine(ColorStyle::tertiary()),
-    );
-    text.append_plain(" Clear value  ");
-    text.append_styled(
-        "M",
-        Style::from(Effect::Bold).combine(ColorStyle::tertiary()),
-    );
-    text.append_plain(" Toggle menu  ");
-    text.append_styled(
-        "Tab",
-        Style::from(Effect::Bold).combine(ColorStyle::tertiary()),
-    );
-    text.append_plain(" Switch OneOf\n");
+    // 第二行：编辑
+    text.append_styled("▶ ", ColorStyle::tertiary());
+    text.append_styled("C", Style::from(Effect::Bold));
+    text.append_plain(" Clear  ");
+    text.append_styled("M", Style::from(Effect::Bold));
+    text.append_plain(" Toggle  ");
+    text.append_styled("Tab", Style::from(Effect::Bold));
+    text.append_plain(" Switch\n");
 
-    // 第三行：全局操作
-    text.append_styled("Global: ", Style::from(Effect::Underline));
-    text.append_plain("\n  ");
-    text.append_styled(
-        "S",
-        Style::from(Effect::Bold).combine(ColorStyle::tertiary()),
-    );
+    // 第三行：全局
+    text.append_styled("▶ ", ColorStyle::tertiary());
+    text.append_styled("S", Style::from(Effect::Bold));
     text.append_plain(" Save & Exit  ");
-    text.append_styled(
-        "Q",
-        Style::from(Effect::Bold).combine(ColorStyle::tertiary()),
-    );
+    text.append_styled("Q", Style::from(Effect::Bold));
     text.append_plain(" Quit  ");
-    text.append_styled(
-        "~",
-        Style::from(Effect::Bold).combine(ColorStyle::tertiary()),
-    );
-    text.append_plain(" Debug Console");
+    text.append_styled("~", Style::from(Effect::Bold));
+    text.append_plain(" Console");
 
     text
 }
 
-/// 创建状态文本（显示当前项的详细信息）
-fn create_status_text() -> String {
-    let mut text = String::new();
-    text.push_str("╔═══════════════════════════════════════════════\n");
-    text.push_str("║\n");
-    text.push_str("║  Welcome to JKConfig!\n");
-    text.push_str("║\n");
-    text.push_str("║  Use ↑↓ or j/k to navigate\n");
-    text.push_str("║  Press Enter to select or edit an item\n");
-    text.push_str("║\n");
-    text.push_str("╚═══════════════════════════════════════════════");
-    text
+/// 显示帮助对话框，展示当前选中项的详细信息
+fn on_show_help(s: &mut Cursive) {
+    // 获取当前选中的项
+    let element = match menu_selected(s) {
+        Some(e) => e,
+        None => return,
+    };
+
+    // 根据元素类型格式化详情
+    let details = match element {
+        ElementType::Menu(menu) => {
+            let mut text = StyledString::new();
+            text.append_styled(
+                "📁 Menu\n",
+                Style::from(Effect::Bold).combine(ColorStyle::title_primary()),
+            );
+            text.append_plain("\n");
+            text.append_styled("Title: ", Style::from(Effect::Bold));
+            text.append_plain(&menu.title);
+            text.append_plain("\n\n");
+
+            if let Some(help) = &menu.help {
+                text.append_styled("Description:\n", Style::from(Effect::Bold));
+                text.append_plain(help);
+                text.append_plain("\n\n");
+            }
+
+            let item_count = menu.children.len();
+            text.append_styled("Items: ", Style::from(Effect::Bold));
+            text.append_plain(format!("{} items\n", item_count));
+
+            text
+        }
+        ElementType::OneOf(oneof) => {
+            let mut text = StyledString::new();
+            text.append_styled(
+                "🔀 OneOf Selector\n",
+                Style::from(Effect::Bold).combine(ColorStyle::title_primary()),
+            );
+            text.append_plain("\n");
+            text.append_styled("Property: ", Style::from(Effect::Bold));
+            text.append_plain(&oneof.title);
+            text.append_plain("\n\n");
+
+            if let Some(help) = &oneof.help {
+                text.append_styled("Description:\n", Style::from(Effect::Bold));
+                text.append_plain(help);
+                text.append_plain("\n\n");
+            }
+
+            text.append_styled("Current Variant: ", Style::from(Effect::Bold));
+            if let Some(idx) = oneof.selected_index {
+                text.append_plain(format!("{}\n\n", idx));
+            } else {
+                text.append_plain("(none)\n\n");
+            }
+
+            text.append_styled("Available Variants:\n", Style::from(Effect::Bold));
+            for (i, variant) in oneof.variants.iter().enumerate() {
+                let prefix = if Some(i) == oneof.selected_index {
+                    "→ "
+                } else {
+                    "  "
+                };
+                text.append_plain(format!("{}[{}] {}\n", prefix, i, variant.title));
+                if let Some(help) = &variant.help {
+                    text.append_plain(format!("    {}\n", help));
+                }
+            }
+
+            text
+        }
+        ElementType::Item(item) => {
+            let mut text = StyledString::new();
+
+            // 标题和类型
+            text.append_styled(
+                format!("{}\n", item.base.title),
+                Style::from(Effect::Bold).combine(ColorStyle::title_primary()),
+            );
+            text.append_plain("\n");
+
+            // 类型信息
+            text.append_styled("Type: ", Style::from(Effect::Bold));
+            match &item.item_type {
+                ItemType::String { .. } => text.append_plain("String"),
+                ItemType::Integer { .. } => text.append_plain("Integer"),
+                ItemType::Number { .. } => text.append_plain("Number"),
+                ItemType::Boolean { .. } => text.append_plain("Boolean"),
+                ItemType::Enum(_) => text.append_plain("Enum"),
+                ItemType::Array(_) => text.append_plain("Array"),
+            }
+            text.append_plain("\n\n");
+
+            // 描述
+            if let Some(help) = &item.base.help {
+                text.append_styled("Description:\n", Style::from(Effect::Bold));
+                text.append_plain(help);
+                text.append_plain("\n\n");
+            }
+
+            // 当前值
+            text.append_styled("Current Value:\n", Style::from(Effect::Bold));
+            match &item.item_type {
+                ItemType::String { value, .. } => {
+                    text.append_plain(value.as_ref().unwrap_or(&"(none)".to_string()));
+                }
+                ItemType::Integer { value, .. } => {
+                    text.append_plain(format!("{}", value.unwrap_or(0)));
+                }
+                ItemType::Number { value, .. } => {
+                    text.append_plain(format!("{}", value.unwrap_or(0.0)));
+                }
+                ItemType::Boolean { value, .. } => {
+                    text.append_plain(if *value { "true" } else { "false" });
+                }
+                ItemType::Enum(v) => {
+                    if let Some(idx) = v.value {
+                        if let Some(variant) = v.variants.get(idx) {
+                            text.append_plain(variant);
+                        } else {
+                            text.append_plain("(invalid)");
+                        }
+                    } else {
+                        text.append_plain("(none)");
+                    }
+                }
+                ItemType::Array(v) => {
+                    text.append_plain(format!("[{} items]", v.values.len()));
+                }
+            }
+            text.append_plain("\n\n");
+
+            // 额外信息
+            match &item.item_type {
+                ItemType::String { default, .. } => {
+                    if let Some(default) = default {
+                        text.append_styled("Default: ", Style::from(Effect::Bold));
+                        text.append_plain(default);
+                        text.append_plain("\n");
+                    }
+                }
+                ItemType::Integer { default, .. } => {
+                    if let Some(default) = default {
+                        text.append_styled("Default: ", Style::from(Effect::Bold));
+                        text.append_plain(format!("{}\n", default));
+                    }
+                }
+                ItemType::Number { default, .. } => {
+                    if let Some(default) = default {
+                        text.append_styled("Default: ", Style::from(Effect::Bold));
+                        text.append_plain(format!("{}\n", default));
+                    }
+                }
+                ItemType::Boolean { default, .. } => {
+                    text.append_styled("Default: ", Style::from(Effect::Bold));
+                    text.append_plain(if *default { "true" } else { "false" });
+                    text.append_plain("\n");
+                }
+                ItemType::Enum(v) => {
+                    if let Some(default_idx) = v.default
+                        && let Some(default) = v.variants.get(default_idx)
+                    {
+                        text.append_styled("Default: ", Style::from(Effect::Bold));
+                        text.append_plain(default);
+                        text.append_plain("\n");
+                    }
+                    text.append_styled("Options:\n", Style::from(Effect::Bold));
+                    for opt in &v.variants {
+                        text.append_plain(format!("  • {}\n", opt));
+                    }
+                }
+                ItemType::Array(v) => {
+                    text.append_styled("Element Type: ", Style::from(Effect::Bold));
+                    text.append_plain(format!("{}\n", v.element_type));
+                    if !v.default.is_empty() {
+                        text.append_styled("Default: ", Style::from(Effect::Bold));
+                        text.append_plain(format!("[{:?}]\n", v.default));
+                    }
+                }
+            }
+
+            text
+        }
+    };
+
+    // 创建漂亮的对话框
+    s.add_layer(
+        Dialog::around(
+            Panel::new(
+                TextView::new(details)
+                    .scrollable()
+                    .scroll_x(true)
+                    .max_width(80)
+                    .max_height(25),
+            )
+            .title("╔═══ Item Details ═══╗")
+            .title_position(HAlign::Center),
+        )
+        .dismiss_button("Close")
+        .button("OK", |s| {
+            s.pop_layer();
+        }),
+    );
 }
 
 /// 当选择项改变时更新详细信息
