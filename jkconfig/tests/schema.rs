@@ -7,6 +7,13 @@ use serde::{Deserialize, Serialize};
 pub struct Cat {
     pub a: usize,
     pub b: String,
+    pub children: Option<CatChild>,
+    pub child2: CatChild,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub struct CatChild {
+    pub e: isize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
@@ -76,6 +83,8 @@ fn test_value() {
     let mut menu = MenuRoot::try_from(value).unwrap();
 
     let value = serde_json::to_value(&origin).unwrap();
+
+    println!("Origin MenuRoot : \n{menu:#?}",);
 
     menu.update_by_value(&value).unwrap();
 

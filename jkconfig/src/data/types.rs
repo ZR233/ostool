@@ -13,10 +13,16 @@ pub struct ElementBase {
     pub title: String,
     pub help: Option<String>,
     pub is_required: bool,
+    pub struct_name: String,
 }
 
 impl ElementBase {
-    pub fn new(path: &Path, description: Option<String>, is_required: bool) -> Self {
+    pub fn new(
+        path: &Path,
+        description: Option<String>,
+        is_required: bool,
+        struct_name: &str,
+    ) -> Self {
         let title = description
             .as_ref()
             .and_then(|d| d.split('\n').next())
@@ -33,6 +39,7 @@ impl ElementBase {
             title,
             help: description,
             is_required,
+            struct_name: struct_name.to_string(),
         }
     }
 

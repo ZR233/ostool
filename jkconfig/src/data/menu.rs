@@ -67,8 +67,9 @@ impl Debug for MenuRoot {
             .field("path", &self.menu.path)
             .field("help", &self.menu.help)
             .field("is_required", &self.menu.is_required)
-            .field("children", &self.menu().children)
+            .field("struct_name", &self.menu.struct_name)
             .field("is_set", &self.menu().is_set)
+            .field("children", &self.menu().children)
             .finish()
     }
 }
@@ -217,8 +218,9 @@ impl Debug for Menu {
             .field("title", &self.title)
             .field("help", &self.help)
             .field("is_required", &self.is_required)
-            .field("children", &self.children)
             .field("is_set", &self.is_set)
+            .field("struct_name", &self.struct_name)
+            .field("children", &self.children)
             .finish()
     }
 }
