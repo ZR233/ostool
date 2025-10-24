@@ -39,12 +39,15 @@ pub fn show_integer_edit(
                 .unwrap();
 
             match content.parse::<i64>() {
-                Ok(_num) => {
+                Ok(num) => {
+                    info!("Setting integer value for key {}: {}", key, num);
+
                     if let Some(app) = s.user_data::<crate::data::app_data::AppData>()
                         && let Some(ElementType::Item(item)) = app.root.get_mut_by_key(&key)
                         && let ItemType::Integer { value, .. } = &mut item.item_type
                     {
-                        *value = Some(_num);
+                        info!("Old value: {:?}", value);
+                        *value = Some(num);
                     }
                     handle_back(s);
                 }

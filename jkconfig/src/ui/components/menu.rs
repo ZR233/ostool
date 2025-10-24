@@ -23,7 +23,7 @@ pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl Into
 
     select.set_on_select(on_select);
     select.set_on_submit(on_submit);
-    menu_select_flush_fields(&mut select, fields);
+    menu_select_flush_fields(&mut select, &fields);
     info!("Created menu view for path: {}", path);
     let select = select.with_name(menu_select_name);
 
@@ -86,20 +86,20 @@ pub fn menu_select_flush(s: &mut Cursive, path: &str) {
     {
         info!("Found menu: {}", menu.key());
         let name = menu_view_name(path);
-        let fields = menu.children.values().cloned().collect();
-        s.call_on_name(&name, |view: &mut SelectView<ElementType>| {
-            menu_select_flush_fields(view, fields);
+        let fields = menu.children.values().cloned().collect::<Vec<_>>();
+        s.call_on_all_named(&name, |view: &mut SelectView<ElementType>| {
+            menu_select_flush_fields(view, &fields);
         });
     }
 }
 
-fn menu_select_flush_fields(view: &mut SelectView<ElementType>, fields: Vec<ElementType>) {
+fn menu_select_flush_fields(view: &mut SelectView<ElementType>, fields: &[ElementType]) {
     let select_old = view.selected_id();
     view.clear();
     // 为每个字段添加带格式的项
     for field in fields {
         let label = format_item_label(&field);
-        view.add_item(label, field);
+        view.add_item(label, field.clone());
     }
     // 恢复之前的选择位置
     if let Some(idx) = select_old
