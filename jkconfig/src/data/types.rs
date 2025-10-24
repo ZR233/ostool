@@ -126,6 +126,28 @@ impl ElementType {
             },
         }
     }
+
+    pub fn set_none(&mut self) {
+        if self.is_required {
+            return;
+        }
+
+        match self {
+            ElementType::Menu(menu) => {
+                menu.is_set = false;
+            }
+            ElementType::OneOf(one_of) => {
+                one_of.selected_index = None;
+            }
+            ElementType::Item(item) => match &mut item.item_type {
+                super::item::ItemType::String { value, .. } => *value = None,
+                super::item::ItemType::Number { value, .. } => *value = None,
+                super::item::ItemType::Integer { value, .. } => *value = None,
+                super::item::ItemType::Boolean { value, .. } => *value = false,
+                super::item::ItemType::Enum(enum_item) => enum_item.value = None,
+            },
+        }
+    }
 }
 
 #[cfg(test)]

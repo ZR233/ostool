@@ -61,15 +61,29 @@ pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl Into
     )
     .on_event(Event::Char('m'), on_change_set)
     .on_event(Key::Tab, on_oneof_switch)
-    .on_event(Event::Char('r'), on_reset_value)
+    .on_event(Event::Char('c'), on_clear)
 }
 
-fn on_reset_value(s: &mut Cursive) {
+fn on_clear(s: &mut Cursive) {
     let Some(selected) = menu_selected(s) else {
         return;
     };
 
-    info!("Resetting value for selected item {}", selected.key());
+    info!("Clear value for selected item {}", selected.key());
+    update_selected(s, |elem| elem.set_none());
+}
+
+fn update_selected(s: &mut Cursive, f: impl Fn(&mut ElementType)) {
+    let Some(selected) = menu_selected(s) else {
+        return;
+    };
+
+    if let Some(app) = s.user_data::<AppData>()
+        && let Some(elem) = app.root.get_mut_by_key(&selected.key())
+    {
+        f(elem);
+        menu_flush(s);
+    }
 }
 
 fn menu_selected(s: &mut Cursive) -> Option<ElementType> {
