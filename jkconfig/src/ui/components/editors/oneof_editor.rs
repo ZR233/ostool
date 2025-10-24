@@ -21,8 +21,6 @@ pub fn show_oneof_dialog(s: &mut Cursive, one_of: &OneOf) {
         select.add_item(label, idx);
     }
 
-    let key = one_of.base.key();
-
     s.add_layer(
         OnEventView::new(
             Dialog::around(

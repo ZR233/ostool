@@ -88,13 +88,16 @@ impl AppData {
     }
 
     pub fn on_exit(&mut self) -> anyhow::Result<()> {
-        if self.needs_save && self.config.exists() {
-            let ext = self
-                .config
-                .extension()
-                .and_then(|s| s.to_str())
-                .unwrap_or("");
+        if !self.needs_save {
+            return Ok(());
+        }
+        let ext = self
+            .config
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("");
 
+        if self.config.exists() {
             let bk = format!(
                 "bk-{:?}.{ext}",
                 SystemTime::now()
@@ -104,19 +107,18 @@ impl AppData {
 
             let backup_path = self.config.with_extension(bk);
             fs::copy(&self.config, &backup_path)?;
-
-            let json_value = self.root.as_json();
-
-            let s = match ext {
-                "toml" | "tml" => toml::to_string_pretty(&json_value)?,
-                "json" => serde_json::to_string_pretty(&json_value)?,
-                _ => {
-                    bail!("Unsupported config file extension: {}", ext);
-                }
-            };
-            fs::write(&self.config, s)?;
         }
 
+        let json_value = self.root.as_json();
+
+        let s = match ext {
+            "toml" | "tml" => toml::to_string_pretty(&json_value)?,
+            "json" => serde_json::to_string_pretty(&json_value)?,
+            _ => {
+                bail!("Unsupported config file extension: {}", ext);
+            }
+        };
+        fs::write(&self.config, s)?;
         Ok(())
     }
 

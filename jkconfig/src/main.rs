@@ -82,6 +82,7 @@ fn handle_save(siv: &mut Cursive) {
                 if let Err(e) = app.on_exit() {
                     error!("Failed to save config: {}", e);
                 }
+                s.quit();
             })
             .button("Cancel", |s| {
                 s.pop_layer();
