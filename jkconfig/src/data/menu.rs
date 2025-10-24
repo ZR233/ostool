@@ -195,21 +195,17 @@ impl Menu {
     }
 
     pub fn get_child_by_key(&self, key: &str) -> Option<&ElementType> {
-        for child in &self.children {
-            if child.field_name() == key {
-                return Some(child);
-            }
-        }
-        None
+        self.children
+            .iter()
+            .find(|&child| child.field_name() == key)
+            .map(|v| v as _)
     }
 
     pub fn get_child_mut_by_key(&mut self, key: &str) -> Option<&mut ElementType> {
-        for child in &mut self.children {
-            if child.field_name() == key {
-                return Some(child);
-            }
-        }
-        None
+        self.children
+            .iter_mut()
+            .find(|child| child.field_name() == key)
+            .map(|v| v as _)
     }
 }
 

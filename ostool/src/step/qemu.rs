@@ -109,7 +109,7 @@ impl Step for Qemu {
                 })
                 .unwrap();
 
-            if test_success.lock().unwrap().clone() {
+            if *test_success.lock().unwrap() {
                 exit(0);
             } else {
                 exit(1);

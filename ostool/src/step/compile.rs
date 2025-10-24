@@ -131,11 +131,10 @@ impl Compile {
         let elf_file = target_dir.join("kernel.elf");
         let _ = std::fs::remove_file(&elf_file);
 
-        if let Some(ref elf) = config.elf {
-            if !elf.trim().is_empty() {
+        if let Some(ref elf) = config.elf
+            && !elf.trim().is_empty() {
                 std::fs::copy(elf, elf_file).unwrap();
             }
-        }
 
         project.out_dir = Some(
             project

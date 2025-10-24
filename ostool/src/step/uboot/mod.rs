@@ -4,7 +4,6 @@ use std::{
     io::{self, Read, Write},
     path::PathBuf,
     process::exit,
-    sync::atomic::fence,
     thread::{self, sleep},
     time::Duration,
 };
@@ -145,8 +144,8 @@ impl Step for Uboot {
         let mut fdtfile = String::new();
         let mut env_map = HashMap::new();
 
-        if let Some(dtb) = PathBuf::from(&config.dtb_file).file_name() {
-            if !dtb.is_empty() {
+        if let Some(dtb) = PathBuf::from(&config.dtb_file).file_name()
+            && !dtb.is_empty() {
                 let dtb_name = dtb.to_str().unwrap().to_string();
 
                 fdtfile = dtb_name.to_string();
@@ -164,7 +163,6 @@ impl Step for Uboot {
                     )
                 });
             }
-        }
 
         match &config.net {
             Some(net) => {
@@ -241,15 +239,14 @@ impl Step for Uboot {
         println!("{}", "Uboot shell ok".green());
         sleep(Duration::from_millis(500));
 
-        if config.net.is_some() {
-            if let Ok(output) = uboot.cmd("net list") {
+        if config.net.is_some()
+            && let Ok(output) = uboot.cmd("net list") {
                 let device_list = output.strip_prefix("net list").unwrap_or(&output).trim();
 
                 if device_list.is_empty() {
                     let _ = uboot.cmd_without_reply("bootdev hunt ethernet");
                 }
             }
-        }
 
         let loadaddr = uboot.env_int("loadaddr").unwrap_or_else(|_e| {
             println!("$loadaddr not found");
@@ -304,8 +301,8 @@ impl Step for Uboot {
 
             thread::spawn(move || {
                 loop {
-                    if let Ok(Event::Key(key)) = event::read() {
-                        if matches!(key.kind, event::KeyEventKind::Release) {
+                    if let Ok(Event::Key(key)) = event::read()
+                        && matches!(key.kind, event::KeyEventKind::Release) {
                             match key.code {
                                 KeyCode::Char(ch) => {
                                     port_tx.write_all(&[ch as u8]).unwrap();
@@ -319,7 +316,6 @@ impl Step for Uboot {
                                 _ => {}
                             }
                         }
-                    }
                 }
             });
         }
