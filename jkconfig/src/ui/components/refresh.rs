@@ -42,10 +42,10 @@ pub fn refresh_current_menu(s: &mut Cursive) {
         }
 
         // 恢复之前的选择位置
-        if let Some(idx) = current_selection {
-            if idx < view.len() {
-                view.set_selection(idx);
-            }
+        if let Some(idx) = current_selection
+            && idx < view.len()
+        {
+            view.set_selection(idx);
         }
     });
 }

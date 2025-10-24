@@ -28,6 +28,7 @@ thiserror = "2.0"
 log = "0.4"
 
 [dev-dependencies]
+env_logger = "0.11"
 schemars = {version = "1.0.4", features = ["derive"]}
 serde = {version = "1.0", features = ["derive"]}
 tokio-test = "0.4"

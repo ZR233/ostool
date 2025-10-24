@@ -4,6 +4,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+use log::trace;
 use serde_json::Value;
 
 use crate::data::{
@@ -51,7 +52,7 @@ impl MenuRoot {
     }
 
     pub fn update_by_value(&mut self, value: &Value) -> Result<(), SchemaError> {
-        self.menu_mut().update_from_value(value)
+        self.menu.update_from_value(value, None)
     }
 
     pub fn as_json(&self) -> Value {
@@ -160,48 +161,66 @@ impl Menu {
     }
 
     pub fn update_from_value(&mut self, value: &Value) -> Result<(), SchemaError> {
-        match value {
-            Value::Object(map) => {
-                // First pass: collect mappings from JSON keys to child keys
-                let mut key_mappings = Vec::new();
-                {
-                    for (child_key, child_element) in &self.children {
-                        if let ElementType::Menu(child_menu) = child_element {
-                            key_mappings.push((child_menu.field_name(), child_key.clone()));
-                        } else if let ElementType::Item(item) = child_element {
-                            key_mappings.push((item.base.field_name(), child_key.clone()));
-                        } else if let ElementType::OneOf(oneof) = child_element {
-                            key_mappings.push((oneof.field_name(), child_key.clone()));
-                        }
-                    }
-                }
-
-                // Second pass: update elements using the mappings
-                for (key, val) in map {
-                    let mut found_child_key = None;
-                    for (field_name, child_key) in &key_mappings {
-                        if *field_name == *key {
-                            found_child_key = Some(child_key);
-                            break;
-                        }
-                    }
-
-                    if let Some(child_key) = found_child_key
-                        && let Some(element) = self.children.get_mut(child_key)
-                    {
-                        element.update_from_value(val)?;
-                    }
-                    // If key doesn't exist in menu children, skip it as per requirement
-                }
-                Ok(())
+        let value = value.as_object().ok_or(SchemaError::TypeMismatch {
+            path: self.key(),
+            expected: "object".to_string(),
+            actual: serde_json::to_string_pretty(value).unwrap(),
+        })?;
+        trace!("Updating Menu at {} with value: {:?}", self.key(), value);
+        for (key, val) in value {
+            if let Some(element) = self.children.get_mut(key) {
+                element.update_from_value(val, None)?;
+                trace!("Updated child {} of Menu at {}", key, self.key());
             }
-            _ => Err(SchemaError::TypeMismatch {
-                path: self.base.key(),
-                expected: "object".to_string(),
-                actual: format!("{}", value),
-            }),
+            // If key doesn't exist in menu children, skip it as per requirement
         }
+
+        Ok(())
     }
+
+    // pub fn update_from_value(&mut self, value: &Value) -> Result<(), SchemaError> {
+    //     match value {
+    //         Value::Object(map) => {
+    //             // First pass: collect mappings from JSON keys to child keys
+    //             let mut key_mappings = Vec::new();
+    //             {
+    //                 for (child_key, child_element) in &self.children {
+    //                     if let ElementType::Menu(child_menu) = child_element {
+    //                         key_mappings.push((child_menu.field_name(), child_key.clone()));
+    //                     } else if let ElementType::Item(item) = child_element {
+    //                         key_mappings.push((item.base.field_name(), child_key.clone()));
+    //                     } else if let ElementType::OneOf(oneof) = child_element {
+    //                         key_mappings.push((oneof.field_name(), child_key.clone()));
+    //                     }
+    //                 }
+    //             }
+
+    //             // Second pass: update elements using the mappings
+    //             for (key, val) in map {
+    //                 let mut found_child_key = None;
+    //                 for (field_name, child_key) in &key_mappings {
+    //                     if *field_name == *key {
+    //                         found_child_key = Some(child_key);
+    //                         break;
+    //                     }
+    //                 }
+
+    //                 if let Some(child_key) = found_child_key
+    //                     && let Some(element) = self.children.get_mut(child_key)
+    //                 {
+    //                     element.update_from_value(val)?;
+    //                 }
+    //                 // If key doesn't exist in menu children, skip it as per requirement
+    //             }
+    //             Ok(())
+    //         }
+    //         _ => Err(SchemaError::TypeMismatch {
+    //             path: self.base.key(),
+    //             expected: "object".to_string(),
+    //             actual: format!("{}", value),
+    //         }),
+    //     }
+    // }
 
     pub fn fields(&self) -> Vec<ElementType> {
         self.children

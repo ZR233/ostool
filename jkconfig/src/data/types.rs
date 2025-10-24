@@ -90,9 +90,24 @@ impl DerefMut for ElementType {
 }
 
 impl ElementType {
-    pub fn update_from_value(&mut self, value: &Value) -> Result<(), SchemaError> {
+    pub fn update_from_value(
+        &mut self,
+        value: &Value,
+        struct_name: Option<&str>,
+    ) -> Result<(), SchemaError> {
         match self {
-            ElementType::Menu(menu) => menu.update_from_value(value),
+            ElementType::Menu(menu) => {
+                if let Some(name) = struct_name
+                    && menu.struct_name.as_str() != name
+                {
+                    return Err(SchemaError::TypeMismatch {
+                        path: menu.key(),
+                        expected: name.to_string(),
+                        actual: menu.struct_name.clone(),
+                    });
+                }
+                menu.update_from_value(value)
+            }
             ElementType::OneOf(one_of) => one_of.update_from_value(value),
             ElementType::Item(item) => item.update_from_value(value),
         }

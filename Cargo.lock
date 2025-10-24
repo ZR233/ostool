@@ -993,6 +993,7 @@ dependencies = [
  "anyhow",
  "clap",
  "cursive",
+ "env_logger",
  "log",
  "schemars",
  "serde",

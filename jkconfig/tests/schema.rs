@@ -63,6 +63,8 @@ fn test_object() {
 
 #[test]
 fn test_value() {
+    env_logger::builder().is_test(true).init();
+
     let schema = schema_for!(AnimalObject);
 
     let origin = AnimalObject {
@@ -86,11 +88,65 @@ fn test_value() {
 
     println!("Origin MenuRoot : \n{menu:#?}",);
 
+    println!(
+        "Json value to update: \n{}",
+        serde_json::to_string_pretty(&value).unwrap()
+    );
+
     menu.update_by_value(&value).unwrap();
 
     println!("Updated MenuRoot: \n{:#?}", menu);
 
     let actual_value = menu.as_json();
+
+    println!(
+        "Actual JSON value from MenuRoot: \n{}",
+        serde_json::to_string_pretty(&actual_value).unwrap()
+    );
+
+    let actual: AnimalObject = serde_json::from_value(actual_value).unwrap();
+
+    assert_eq!(origin.animal, actual.animal);
+}
+
+#[test]
+fn test_value_enum() {
+    env_logger::builder().is_test(true).init();
+
+    let schema = schema_for!(AnimalObject);
+
+    let origin = AnimalObject {
+        animal: AnimalEnum::Rabbit,
+    };
+
+    let value = schema.as_value();
+
+    println!(
+        "Generated JSON Schema Value: \n{}",
+        serde_json::to_string_pretty(&value).unwrap()
+    );
+
+    let mut menu = MenuRoot::try_from(value).unwrap();
+
+    let value = serde_json::to_value(&origin).unwrap();
+
+    println!("Origin MenuRoot : \n{menu:#?}",);
+
+    println!(
+        "Json value to update: \n{}",
+        serde_json::to_string_pretty(&value).unwrap()
+    );
+
+    menu.update_by_value(&value).unwrap();
+
+    println!("Updated MenuRoot: \n{:#?}", menu);
+
+    let actual_value = menu.as_json();
+
+    println!(
+        "Actual JSON value from MenuRoot: \n{}",
+        serde_json::to_string_pretty(&actual_value).unwrap()
+    );
 
     let actual: AnimalObject = serde_json::from_value(actual_value).unwrap();
 

@@ -1,5 +1,5 @@
 use cursive::{
-    Cursive, menu,
+    Cursive,
     theme::{ColorStyle, Effect, Style},
     utils::markup::StyledString,
     view::{IntoBoxedView, Nameable, Resizable, Scrollable},

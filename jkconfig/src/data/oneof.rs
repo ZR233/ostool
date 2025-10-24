@@ -8,6 +8,7 @@ use crate::data::{
     types::{ElementBase, ElementType},
 };
 
+use log::trace;
 use serde_json::Value;
 
 #[derive(Clone)]
@@ -76,148 +77,58 @@ impl OneOf {
         None
     }
 
-    /// Try to determine which variant matches the given value structure
-    fn find_matching_variant(&self, value: &Value) -> Result<usize, SchemaError> {
-        match value {
-            Value::Object(map) => {
-                // For OneOf, we need to determine which variant matches the structure
-                // Each variant typically has a single key that identifies the variant
-                for (idx, variant) in self.variants.iter().enumerate() {
-                    match variant {
-                        ElementType::Menu(menu) => {
-                            // Check if any key in the map matches a child menu's field name
-                            for key in map.keys() {
-                                // Look through children to find a matching field name
-                                for child_element in menu.children.values() {
-                                    if let ElementType::Menu(child_menu) = child_element {
-                                        // Check if the key matches this child menu's field name
-                                        if child_menu.field_name() == *key {
-                                            return Ok(idx);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        _ => {
-                            // For non-menu variants, try to update directly
-                            if let Ok(()) = variant.clone().update_from_value(value) {
-                                return Ok(idx);
-                            }
-                        }
-                    }
-                }
-                Err(SchemaError::TypeMismatch {
-                    path: self.base.key(),
-                    expected: format!(
-                        "one of: {:?}",
-                        self.variants
-                            .iter()
-                            .filter_map(|v| {
-                                if let ElementType::Menu(menu) = v {
-                                    Some(
-                                        menu.children
-                                            .iter()
-                                            .filter_map(|(_k, e)| {
-                                                if let ElementType::Menu(child_menu) = e {
-                                                    Some(child_menu.field_name())
-                                                } else {
-                                                    None
-                                                }
-                                            })
-                                            .collect::<Vec<_>>(),
-                                    )
-                                } else {
-                                    None
-                                }
-                            })
-                            .collect::<Vec<_>>()
-                    ),
-                    actual: format!("object with keys: {:?}", map.keys().collect::<Vec<_>>()),
-                })
-            }
-            _ => {
-                // For non-object values, try each variant
-                for (idx, variant) in self.variants.iter().enumerate() {
-                    if let Ok(()) = variant.clone().update_from_value(value) {
-                        return Ok(idx);
-                    }
-                }
-                Err(SchemaError::TypeMismatch {
-                    path: self.base.key(),
-                    expected: "matching variant".to_string(),
-                    actual: format!("{}", value),
-                })
-            }
-        }
+    fn try_update_index(&mut self, index: usize, name: Option<&str>, value: &Value) -> bool {
+        let Some(variant) = self.variants.get_mut(index) else {
+            return false;
+        };
+        trace!("Try index {index} , {variant:?}");
+        variant.update_from_value(value, name).is_ok()
     }
 
     pub fn update_from_value(&mut self, value: &Value) -> Result<(), SchemaError> {
-        // Always re-determine which variant should be selected
-        let variant_idx = self.find_matching_variant(value)?;
-
-        // Set the selected variant
-        self.selected_index = Some(variant_idx);
-
-        // Update the selected variant with the value
-        if let Some(variant) = self.variants.get_mut(variant_idx) {
-            match value {
-                Value::Object(map) => {
-                    // For OneOf with single-property objects, extract the inner value
-                    if let ElementType::Menu(menu) = variant {
-                        // First pass: find the matching field name
-                        let mut matching_field = None;
-                        {
-                            let menu_clone = menu.clone();
-                            for child_element in menu_clone.children.values() {
-                                if let ElementType::Menu(child_menu) = child_element {
-                                    let field_name = child_menu.field_name();
-                                    if map.contains_key(&field_name) {
-                                        matching_field = Some(field_name);
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-
-                        // Second pass: update the matching child
-                        if let Some(field_name) = matching_field
-                            && let Some(inner_val) = map.get(&field_name)
-                        {
-                            for child_element_mut in menu.children.values_mut() {
-                                if let ElementType::Menu(child_menu_mut) = child_element_mut
-                                    && child_menu_mut.field_name() == field_name
-                                {
-                                    return child_menu_mut.update_from_value(inner_val);
-                                }
-                            }
-                        }
-
-                        // If no matching child found, update with the whole object
-                        menu.update_from_value(value)
-                    } else {
-                        // For non-menu variants, update directly
-                        variant.update_from_value(value)
-                    }
-                }
-                _ => variant.update_from_value(value),
-            }
-        } else {
-            Err(SchemaError::TypeMismatch {
-                path: self.base.key(),
-                expected: format!("valid variant index 0-{}", self.variants.len() - 1),
-                actual: format!("{}", variant_idx),
-            })
+        let mut name: Option<String> = None;
+        let mut value = value;
+        if let Some(obj) = value.as_object()
+            && let Some((struct_name, inner_value)) = obj.iter().next()
+        {
+            name = Some(struct_name.clone());
+            value = inner_value;
         }
+
+        trace!(
+            "Updating OneOf at {} type `{name:?}` with value: {:?}",
+            self.key(),
+            value
+        );
+        for idx in 0..self.variants.len() {
+            if self.try_update_index(idx, name.as_deref(), value) {
+                self.selected_index = Some(idx);
+                return Ok(());
+            }
+        }
+        Err(SchemaError::TypeMismatch {
+            path: self.key(),
+            expected: self
+                .variants
+                .iter()
+                .map(|v| v.struct_name.to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
+            actual: serde_json::to_string_pretty(value).unwrap(),
+        })
     }
 
     pub fn as_json(&self) -> Value {
         if let Some(selected) = self.selected() {
             match selected {
                 ElementType::Menu(menu) => {
+                    let mut obj = serde_json::Map::new();
+                    obj.insert(menu.struct_name.clone(), menu.as_json());
+
                     let mut result = serde_json::Map::new();
                     // For OneOf, the variant name should be the field name from the menu
                     let variant_name = menu.field_name();
-                    result.insert(variant_name, menu.as_json());
+                    result.insert(variant_name, Value::Object(obj));
                     Value::Object(result)
                 }
                 ElementType::Item(item) => {

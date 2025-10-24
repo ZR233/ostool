@@ -3,7 +3,7 @@ use std::{collections::HashSet, ops::Deref, path::PathBuf};
 use serde_json::Value;
 
 use crate::data::{
-    item::{Item, ItemType},
+    item::{EnumItem, Item, ItemType},
     menu::{Menu, MenuRoot},
     oneof::OneOf,
     types::{ElementBase, ElementType},
@@ -201,10 +201,27 @@ impl WalkContext {
                 let item = Item {
                     base: ElementBase::new(&self.path, self.description()?, is_required, ty_str),
                     item_type: match ty_str {
-                        "string" => ItemType::String {
-                            value: None,
-                            default: None,
-                        },
+                        "string" => {
+                            if let Some(enum_values) = self.get("enum")
+                                && let Some(variants) = enum_values.as_array()
+                            {
+                                let variant_strings = variants
+                                    .iter()
+                                    .filter_map(|v| v.as_str().map(String::from))
+                                    .collect::<Vec<_>>();
+
+                                ItemType::Enum(EnumItem {
+                                    variants: variant_strings,
+                                    value: None,
+                                    default: None,
+                                })
+                            } else {
+                                ItemType::String {
+                                    value: None,
+                                    default: None,
+                                }
+                            }
+                        }
                         "number" => ItemType::Number {
                             value: None,
                             default: None,
