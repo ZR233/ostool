@@ -46,6 +46,7 @@ pub fn show_string_edit(
             {
                 *value = Some(st.to_string());
             }
+            handle_back(s);
         })
         .button("Cancel", handle_back),
     );

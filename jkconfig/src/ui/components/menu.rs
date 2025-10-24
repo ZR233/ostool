@@ -10,7 +10,7 @@ use log::info;
 
 use crate::{
     data::{AppData, item::ItemType, menu::Menu, types::ElementType},
-    ui::handle_back,
+    ui::handle_edit,
 };
 
 use super::editors::*;
@@ -24,7 +24,7 @@ pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl Into
     select.set_on_select(on_select);
     select.set_on_submit(on_submit);
     menu_select_flush_fields(&mut select, fields);
-
+    info!("Created menu view for path: {}", path);
     let select = select.with_name(menu_select_name);
 
     // 创建路径显示面板
@@ -80,9 +80,11 @@ pub fn menu_view_name(path: &str) -> String {
 }
 
 pub fn menu_select_flush(s: &mut Cursive, path: &str) {
+    info!("Flushing menu select for path: {}", path);
     if let Some(app) = s.user_data::<AppData>()
         && let Some(ElementType::Menu(menu)) = app.root.get_by_key(path)
     {
+        info!("Found menu: {}", menu.key());
         let name = menu_view_name(path);
         let fields = menu.children.values().cloned().collect();
         s.call_on_name(&name, |view: &mut SelectView<ElementType>| {
@@ -307,7 +309,6 @@ pub fn enter_menu(s: &mut Cursive, menu: &Menu) {
 }
 
 fn enter_elem(s: &mut Cursive, elem: &ElementType) {
-    
     let key = elem.key();
     info!("Entering key: {}, type {}", key, elem.struct_name);
     match elem {
@@ -330,7 +331,7 @@ fn enter_elem(s: &mut Cursive, elem: &ElementType) {
             show_oneof_dialog(s, one_of);
         }
         ElementType::Item(item) => {
-            info!("Handling Item: {}", item.base.title);
+            info!("Handling Item: {}", item.base.key());
             // 根据类型显示编辑对话框
             match &item.item_type {
                 ItemType::Boolean { .. } => {
@@ -341,7 +342,7 @@ fn enter_elem(s: &mut Cursive, elem: &ElementType) {
                     {
                         *value = !*value;
                     }
-                    handle_back(s);
+                    handle_edit(s);
                 }
                 ItemType::String { value, default } => {
                     show_string_edit(s, &item.base.key(), &item.base.title, value, default);
@@ -364,6 +365,7 @@ pub fn enter_key(s: &mut Cursive, key: &str) {
     if let Some(app) = s.user_data::<AppData>()
         && let Some(item) = app.root.get_by_key(key).cloned()
     {
+        info!("Entering key: {}, got {}", key, item.key());
         app.enter(key);
         enter_elem(s, &item);
     }
@@ -371,5 +373,6 @@ pub fn enter_key(s: &mut Cursive, key: &str) {
 
 /// 处理项目选择
 fn on_submit(s: &mut Cursive, item: &ElementType) {
+    info!("Submitting item: {}", item.key());
     enter_key(s, &item.key());
 }

@@ -55,19 +55,24 @@ impl OneOf {
         }
 
         let selected = self.selected()?;
-
-        if field_path.len() == 1 {
-            return Some(selected);
-        }
+        info!(
+            "OneOf get by field path: {:?}, selected: {:?}",
+            field_path,
+            selected.key()
+        );
 
         match selected {
             ElementType::Menu(menu) => {
-                return menu.get_by_field_path(&field_path[1..]);
+                return menu.get_by_field_path(field_path);
             }
             ElementType::OneOf(one_of) => {
                 return one_of.get_by_field_path(&field_path[1..]);
             }
-            _ => {}
+            _ => {
+                if field_path.len() == 1 {
+                    return Some(selected);
+                }
+            }
         }
 
         None

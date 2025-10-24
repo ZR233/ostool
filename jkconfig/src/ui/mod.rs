@@ -19,6 +19,14 @@ pub fn handle_back(siv: &mut Cursive) {
     }
 }
 
+pub fn handle_edit(siv: &mut Cursive) {
+    if let Some(app) = siv.user_data::<AppData>() {
+        app.navigate_back();
+        let key = app.key_string();
+        menu_select_flush(siv, &key);
+    }
+}
+
 pub fn enter_submenu(siv: &mut Cursive, key: &str) {
     if let Some(app) = siv.user_data::<AppData>() {
         app.enter(key);

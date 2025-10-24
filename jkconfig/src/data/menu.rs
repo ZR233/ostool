@@ -124,7 +124,7 @@ impl Menu {
         if field_path.is_empty() {
             return None;
         }
-
+        info!("menu get by field path: {:?}", field_path);
         let first_field = field_path[0];
 
         let child = self.children.get(first_field)?;
