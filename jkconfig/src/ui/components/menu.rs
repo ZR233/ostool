@@ -1,17 +1,19 @@
 use cursive::{
     Cursive,
+    event::Event,
     theme::{ColorStyle, Effect, Style},
     utils::markup::StyledString,
     view::{IntoBoxedView, Nameable, Resizable, Scrollable},
-    views::{DummyView, LinearLayout, Panel, SelectView, TextView},
+    views::{DummyView, LinearLayout, OnEventView, Panel, SelectView, TextView},
+};
+use log::info;
+
+use crate::{
+    data::{AppData, item::ItemType, menu::Menu, types::ElementType},
+    ui::handle_back,
 };
 
-use crate::data::{AppData, item::ItemType, menu::Menu, types::ElementType};
-
-use super::editors::{
-    show_enum_select, show_integer_edit, show_number_edit, show_oneof_dialog, show_string_edit,
-    toggle_boolean,
-};
+use super::editors::*;
 
 /// 创建菜单视图
 pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl IntoBoxedView {
@@ -46,35 +48,62 @@ pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl Into
         .fixed_height(5);
 
     // 构建主布局
+    OnEventView::new(
+        LinearLayout::vertical()
+            .child(TextView::new(title).center())
+            .child(Panel::new(path_view).full_width())
+            .child(DummyView)
+            .child(select.scrollable().full_width().min_height(10))
+            .child(DummyView)
+            .child(Panel::new(detail_view).title("Help").full_width())
+            .child(DummyView)
+            .child(Panel::new(help_view).full_width()),
+    )
+    .on_event(Event::Char('m'), on_change_set)
+}
 
-    LinearLayout::vertical()
-        .child(TextView::new(title).center())
-        .child(Panel::new(path_view).full_width())
-        .child(DummyView)
-        .child(select.scrollable().full_width().min_height(10))
-        .child(DummyView)
-        .child(Panel::new(detail_view).title("Help").full_width())
-        .child(DummyView)
-        .child(Panel::new(help_view).full_width())
+fn on_change_set(s: &mut Cursive) {
+    if let Some(app) = s.user_data::<AppData>()
+        && let Some(ElementType::Menu(v)) = &app.select_field
+    {
+        let key = v.key();
+        let ElementType::Menu(v) = app.root.get_mut_by_key(&key).unwrap() else {
+            return;
+        };
+        v.is_set = !v.is_set;
+        menu_select_flush(s, &key);
+    }
 }
 
 pub fn menu_view_name(path: &str) -> String {
     format!("menu_view_{path}")
 }
 
-pub fn menu_select_flush(s: &mut Cursive, path: &str, fields: &[ElementType]) {
-    let name = menu_view_name(path);
-    s.call_on_name(&name, |view: &mut SelectView<ElementType>| {
-        menu_select_flush_fields(view, fields.to_vec());
-    });
+pub fn menu_select_flush(s: &mut Cursive, path: &str) {
+    if let Some(app) = s.user_data::<AppData>()
+        && let Some(ElementType::Menu(menu)) = app.root.get_by_key(path)
+    {
+        let name = menu_view_name(path);
+        let fields = menu.children.values().cloned().collect();
+        s.call_on_name(&name, |view: &mut SelectView<ElementType>| {
+            menu_select_flush_fields(view, fields);
+        });
+    }
 }
 
 fn menu_select_flush_fields(view: &mut SelectView<ElementType>, fields: Vec<ElementType>) {
+    let select_old = view.selected_id();
     view.clear();
     // 为每个字段添加带格式的项
     for field in fields {
         let label = format_item_label(&field);
         view.add_item(label, field);
+    }
+    // 恢复之前的选择位置
+    if let Some(idx) = select_old
+        && idx < view.len()
+    {
+        view.set_selection(idx);
     }
 }
 
@@ -184,6 +213,10 @@ fn create_status_text() -> &'static str {
 
 /// 当选择项改变时更新详细信息
 fn on_select(s: &mut Cursive, item: &ElementType) {
+    if let Some(app) = s.user_data::<AppData>() {
+        app.select_field = Some(item.clone());
+    }
+
     let detail = match item {
         ElementType::Menu(menu) => {
             let mut text = format!("Menu: {}\n", menu.title);
@@ -273,42 +306,66 @@ pub fn enter_menu(s: &mut Cursive, menu: &Menu) {
     s.add_fullscreen_layer(menu_view(&title, &path, fields));
 }
 
+fn enter_elem(s: &mut Cursive, elem: &ElementType) {
+    
+    let key = elem.key();
+    info!("Entering key: {}, type {}", key, elem.struct_name);
+    match elem {
+        ElementType::Menu(menu) => {
+            info!("Handling Menu: {}", menu.title);
+            // 进入子菜单
+            enter_menu(s, menu);
+        }
+        ElementType::OneOf(one_of) => {
+            info!("Handling OneOf: {}", one_of.title);
+            if let Some(selected) = one_of.selected()
+                && let ElementType::Menu(menu) = selected
+            {
+                // 进入子菜单
+                enter_menu(s, menu);
+                return;
+            }
+
+            // 显示 OneOf 选择对话框
+            show_oneof_dialog(s, one_of);
+        }
+        ElementType::Item(item) => {
+            info!("Handling Item: {}", item.base.title);
+            // 根据类型显示编辑对话框
+            match &item.item_type {
+                ItemType::Boolean { .. } => {
+                    // Boolean 类型直接切换
+                    if let Some(ElementType::Item(b)) =
+                        s.user_data::<AppData>().unwrap().root.get_mut_by_key(&key)
+                        && let ItemType::Boolean { value, .. } = &mut b.item_type
+                    {
+                        *value = !*value;
+                    }
+                    handle_back(s);
+                }
+                ItemType::String { value, default } => {
+                    show_string_edit(s, &item.base.key(), &item.base.title, value, default);
+                }
+                ItemType::Number { value, default } => {
+                    show_number_edit(s, &item.base.key(), &item.base.title, *value, *default);
+                }
+                ItemType::Integer { value, default } => {
+                    show_integer_edit(s, &item.base.key(), &item.base.title, *value, *default);
+                }
+                ItemType::Enum(enum_item) => {
+                    show_enum_select(s, &item.base.key(), &item.base.title, enum_item);
+                }
+            }
+        }
+    }
+}
+
 pub fn enter_key(s: &mut Cursive, key: &str) {
     if let Some(app) = s.user_data::<AppData>()
         && let Some(item) = app.root.get_by_key(key).cloned()
     {
         app.enter(key);
-        match item {
-            ElementType::Menu(menu) => {
-                // 进入子菜单
-                enter_menu(s, &menu);
-            }
-            ElementType::OneOf(one_of) => {
-                // 显示 OneOf 选择对话框
-                show_oneof_dialog(s, &one_of);
-            }
-            ElementType::Item(item) => {
-                // 根据类型显示编辑对话框
-                match &item.item_type {
-                    ItemType::Boolean { .. } => {
-                        // Boolean 类型直接切换
-                        toggle_boolean(s, &item.base.key());
-                    }
-                    ItemType::String { value, default } => {
-                        show_string_edit(s, &item.base.key(), &item.base.title, value, default);
-                    }
-                    ItemType::Number { value, default } => {
-                        show_number_edit(s, &item.base.key(), &item.base.title, *value, *default);
-                    }
-                    ItemType::Integer { value, default } => {
-                        show_integer_edit(s, &item.base.key(), &item.base.title, *value, *default);
-                    }
-                    ItemType::Enum(enum_item) => {
-                        show_enum_select(s, &item.base.key(), &item.base.title, enum_item);
-                    }
-                }
-            }
-        }
+        enter_elem(s, &item);
     }
 }
 

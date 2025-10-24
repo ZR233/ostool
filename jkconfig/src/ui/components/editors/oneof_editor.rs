@@ -9,6 +9,7 @@ use crate::{data::oneof::OneOf, ui::handle_back};
 
 /// 显示 OneOf 选择对话框
 pub fn show_oneof_dialog(s: &mut Cursive, one_of: &OneOf) {
+    info!("Showing OneOf dialog for: {}", one_of.title);
     let mut select = SelectView::new();
 
     for (idx, _) in one_of.variants.iter().enumerate() {
@@ -47,7 +48,8 @@ fn on_ok(s: &mut Cursive) {
         && let Some(current) = app.current_mut()
         && let crate::data::types::ElementType::OneOf(one_of) = current
     {
-        one_of.selected_index = Some(*idx);
+        let _ = one_of.set_selected_index(*idx);
+
         handle_back(s);
     }
 }

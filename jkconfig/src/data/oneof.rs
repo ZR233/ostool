@@ -4,6 +4,7 @@ use std::{
 };
 
 use crate::data::{
+    item::ItemType,
     schema::SchemaError,
     types::{ElementBase, ElementType},
 };
@@ -164,6 +165,29 @@ impl OneOf {
 
     pub fn field_name(&self) -> String {
         self.base.field_name()
+    }
+
+    pub fn set_selected_index(&mut self, index: usize) -> Result<(), SchemaError> {
+        let path = self.path.clone();
+        let v = self
+            .variants
+            .get_mut(index)
+            .ok_or(SchemaError::SchemaConversionError {
+                path,
+                reason: "index out of bounds".to_string(),
+            })?;
+        self.selected_index = Some(index);
+        match v {
+            ElementType::Menu(menu) => menu.is_set = true,
+            ElementType::Item(item) => {
+                if let ItemType::Enum(en) = &mut item.item_type {
+                    en.value = Some(0)
+                }
+            }
+            _ => {}
+        }
+
+        Ok(())
     }
 }
 

@@ -13,6 +13,7 @@ pub struct AppData {
     pub current_key: Vec<String>,
     pub needs_save: bool,
     pub config: PathBuf,
+    pub select_field: Option<ElementType>,
 }
 
 const DEFAULT_CONFIG_PATH: &str = ".project.toml";
@@ -84,6 +85,7 @@ impl AppData {
             current_key: Vec::new(),
             needs_save: false,
             config: init_value_path,
+            select_field: None,
         })
     }
 
@@ -126,7 +128,11 @@ impl AppData {
         if key.is_empty() {
             return;
         }
-        self.current_key.push(key.to_string());
+        self.current_key = key.split(".").map(|s| s.to_string()).collect();
+    }
+
+    pub fn push_field(&mut self, f: &str) {
+        self.current_key.push(f.to_string());
     }
 
     /// 返回上级路径

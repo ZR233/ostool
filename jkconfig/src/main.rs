@@ -49,6 +49,8 @@ fn main() -> anyhow::Result<()> {
         .cloned()
         .collect::<Vec<_>>();
 
+    cursive::logger::init();
+    cursive::logger::set_filter_levels_from_env();
     // 创建Cursive应用
     let mut siv = Cursive::default();
 
@@ -61,12 +63,23 @@ fn main() -> anyhow::Result<()> {
     siv.add_global_callback('s', handle_save);
     siv.add_global_callback('S', handle_save);
     siv.add_global_callback(Key::Esc, handle_back);
-
+    siv.add_global_callback('~', cursive::Cursive::toggle_debug_console);
     // 初始菜单路径为空
     siv.add_fullscreen_layer(menu_view(&title, "", fields));
 
     // 运行应用
     siv.run();
+
+    println!("Exiting jkconfig...");
+    let app = siv.take_user_data::<AppData>().unwrap();
+
+    if app.needs_save {
+        println!("Saving to {}:\n {:#?}", app.config.display(), app.root);
+        let value = app.root.as_json();
+        println!("Serialized JSON Value: {:#?}", value);
+        let toml_string = toml::to_string_pretty(&value)?;
+        std::fs::write(&app.config, toml_string)?;
+    }
 
     Ok(())
 }
@@ -79,9 +92,6 @@ fn handle_save(siv: &mut Cursive) {
             .button("Ok", |s| {
                 let app = s.user_data::<AppData>().unwrap();
                 app.needs_save = true;
-                if let Err(e) = app.on_exit() {
-                    error!("Failed to save config: {}", e);
-                }
                 s.quit();
             })
             .button("Cancel", |s| {

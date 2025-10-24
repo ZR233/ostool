@@ -1,9 +1,6 @@
 use cursive::{Cursive, views::Dialog};
 
-use crate::{
-    data::{AppData, types::ElementType},
-    ui::components::menu::menu_select_flush,
-};
+use crate::{data::AppData, ui::components::menu::menu_select_flush};
 
 pub mod components;
 
@@ -14,15 +11,11 @@ pub fn handle_back(siv: &mut Cursive) {
             return;
         }
         app.navigate_back();
-        let fields = if let Some(ElementType::Menu(menu)) = app.current() {
-            menu.fields()
-        } else {
-            vec![]
-        };
+
         let key = app.key_string();
         siv.pop_layer();
 
-        menu_select_flush(siv, &key, &fields);
+        menu_select_flush(siv, &key);
     }
 }
 
