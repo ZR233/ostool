@@ -47,9 +47,6 @@ pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl Into
         .scrollable()
         .fixed_height(5);
 
-    let name1 = menu_select_name.clone();
-    let name2 = menu_select_name.clone();
-
     // 构建主布局
     OnEventView::new(
         LinearLayout::vertical()
@@ -62,14 +59,23 @@ pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl Into
             .child(DummyView)
             .child(Panel::new(help_view).full_width()),
     )
-    .on_event(Event::Char('m'), move |s| on_change_set(s, &name1))
-    .on_event(Key::Tab, move |s| on_oneof_switch(s, &name2))
+    .on_event(Event::Char('m'), on_change_set)
+    .on_event(Key::Tab, on_oneof_switch)
+    .on_event(Event::Char('r'), on_reset_value)
 }
 
-fn menu_get_selected(s: &mut Cursive, name: &str) -> Option<ElementType> {
-    let mut selected = None;
+fn on_reset_value(s: &mut Cursive) {
+    let Some(selected) = menu_selected(s) else {
+        return;
+    };
 
-    s.call_on_name(name, |view: &mut SelectView<ElementType>| {
+    info!("Resetting value for selected item {}", selected.key());
+}
+
+fn menu_selected(s: &mut Cursive) -> Option<ElementType> {
+    let mut selected = None;
+    let name = menu_view_name(&menu_key(s));
+    s.call_on_name(&name, |view: &mut SelectView<ElementType>| {
         if let Some(elem) = view.selection() {
             selected = Some(elem.as_ref().clone());
         }
@@ -78,10 +84,10 @@ fn menu_get_selected(s: &mut Cursive, name: &str) -> Option<ElementType> {
     selected
 }
 
-fn on_change_set(s: &mut Cursive, name: &str) {
+fn on_change_set(s: &mut Cursive) {
     info!("Toggling 'is_set' for menu");
 
-    let selected = menu_get_selected(s, name);
+    let selected = menu_selected(s);
 
     if let Some(app) = s.user_data::<AppData>()
         && let Some(ElementType::Menu(v)) = selected
@@ -99,11 +105,13 @@ fn on_change_set(s: &mut Cursive, name: &str) {
     }
 }
 
+fn menu_key(s: &mut Cursive) -> String {
+    let app = s.user_data::<AppData>().unwrap();
+    app.key_string()
+}
+
 fn menu_flush(s: &mut Cursive) {
-    let Some(app) = s.user_data::<AppData>() else {
-        return;
-    };
-    let key = app.key_string();
+    let key = menu_key(s);
     menu_select_flush(s, &key);
 }
 
@@ -352,25 +360,20 @@ pub fn enter_key(s: &mut Cursive, key: &str) {
     }
 }
 
-fn on_oneof_switch(s: &mut Cursive, name: &str) {
-    let mut oneof = None;
+fn on_oneof_switch(s: &mut Cursive) {
+    let Some(selected) = menu_selected(s) else {
+        return;
+    };
 
-    s.call_on_name(name, |view: &mut SelectView<ElementType>| {
-        let selected = view.selection();
-        if let Some(elem) = selected
-            && let ElementType::OneOf(_one_of) = elem.as_ref()
-        {
-            oneof = Some(elem.as_ref().clone());
-        }
-    });
+    let ElementType::OneOf(oneof) = selected else {
+        return;
+    };
 
-    if let Some(ElementType::OneOf(one_of)) = &oneof {
-        if let Some(app) = s.user_data::<AppData>() {
-            let key = one_of.key();
-            app.enter(&key);
-        }
-        show_oneof_dialog(s, one_of);
+    if let Some(app) = s.user_data::<AppData>() {
+        let key = oneof.key();
+        app.enter(&key);
     }
+    show_oneof_dialog(s, &oneof);
 }
 
 /// 处理项目选择
