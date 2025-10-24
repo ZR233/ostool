@@ -4,7 +4,6 @@ use std::{
     io::{self, Read, Write},
     path::PathBuf,
     process::exit,
-    sync::atomic::fence,
     thread::{self, sleep},
     time::Duration,
 };
@@ -145,25 +144,25 @@ impl Step for Uboot {
         let mut fdtfile = String::new();
         let mut env_map = HashMap::new();
 
-        if let Some(dtb) = PathBuf::from(&config.dtb_file).file_name() {
-            if !dtb.is_empty() {
-                let dtb_name = dtb.to_str().unwrap().to_string();
+        if let Some(dtb) = PathBuf::from(&config.dtb_file).file_name()
+            && !dtb.is_empty()
+        {
+            let dtb_name = dtb.to_str().unwrap().to_string();
 
-                fdtfile = dtb_name.to_string();
+            fdtfile = dtb_name.to_string();
 
-                let ftp_dtb = out_dir.join(&dtb_name);
+            let ftp_dtb = out_dir.join(&dtb_name);
 
-                let _ = fs::remove_file(&ftp_dtb);
+            let _ = fs::remove_file(&ftp_dtb);
 
-                fs::copy(&config.dtb_file, &ftp_dtb).unwrap_or_else(|e| {
-                    panic!(
-                        "Copy {} to {} failed: {}",
-                        &config.dtb_file,
-                        ftp_dtb.display(),
-                        e
-                    )
-                });
-            }
+            fs::copy(&config.dtb_file, &ftp_dtb).unwrap_or_else(|e| {
+                panic!(
+                    "Copy {} to {} failed: {}",
+                    &config.dtb_file,
+                    ftp_dtb.display(),
+                    e
+                )
+            });
         }
 
         match &config.net {
@@ -241,13 +240,13 @@ impl Step for Uboot {
         println!("{}", "Uboot shell ok".green());
         sleep(Duration::from_millis(500));
 
-        if config.net.is_some() {
-            if let Ok(output) = uboot.cmd("net list") {
-                let device_list = output.strip_prefix("net list").unwrap_or(&output).trim();
+        if config.net.is_some()
+            && let Ok(output) = uboot.cmd("net list")
+        {
+            let device_list = output.strip_prefix("net list").unwrap_or(&output).trim();
 
-                if device_list.is_empty() {
-                    let _ = uboot.cmd_without_reply("bootdev hunt ethernet");
-                }
+            if device_list.is_empty() {
+                let _ = uboot.cmd_without_reply("bootdev hunt ethernet");
             }
         }
 
@@ -304,20 +303,20 @@ impl Step for Uboot {
 
             thread::spawn(move || {
                 loop {
-                    if let Ok(Event::Key(key)) = event::read() {
-                        if matches!(key.kind, event::KeyEventKind::Release) {
-                            match key.code {
-                                KeyCode::Char(ch) => {
-                                    port_tx.write_all(&[ch as u8]).unwrap();
-                                }
-                                KeyCode::Backspace => {
-                                    port_tx.write_all(&[127]).unwrap();
-                                }
-                                KeyCode::Enter => {
-                                    port_tx.write_all(b"\r\n").unwrap();
-                                }
-                                _ => {}
+                    if let Ok(Event::Key(key)) = event::read()
+                        && matches!(key.kind, event::KeyEventKind::Release)
+                    {
+                        match key.code {
+                            KeyCode::Char(ch) => {
+                                port_tx.write_all(&[ch as u8]).unwrap();
                             }
+                            KeyCode::Backspace => {
+                                port_tx.write_all(&[127]).unwrap();
+                            }
+                            KeyCode::Enter => {
+                                port_tx.write_all(b"\r\n").unwrap();
+                            }
+                            _ => {}
                         }
                     }
                 }

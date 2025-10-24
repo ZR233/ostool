@@ -13,10 +13,16 @@ pub struct ElementBase {
     pub title: String,
     pub help: Option<String>,
     pub is_required: bool,
+    pub struct_name: String,
 }
 
 impl ElementBase {
-    pub fn new(path: &Path, description: Option<String>, is_required: bool) -> Self {
+    pub fn new(
+        path: &Path,
+        description: Option<String>,
+        is_required: bool,
+        struct_name: &str,
+    ) -> Self {
         let title = description
             .as_ref()
             .and_then(|d| d.split('\n').next())
@@ -33,6 +39,7 @@ impl ElementBase {
             title,
             help: description,
             is_required,
+            struct_name: struct_name.to_string(),
         }
     }
 
@@ -83,11 +90,64 @@ impl DerefMut for ElementType {
 }
 
 impl ElementType {
-    pub fn update_from_value(&mut self, value: &Value) -> Result<(), SchemaError> {
+    pub fn update_from_value(
+        &mut self,
+        value: &Value,
+        struct_name: Option<&str>,
+    ) -> Result<(), SchemaError> {
         match self {
-            ElementType::Menu(menu) => menu.update_from_value(value),
+            ElementType::Menu(menu) => {
+                if let Some(name) = struct_name
+                    && menu.struct_name.as_str() != name
+                {
+                    return Err(SchemaError::TypeMismatch {
+                        path: menu.key(),
+                        expected: name.to_string(),
+                        actual: menu.struct_name.clone(),
+                    });
+                }
+                menu.update_from_value(value)
+            }
             ElementType::OneOf(one_of) => one_of.update_from_value(value),
             ElementType::Item(item) => item.update_from_value(value),
+        }
+    }
+
+    pub fn is_none(&self) -> bool {
+        match self {
+            ElementType::Menu(menu) => menu.is_none(),
+            ElementType::OneOf(one_of) => one_of.is_none(),
+            ElementType::Item(item) => match &item.item_type {
+                super::item::ItemType::String { value, .. } => value.is_none(),
+                super::item::ItemType::Number { value, .. } => value.is_none(),
+                super::item::ItemType::Integer { value, .. } => value.is_none(),
+                super::item::ItemType::Boolean { .. } => false,
+                super::item::ItemType::Enum(enum_item) => enum_item.value.is_none(),
+                super::item::ItemType::Array(_) => false,
+            },
+        }
+    }
+
+    pub fn set_none(&mut self) {
+        if self.is_required {
+            return;
+        }
+
+        match self {
+            ElementType::Menu(menu) => {
+                menu.is_set = false;
+            }
+            ElementType::OneOf(one_of) => {
+                one_of.selected_index = None;
+            }
+            ElementType::Item(item) => match &mut item.item_type {
+                super::item::ItemType::String { value, .. } => *value = None,
+                super::item::ItemType::Number { value, .. } => *value = None,
+                super::item::ItemType::Integer { value, .. } => *value = None,
+                super::item::ItemType::Boolean { value, .. } => *value = false,
+                super::item::ItemType::Enum(enum_item) => enum_item.value = None,
+                super::item::ItemType::Array(array_item) => array_item.values.clear(),
+            },
         }
     }
 }
