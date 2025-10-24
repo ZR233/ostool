@@ -71,7 +71,7 @@ fn main() -> anyhow::Result<()> {
 
     println!("Exiting jkconfig...");
     let mut app = siv.take_user_data::<AppData>().unwrap();
-
+    println!("Data: \n{:#?}", app.root);
     app.on_exit()?;
 
     Ok(())

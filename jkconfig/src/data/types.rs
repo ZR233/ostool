@@ -115,13 +115,8 @@ impl ElementType {
 
     pub fn is_none(&self) -> bool {
         match self {
-            ElementType::Menu(menu) => {
-                if menu.is_required {
-                    return false;
-                }
-                !menu.is_set
-            }
-            ElementType::OneOf(one_of) => one_of.selected_index.is_none(),
+            ElementType::Menu(menu) => menu.is_none(),
+            ElementType::OneOf(one_of) => one_of.is_none(),
             ElementType::Item(item) => match &item.item_type {
                 super::item::ItemType::String { value, .. } => value.is_none(),
                 super::item::ItemType::Number { value, .. } => value.is_none(),

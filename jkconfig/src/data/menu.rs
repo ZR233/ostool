@@ -178,49 +178,12 @@ impl Menu {
         Ok(())
     }
 
-    // pub fn update_from_value(&mut self, value: &Value) -> Result<(), SchemaError> {
-    //     match value {
-    //         Value::Object(map) => {
-    //             // First pass: collect mappings from JSON keys to child keys
-    //             let mut key_mappings = Vec::new();
-    //             {
-    //                 for (child_key, child_element) in &self.children {
-    //                     if let ElementType::Menu(child_menu) = child_element {
-    //                         key_mappings.push((child_menu.field_name(), child_key.clone()));
-    //                     } else if let ElementType::Item(item) = child_element {
-    //                         key_mappings.push((item.base.field_name(), child_key.clone()));
-    //                     } else if let ElementType::OneOf(oneof) = child_element {
-    //                         key_mappings.push((oneof.field_name(), child_key.clone()));
-    //                     }
-    //                 }
-    //             }
-
-    //             // Second pass: update elements using the mappings
-    //             for (key, val) in map {
-    //                 let mut found_child_key = None;
-    //                 for (field_name, child_key) in &key_mappings {
-    //                     if *field_name == *key {
-    //                         found_child_key = Some(child_key);
-    //                         break;
-    //                     }
-    //                 }
-
-    //                 if let Some(child_key) = found_child_key
-    //                     && let Some(element) = self.children.get_mut(child_key)
-    //                 {
-    //                     element.update_from_value(val)?;
-    //                 }
-    //                 // If key doesn't exist in menu children, skip it as per requirement
-    //             }
-    //             Ok(())
-    //         }
-    //         _ => Err(SchemaError::TypeMismatch {
-    //             path: self.base.key(),
-    //             expected: "object".to_string(),
-    //             actual: format!("{}", value),
-    //         }),
-    //     }
-    // }
+    pub fn is_none(&self) -> bool {
+        if self.is_required {
+            return false;
+        }
+        !self.is_set
+    }
 
     pub fn fields(&self) -> Vec<ElementType> {
         self.children

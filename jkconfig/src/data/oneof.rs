@@ -200,6 +200,10 @@ impl OneOf {
 
         Ok(())
     }
+
+    pub fn is_none(&self) -> bool {
+        self.selected_index.is_none()
+    }
 }
 
 impl Deref for OneOf {
