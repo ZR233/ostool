@@ -47,6 +47,9 @@ pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl Into
         .scrollable()
         .fixed_height(5);
 
+    let name1 = menu_select_name.clone();
+    let name2 = menu_select_name.clone();
+
     // 构建主布局
     OnEventView::new(
         LinearLayout::vertical()
@@ -59,23 +62,49 @@ pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl Into
             .child(DummyView)
             .child(Panel::new(help_view).full_width()),
     )
-    .on_event(Event::Char('m'), on_change_set)
-    .on_event(Key::Tab, move |s| on_oneof_switch(s, &menu_select_name))
+    .on_event(Event::Char('m'), move |s| on_change_set(s, &name1))
+    .on_event(Key::Tab, move |s| on_oneof_switch(s, &name2))
 }
 
-fn on_change_set(s: &mut Cursive) {
+fn menu_get_selected(s: &mut Cursive, name: &str) -> Option<ElementType> {
+    let mut selected = None;
+
+    s.call_on_name(name, |view: &mut SelectView<ElementType>| {
+        if let Some(elem) = view.selection() {
+            selected = Some(elem.as_ref().clone());
+        }
+    });
+
+    selected
+}
+
+fn on_change_set(s: &mut Cursive, name: &str) {
+    info!("Toggling 'is_set' for menu");
+
+    let selected = menu_get_selected(s, name);
+
     if let Some(app) = s.user_data::<AppData>()
-        && let Some(ElementType::Menu(v)) = &app.select_field
+        && let Some(ElementType::Menu(v)) = selected
     {
         let key = v.key();
+        info!("Found selected menu: {key}");
         let ElementType::Menu(v) = app.root.get_mut_by_key(&key).unwrap() else {
             return;
         };
         if !v.is_required {
             v.is_set = !v.is_set;
         }
-        menu_select_flush(s, &key);
+        info!("Menu {} is_set toggled to {}", v.key(), v.is_set);
+        menu_flush(s);
     }
+}
+
+fn menu_flush(s: &mut Cursive) {
+    let Some(app) = s.user_data::<AppData>() else {
+        return;
+    };
+    let key = app.key_string();
+    menu_select_flush(s, &key);
 }
 
 pub fn menu_view_name(path: &str) -> String {
@@ -96,12 +125,12 @@ pub fn menu_select_flush(s: &mut Cursive, path: &str) {
             {
                 menu
             } else {
-                info!("No menu selected in OneOf for path: {}", path);
+                warn!("No menu selected in OneOf for path: {}", path);
                 return;
             }
         }
         _ => {
-            info!("No menu found for path: {}", path);
+            warn!("No menu found for path: {}", path);
             return;
         }
     };
@@ -128,6 +157,7 @@ fn menu_select_flush_fields(view: &mut SelectView<ElementType>, fields: &[Elemen
     {
         view.set_selection(idx);
     }
+    info!("Menu select view flushed with {} fields", fields.len());
 }
 
 /// 格式化项目标签，显示类型和当前值
