@@ -130,14 +130,78 @@ fn menu_select_flush_fields(view: &mut SelectView<ElementType>, fields: &[Elemen
     }
 }
 
+// Emoji 状态常量定义
+const EMOJI_REQUIRED: &str = "⭕";
+const EMOJI_OPTIONAL: &str = "  "; // 等长空格保持对齐
+const EMOJI_SET: &str = "✅";
+const EMOJI_UNSET: &str = "  ";
+const EMOJI_MENU: &str = "📁";
+const EMOJI_ONEOF: &str = "🎛️";
+const EMOJI_STRING: &str = "📝";
+const EMOJI_NUMBER: &str = "🔢";
+const EMOJI_INTEGER: &str = "☑️";
+const EMOJI_ENUM: &str = "📋";
+const EMOJI_BOOL_TRUE: &str = "✅";
+const EMOJI_BOOL_FALSE: &str = "❌";
+
+/// 获取 required 状态的 emoji
+fn get_required_emoji(is_required: bool) -> &'static str {
+    if is_required {
+        EMOJI_REQUIRED
+    } else {
+        EMOJI_OPTIONAL
+    }
+}
+
+/// 获取赋值状态的 emoji
+fn get_value_emoji(element: &ElementType) -> &'static str {
+    if element.is_none() {
+        EMOJI_UNSET
+    } else {
+        EMOJI_SET
+    }
+}
+
+/// 获取类型图标的 emoji（Boolean 类型特殊处理，直接返回状态）
+fn get_type_emoji(element: &ElementType) -> Option<&'static str> {
+    match element {
+        ElementType::Menu(_) => Some(EMOJI_MENU),
+        ElementType::OneOf(_) => Some(EMOJI_ONEOF),
+        ElementType::Item(item) => {
+            match &item.item_type {
+                ItemType::Boolean { .. } => {
+                    // Boolean 类型直接用状态 emoji，不需要额外的类型图标
+                    None
+                }
+                ItemType::String { .. } => Some(EMOJI_STRING),
+                ItemType::Number { .. } => Some(EMOJI_NUMBER),
+                ItemType::Integer { .. } => Some(EMOJI_INTEGER),
+                ItemType::Enum(_) => Some(EMOJI_ENUM),
+            }
+        }
+    }
+}
+
+/// 获取 Boolean 类型的状态 emoji
+fn get_boolean_emoji(value: bool) -> &'static str {
+    if value {
+        EMOJI_BOOL_TRUE
+    } else {
+        EMOJI_BOOL_FALSE
+    }
+}
+
 /// 格式化项目标签，显示类型和当前值
 pub fn format_item_label(element: &ElementType) -> StyledString {
     let mut label = StyledString::new();
 
     match element {
         ElementType::Menu(menu) => {
-            // 菜单项：显示 [>] 符号
-            label.append_styled("[>] ", ColorStyle::secondary());
+            // 菜单项：[required][value][type] 标题
+            label.append_styled(get_required_emoji(menu.is_required), ColorStyle::highlight());
+            label.append_styled(get_value_emoji(element), ColorStyle::title_secondary());
+            label.append_styled(EMOJI_MENU, ColorStyle::tertiary());
+            label.append_plain(" ");
             label.append_plain(&menu.title);
 
             if menu.is_required {
@@ -145,8 +209,11 @@ pub fn format_item_label(element: &ElementType) -> StyledString {
             }
         }
         ElementType::OneOf(one_of) => {
-            // OneOf 选择项
-            label.append_styled("[?] ", ColorStyle::tertiary());
+            // OneOf 选择项：[required][value][type] 标题 = 当前选择
+            label.append_styled(get_required_emoji(one_of.is_required), ColorStyle::highlight());
+            label.append_styled(get_value_emoji(element), ColorStyle::title_secondary());
+            label.append_styled(EMOJI_ONEOF, ColorStyle::tertiary());
+            label.append_plain(" ");
             label.append_plain(&one_of.title);
 
             if let Some(selected) = one_of.selected() {
@@ -159,49 +226,56 @@ pub fn format_item_label(element: &ElementType) -> StyledString {
             }
         }
         ElementType::Item(item) => {
-            // 根据项目类型显示不同的前缀和值
-            let (prefix, value_str) = match &item.item_type {
-                ItemType::Boolean { value, .. } => {
-                    let checkbox = if *value { "[X]" } else { "[ ]" };
-                    (checkbox, String::new())
-                }
-                ItemType::String { value, .. } => {
-                    let val = value
-                        .as_ref()
-                        .map(|v| {
-                            if v.len() > 30 {
-                                format!("\"{}...\"", &v[..27])
-                            } else {
-                                format!("\"{}\"", v)
-                            }
-                        })
-                        .unwrap_or_else(|| "<empty>".to_string());
-                    (" S ", val)
-                }
-                ItemType::Number { value, .. } => {
-                    let val = value
-                        .map(|v| format!("{:.2}", v))
-                        .unwrap_or_else(|| "<unset>".to_string());
-                    (" # ", val)
-                }
-                ItemType::Integer { value, .. } => {
-                    let val = value
-                        .map(|v| v.to_string())
-                        .unwrap_or_else(|| "<unset>".to_string());
-                    (" N ", val)
-                }
-                ItemType::Enum(enum_item) => {
-                    let val = enum_item.value_str().unwrap_or("<select>").to_string();
-                    (" E ", val)
-                }
-            };
+            // Boolean 类型特殊处理：直接用 ✅/❌ 表示状态
+            if let ItemType::Boolean { value, .. } = &item.item_type {
+                label.append_styled(get_required_emoji(item.base.is_required), ColorStyle::highlight());
+                label.append_styled("  ", ColorStyle::title_secondary()); // Boolean 不需要赋值状态标识
+                label.append_styled(get_boolean_emoji(*value), ColorStyle::primary());
+                label.append_plain(" ");
+                label.append_plain(&item.base.title);
 
-            label.append_styled(prefix, ColorStyle::secondary());
+                if item.base.is_required {
+                    label.append_styled(" *", ColorStyle::highlight());
+                }
+                return label;
+            }
+
+            // 其他类型：[required][value][type] 标题 = 当前值
+            label.append_styled(get_required_emoji(item.base.is_required), ColorStyle::highlight());
+            label.append_styled(get_value_emoji(element), ColorStyle::title_secondary());
+
+            if let Some(type_emoji) = get_type_emoji(element) {
+                label.append_styled(type_emoji, ColorStyle::tertiary());
+            }
+            label.append_plain(" ");
             label.append_plain(&item.base.title);
 
-            if !value_str.is_empty() {
+            // 添加当前值显示
+            let value_str = match &item.item_type {
+                ItemType::String { value, .. } => {
+                    value.as_ref().map(|v| {
+                        if v.len() > 30 {
+                            format!("\"{}...\"", &v[..27])
+                        } else {
+                            format!("\"{}\"", v)
+                        }
+                    })
+                }
+                ItemType::Number { value, .. } => {
+                    value.map(|v| format!("{:.2}", v))
+                }
+                ItemType::Integer { value, .. } => {
+                    value.map(|v| v.to_string())
+                }
+                ItemType::Enum(enum_item) => {
+                    enum_item.value_str().map(|s| s.to_string())
+                }
+                _ => None,
+            };
+
+            if let Some(val) = value_str {
                 label.append_styled(" = ", Style::from(ColorStyle::secondary()));
-                label.append_styled(value_str, ColorStyle::title_secondary());
+                label.append_styled(val, ColorStyle::title_secondary());
             }
 
             if item.base.is_required {
