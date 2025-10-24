@@ -123,6 +123,7 @@ impl ElementType {
                 super::item::ItemType::Integer { value, .. } => value.is_none(),
                 super::item::ItemType::Boolean { .. } => false,
                 super::item::ItemType::Enum(enum_item) => enum_item.value.is_none(),
+                super::item::ItemType::Array(_) => false,
             },
         }
     }
@@ -145,6 +146,7 @@ impl ElementType {
                 super::item::ItemType::Integer { value, .. } => *value = None,
                 super::item::ItemType::Boolean { value, .. } => *value = false,
                 super::item::ItemType::Enum(enum_item) => enum_item.value = None,
+                super::item::ItemType::Array(array_item) => array_item.values.clear(),
             },
         }
     }

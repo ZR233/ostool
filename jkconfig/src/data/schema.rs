@@ -195,7 +195,7 @@ impl WalkContext {
         is_required: bool,
     ) -> Result<Option<ElementType>, SchemaError> {
         match ty_str {
-            "string" | "number" | "integer" | "boolean" => {
+            "string" | "number" | "integer" | "boolean" | "array" => {
                 // Create Item based on type
                 // Placeholder implementation
                 let item = Item {
@@ -234,6 +234,23 @@ impl WalkContext {
                             value: false,
                             default: false,
                         },
+                        "array" => {
+                            // Get array element type from items field
+                            let element_type = if let Some(items) = self.get("items")
+                                && let Some(item_type) = items.get("type")
+                                && let Some(type_str) = item_type.as_str()
+                            {
+                                type_str.to_string()
+                            } else {
+                                "string".to_string() // default to string
+                            };
+
+                            ItemType::Array(crate::data::item::ArrayItem {
+                                element_type,
+                                values: Vec::new(),
+                                default: Vec::new(),
+                            })
+                        }
                         _ => unreachable!(),
                     },
                 };

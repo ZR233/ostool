@@ -26,10 +26,11 @@ impl ItemDisplay for ElementType {
                     if *value {
                         "✅"
                     } else {
-                        "❎"
+                        "🔘"
                     }
                 }
                 ItemType::Enum(_) => "📚",
+                ItemType::Array(_) => "📋",
             },
         };
         if self.is_required {
@@ -82,6 +83,13 @@ impl ItemDisplay for ElementType {
                         v.to_string()
                     } else {
                         String::new()
+                    }
+                }
+                ItemType::Array(array_item) => {
+                    if array_item.values.is_empty() {
+                        "[]".to_string()
+                    } else {
+                        format!("[{} items]", array_item.values.len())
                     }
                 }
             },

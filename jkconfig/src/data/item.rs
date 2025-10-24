@@ -27,6 +27,17 @@ pub enum ItemType {
         default: bool,
     },
     Enum(EnumItem),
+    Array(ArrayItem),
+}
+
+#[derive(Debug, Clone)]
+pub struct ArrayItem {
+    /// Array element type (e.g., "string", "integer")
+    pub element_type: String,
+    /// Array values
+    pub values: Vec<String>,
+    /// Default values
+    pub default: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -162,6 +173,32 @@ impl ItemType {
                 }),
             },
             ItemType::Enum(enum_item) => enum_item.update_from_value(value, path),
+            ItemType::Array(array_item) => match value {
+                Value::Array(arr) => {
+                    let mut values = Vec::new();
+                    for item in arr {
+                        match item {
+                            Value::String(s) => values.push(s.clone()),
+                            Value::Number(n) => values.push(n.to_string()),
+                            Value::Bool(b) => values.push(b.to_string()),
+                            _ => {
+                                return Err(SchemaError::TypeMismatch {
+                                    path: path.to_string(),
+                                    expected: "string, number, or boolean".to_string(),
+                                    actual: format!("{}", item),
+                                });
+                            }
+                        }
+                    }
+                    array_item.values = values;
+                    Ok(())
+                }
+                _ => Err(SchemaError::TypeMismatch {
+                    path: path.to_string(),
+                    expected: "array".to_string(),
+                    actual: format!("{}", value),
+                }),
+            },
         }
     }
 }
@@ -188,6 +225,28 @@ impl Item {
                 Some(v) => Value::String(v.to_string()),
                 None => Value::Null,
             },
+            ItemType::Array(array_item) => {
+                let arr: Vec<Value> = array_item
+                    .values
+                    .iter()
+                    .map(|s| {
+                        // Try to parse as number first
+                        if let Ok(i) = s.parse::<i64>() {
+                            Value::Number(serde_json::Number::from(i))
+                        } else if let Ok(f) = s.parse::<f64>() {
+                            Value::Number(
+                                serde_json::Number::from_f64(f)
+                                    .unwrap_or(serde_json::Number::from(0)),
+                            )
+                        } else if let Ok(b) = s.parse::<bool>() {
+                            Value::Bool(b)
+                        } else {
+                            Value::String(s.clone())
+                        }
+                    })
+                    .collect();
+                Value::Array(arr)
+            }
         }
     }
 

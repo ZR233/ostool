@@ -17,7 +17,7 @@ pub struct CatBBB {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct DogAAA {
     pub name: String,
-    pub breed: String,
+    pub children: Vec<String>,
 }
 
 #[test]
@@ -33,7 +33,7 @@ fn test_value() {
         },
         dog: Some(DogAAA {
             name: "Doggy".to_string(),
-            breed: "Beagle".to_string(),
+            children: vec!["Puppy1".to_string(), "Puppy2".to_string()],
         }),
     };
 

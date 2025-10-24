@@ -277,6 +277,17 @@ fn on_select(s: &mut Cursive, item: &ElementType) {
                         text.push_str(&format!("\nCurrent: {}", val));
                     }
                 }
+                ItemType::Array(array_item) => {
+                    text.push_str("\n\nType: Array");
+                    text.push_str(&format!("\nElement Type: {}", array_item.element_type));
+                    text.push_str(&format!("\nCount: {}", array_item.values.len()));
+                    if !array_item.values.is_empty() {
+                        text.push_str("\nValues:");
+                        for (idx, val) in array_item.values.iter().enumerate() {
+                            text.push_str(&format!("\n  [{}] {}", idx, val));
+                        }
+                    }
+                }
             }
             text
         }
@@ -347,6 +358,9 @@ fn enter_elem(s: &mut Cursive, elem: &ElementType) {
                 }
                 ItemType::Enum(enum_item) => {
                     show_enum_select(s, &item.base.title, enum_item);
+                }
+                ItemType::Array(array_item) => {
+                    show_array_edit(s, &item.base.key(), &item.base.title, &array_item.values);
                 }
             }
         }
