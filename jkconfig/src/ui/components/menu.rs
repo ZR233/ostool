@@ -264,7 +264,6 @@ pub fn enter_menu(s: &mut Cursive, menu: &Menu) {
     let mut path = String::new();
 
     if let Some(app) = s.user_data::<AppData>() {
-        app.enter(&menu.field_name());
         path = app.key_string();
     }
 
@@ -278,6 +277,7 @@ pub fn enter_key(s: &mut Cursive, key: &str) {
     if let Some(app) = s.user_data::<AppData>()
         && let Some(item) = app.root.get_by_key(key).cloned()
     {
+        app.enter(key);
         match item {
             ElementType::Menu(menu) => {
                 // 进入子菜单
