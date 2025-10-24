@@ -175,6 +175,7 @@ impl Menu {
                 element.update_from_value(val, None)?;
                 trace!("Updated child {} of Menu at {}", key, self.key());
             }
+            self.is_set = true;
             // If key doesn't exist in menu children, skip it as per requirement
         }
 
