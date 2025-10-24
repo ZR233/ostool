@@ -1,4 +1,3 @@
-#[macro_use]
 extern crate log;
 
 use clap::{Arg, Command};

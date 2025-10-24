@@ -81,16 +81,34 @@ pub fn menu_view_name(path: &str) -> String {
 
 pub fn menu_select_flush(s: &mut Cursive, path: &str) {
     info!("Flushing menu select for path: {}", path);
-    if let Some(app) = s.user_data::<AppData>()
-        && let Some(ElementType::Menu(menu)) = app.root.get_by_key(path)
-    {
-        info!("Found menu: {}", menu.key());
-        let name = menu_view_name(path);
-        let fields = menu.children.values().cloned().collect::<Vec<_>>();
-        s.call_on_all_named(&name, |view: &mut SelectView<ElementType>| {
-            menu_select_flush_fields(view, &fields);
-        });
-    }
+    let Some(app) = s.user_data::<AppData>() else {
+        return;
+    };
+
+    let menu = match app.root.get_by_key(path) {
+        Some(ElementType::Menu(menu)) => menu,
+        Some(ElementType::OneOf(oneof)) => {
+            if let Some(selected) = oneof.selected()
+                && let ElementType::Menu(menu) = selected
+            {
+                menu
+            } else {
+                info!("No menu selected in OneOf for path: {}", path);
+                return;
+            }
+        }
+        _ => {
+            info!("No menu found for path: {}", path);
+            return;
+        }
+    };
+
+    info!("Found menu: {}", menu.key());
+    let name = menu_view_name(path);
+    let fields = menu.children.values().cloned().collect::<Vec<_>>();
+    s.call_on_name(&name, |view: &mut SelectView<ElementType>| {
+        menu_select_flush_fields(view, &fields);
+    });
 }
 
 fn menu_select_flush_fields(view: &mut SelectView<ElementType>, fields: &[ElementType]) {
@@ -98,7 +116,7 @@ fn menu_select_flush_fields(view: &mut SelectView<ElementType>, fields: &[Elemen
     view.clear();
     // 为每个字段添加带格式的项
     for field in fields {
-        let label = format_item_label(&field);
+        let label = format_item_label(field);
         view.add_item(label, field.clone());
     }
     // 恢复之前的选择位置
