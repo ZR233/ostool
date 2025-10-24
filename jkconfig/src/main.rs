@@ -1,6 +1,6 @@
 extern crate log;
 
-use clap::{Arg, ArgAction, Command};
+use clap::{Arg, Command};
 use cursive::{Cursive, CursiveExt, event::Key, views::Dialog};
 
 use jkconfig::{
