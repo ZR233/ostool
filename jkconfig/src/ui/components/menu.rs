@@ -71,7 +71,9 @@ fn on_change_set(s: &mut Cursive) {
         let ElementType::Menu(v) = app.root.get_mut_by_key(&key).unwrap() else {
             return;
         };
-        v.is_set = !v.is_set;
+        if !v.is_required {
+            v.is_set = !v.is_set;
+        }
         menu_select_flush(s, &key);
     }
 }
