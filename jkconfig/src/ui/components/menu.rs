@@ -153,7 +153,7 @@ pub fn menu_select_flush(s: &mut Cursive, path: &str) {
 
     info!("Found menu: {}", menu.key());
     let name = menu_view_name(path);
-    let fields = menu.children.values().cloned().collect::<Vec<_>>();
+    let fields = menu.fields();
     s.call_on_name(&name, |view: &mut SelectView<ElementType>| {
         menu_select_flush_fields(view, &fields);
     });
@@ -306,7 +306,7 @@ pub fn enter_menu(s: &mut Cursive, menu: &Menu) {
     }
 
     let title = menu.title.clone();
-    let fields: Vec<ElementType> = menu.children.values().cloned().collect();
+    let fields = menu.fields();
 
     s.add_fullscreen_layer(menu_view(&title, &path, fields));
 }

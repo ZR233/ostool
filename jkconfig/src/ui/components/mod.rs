@@ -1,3 +1,3 @@
 pub mod editors;
-pub mod menu;
 pub(crate) mod icon;
+pub mod menu;

@@ -41,13 +41,7 @@ fn main() -> anyhow::Result<()> {
     let app_data = AppData::new(config_file, schema_file)?;
 
     let title = app_data.root.title.clone();
-    let fields = app_data
-        .root
-        .menu()
-        .children
-        .values()
-        .cloned()
-        .collect::<Vec<_>>();
+    let fields = app_data.root.menu().fields();
 
     cursive::logger::init();
     cursive::logger::set_filter_levels_from_env();

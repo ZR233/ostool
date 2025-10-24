@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     fmt::Debug,
     ops::{Deref, DerefMut},
 };
@@ -79,7 +78,7 @@ impl Debug for MenuRoot {
 #[derive(Clone)]
 pub struct Menu {
     pub base: ElementBase,
-    pub children: HashMap<String, ElementType>,
+    pub children: Vec<ElementType>,
     pub is_set: bool,
 }
 
@@ -87,10 +86,12 @@ impl Menu {
     pub fn as_json(&self) -> Value {
         let mut result = serde_json::Map::new();
 
-        for (child_key, child_element) in &self.children {
+        for child_element in &self.children {
             if child_element.is_none() {
                 continue;
             }
+            let child_key = child_element.field_name();
+
             match child_element {
                 ElementType::Menu(menu) => {
                     let field_name = menu.field_name();
@@ -130,7 +131,7 @@ impl Menu {
         info!("menu get by field path: {:?}", field_path);
         let first_field = field_path[0];
 
-        let child = self.children.get(first_field)?;
+        let child = self.get_child_by_key(first_field)?;
 
         if field_path.len() == 1 {
             return Some(child);
@@ -150,7 +151,7 @@ impl Menu {
 
         let first_field = field_path[0];
 
-        let child = self.children.get_mut(first_field)?;
+        let child = self.get_child_mut_by_key(first_field)?;
 
         if field_path.len() == 1 {
             return Some(child);
@@ -171,7 +172,7 @@ impl Menu {
         })?;
         trace!("Updating Menu at {} with value: {:?}", self.key(), value);
         for (key, val) in value {
-            if let Some(element) = self.children.get_mut(key) {
+            if let Some(element) = self.get_child_mut_by_key(key) {
                 element.update_from_value(val, None)?;
                 trace!("Updated child {} of Menu at {}", key, self.key());
             }
@@ -190,10 +191,25 @@ impl Menu {
     }
 
     pub fn fields(&self) -> Vec<ElementType> {
-        self.children
-            .values()
-            .cloned()
-            .collect::<Vec<ElementType>>()
+        self.children.to_vec()
+    }
+
+    pub fn get_child_by_key(&self, key: &str) -> Option<&ElementType> {
+        for child in &self.children {
+            if child.field_name() == key {
+                return Some(child);
+            }
+        }
+        None
+    }
+
+    pub fn get_child_mut_by_key(&mut self, key: &str) -> Option<&mut ElementType> {
+        for child in &mut self.children {
+            if child.field_name() == key {
+                return Some(child);
+            }
+        }
+        None
     }
 }
 

@@ -371,7 +371,7 @@ impl Menu {
         field_name: &str,
     ) -> Result<(), SchemaError> {
         if let Some(val) = walk.as_element_type(is_required, Some(field_name))? {
-            self.children.insert(val.field_name(), val);
+            self.children.push(val);
         }
         Ok(())
     }
