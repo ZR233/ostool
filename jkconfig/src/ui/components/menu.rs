@@ -1,5 +1,5 @@
 use cursive::{
-    Cursive,
+    Cursive, menu,
     theme::{ColorStyle, Effect, Style},
     utils::markup::StyledString,
     view::{IntoBoxedView, Nameable, Resizable, Scrollable},
@@ -15,16 +15,15 @@ use super::editors::{
 
 /// 创建菜单视图
 pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl IntoBoxedView {
+    let menu_select_name = menu_view_name(path);
     let mut select = SelectView::new();
     select.set_autojump(true);
 
-    // 为每个字段添加带格式的项
-    for field in fields {
-        let label = format_item_label(&field);
-        select.add_item(label, field);
-    }
-
     select.set_on_select(on_select);
+    select.set_on_submit(on_submit);
+    menu_select_flush_fields(&mut select, fields);
+
+    let select = select.with_name(menu_select_name);
 
     // 创建路径显示面板
     let path_text = if path.is_empty() {
@@ -52,18 +51,31 @@ pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl Into
         .child(TextView::new(title).center())
         .child(Panel::new(path_view).full_width())
         .child(DummyView)
-        .child(
-            select
-                .on_submit(on_submit)
-                .with_name(path)
-                .scrollable()
-                .full_width()
-                .min_height(10),
-        )
+        .child(select.scrollable().full_width().min_height(10))
         .child(DummyView)
         .child(Panel::new(detail_view).title("Help").full_width())
         .child(DummyView)
         .child(Panel::new(help_view).full_width())
+}
+
+pub fn menu_view_name(path: &str) -> String {
+    format!("menu_view_{path}")
+}
+
+pub fn menu_select_flush(s: &mut Cursive, path: &str, fields: &[ElementType]) {
+    let name = menu_view_name(path);
+    s.call_on_name(&name, |view: &mut SelectView<ElementType>| {
+        menu_select_flush_fields(view, fields.to_vec());
+    });
+}
+
+fn menu_select_flush_fields(view: &mut SelectView<ElementType>, fields: Vec<ElementType>) {
+    view.clear();
+    // 为每个字段添加带格式的项
+    for field in fields {
+        let label = format_item_label(&field);
+        view.add_item(label, field);
+    }
 }
 
 /// 格式化项目标签，显示类型和当前值

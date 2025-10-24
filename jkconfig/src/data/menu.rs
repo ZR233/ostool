@@ -201,6 +201,13 @@ impl Menu {
             }),
         }
     }
+
+    pub fn fields(&self) -> Vec<ElementType> {
+        self.children
+            .values()
+            .cloned()
+            .collect::<Vec<ElementType>>()
+    }
 }
 
 impl Debug for Menu {
