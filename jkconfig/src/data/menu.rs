@@ -88,6 +88,9 @@ impl Menu {
         let mut result = serde_json::Map::new();
 
         for (child_key, child_element) in &self.children {
+            if child_element.is_none() {
+                continue;
+            }
             match child_element {
                 ElementType::Menu(menu) => {
                     let field_name = menu.field_name();

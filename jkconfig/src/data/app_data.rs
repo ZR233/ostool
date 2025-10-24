@@ -99,6 +99,8 @@ impl AppData {
 
         let json_value = self.root.as_json();
 
+        println!("value to save:\n {:?}", json_value);
+
         let s = match ext {
             "toml" | "tml" => toml::to_string_pretty(&json_value)?,
             "json" => serde_json::to_string_pretty(&json_value)?,

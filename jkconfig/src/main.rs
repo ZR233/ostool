@@ -1,6 +1,6 @@
 extern crate log;
 
-use clap::{Arg, Command};
+use clap::{Arg, ArgAction, Command};
 use cursive::{Cursive, CursiveExt, event::Key, views::Dialog};
 
 use jkconfig::{
@@ -31,6 +31,12 @@ fn main() -> anyhow::Result<()> {
                 .value_name("FILE")
                 .help("指定schema文件路径（默认基于配置文件名推导）"),
         )
+        .arg(
+            Arg::new("debug")
+                .long("debug")
+                .short('d')
+                .action(ArgAction::SetTrue),
+        )
         .get_matches();
 
     // 提取命令行参数
@@ -39,6 +45,11 @@ fn main() -> anyhow::Result<()> {
 
     // 初始化AppData
     let app_data = AppData::new(config_file, schema_file)?;
+    if matches.contains_id("debug") {
+        println!("Menu Structure:\n{:#?}", app_data.root);
+        return Ok(());
+    }
+
     let title = app_data.root.title.clone();
     let fields = app_data
         .root

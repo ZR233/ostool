@@ -1,21 +1,21 @@
 use crate::data::{item::ItemType, types::ElementType};
 
 pub trait ItemDisplay {
-    fn icon(&self) -> &'static str;
+    fn icon(&self) -> String;
     fn value(&self) -> String;
 }
 
 impl ItemDisplay for ElementType {
-    fn icon(&self) -> &'static str {
+    fn icon(&self) -> String {
         if self.is_none() {
             if self.is_required {
-                return "❗";
+                return " ❗ ".into();
             }
 
-            return "🔘";
+            return " 🔘 ".into();
         }
 
-        match self {
+        let raw = match self {
             ElementType::Menu(_) => "📂",
             ElementType::OneOf(_) => "🔀",
             ElementType::Item(item) => match &item.item_type {
@@ -31,6 +31,11 @@ impl ItemDisplay for ElementType {
                 }
                 ItemType::Enum(_) => "📚",
             },
+        };
+        if self.is_required {
+            format!(" {raw} ")
+        } else {
+            format!("<{raw}>")
         }
     }
 
