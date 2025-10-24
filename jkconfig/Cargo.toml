@@ -3,11 +3,11 @@ authors = ["周睿 <zrufo747@outlook.com>"]
 categories = ["command-line-interface", "config"]
 description = "A Cursive-based TUI component library for JSON Schema configuration"
 edition = "2024"
-keywords = ["tui", "config", "json-schema", "terminal", "cursive"]
+keywords = ["tui", "config", "json-schema", "terminal"]
 license = "MIT OR Apache-2.0"
 name = "jkconfig"
 repository = "https://github.com/ZR233/ostool"
-version = "0.1.0"
+version = "0.1.1"
 
 [dependencies]
 # Cursive TUI framework
