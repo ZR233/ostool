@@ -70,15 +70,9 @@ fn main() -> anyhow::Result<()> {
     siv.run();
 
     println!("Exiting jkconfig...");
-    let app = siv.take_user_data::<AppData>().unwrap();
+    let mut app = siv.take_user_data::<AppData>().unwrap();
 
-    if app.needs_save {
-        println!("Saving to {}:\n {:#?}", app.config.display(), app.root);
-        let value = app.root.as_json();
-        println!("Serialized JSON Value: {:#?}", value);
-        let toml_string = toml::to_string_pretty(&value)?;
-        std::fs::write(&app.config, toml_string)?;
-    }
+    app.on_exit()?;
 
     Ok(())
 }

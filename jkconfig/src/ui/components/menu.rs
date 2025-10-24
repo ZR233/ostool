@@ -374,7 +374,7 @@ fn enter_elem(s: &mut Cursive, elem: &ElementType) {
                     show_integer_edit(s, &item.base.key(), &item.base.title, *value, *default);
                 }
                 ItemType::Enum(enum_item) => {
-                    show_enum_select(s, &item.base.key(), &item.base.title, enum_item);
+                    show_enum_select(s, &item.base.title, enum_item);
                 }
             }
         }
