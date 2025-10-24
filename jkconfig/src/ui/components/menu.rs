@@ -60,8 +60,10 @@ pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl Into
             .child(Panel::new(help_view).full_width()),
     )
     .on_event(Event::Char('m'), on_change_set)
+    .on_event(Event::Char('M'), on_change_set)
     .on_event(Key::Tab, on_oneof_switch)
     .on_event(Event::Char('c'), on_clear)
+    .on_event(Event::Char('C'), on_clear)
 }
 
 fn on_clear(s: &mut Cursive) {
@@ -101,22 +103,14 @@ fn menu_selected(s: &mut Cursive) -> Option<ElementType> {
 fn on_change_set(s: &mut Cursive) {
     info!("Toggling 'is_set' for menu");
 
-    let selected = menu_selected(s);
-
-    if let Some(app) = s.user_data::<AppData>()
-        && let Some(ElementType::Menu(v)) = selected
-    {
-        let key = v.key();
-        info!("Found selected menu: {key}");
-        let ElementType::Menu(v) = app.root.get_mut_by_key(&key).unwrap() else {
-            return;
-        };
-        if !v.is_required {
-            v.is_set = !v.is_set;
+    update_selected(s, |elem| {
+        if let ElementType::Menu(menu) = elem {
+            if !menu.is_required {
+                menu.is_set = !menu.is_set;
+            }
+            info!("Menu {} is_set toggled to {}", menu.key(), menu.is_set);
         }
-        info!("Menu {} is_set toggled to {}", v.key(), v.is_set);
-        menu_flush(s);
-    }
+    });
 }
 
 fn menu_key(s: &mut Cursive) -> String {
@@ -217,11 +211,6 @@ fn create_status_text() -> &'static str {
 
 /// 当选择项改变时更新详细信息
 fn on_select(s: &mut Cursive, item: &ElementType) {
-    info!("Selected item: {}", item.key());
-    if let Some(app) = s.user_data::<AppData>() {
-        app.select_field = Some(item.clone());
-    }
-
     let detail = match item {
         ElementType::Menu(menu) => {
             let mut text = format!("Menu: {}\n", menu.title);
