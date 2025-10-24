@@ -29,6 +29,7 @@ pub enum ItemType {
     Enum(EnumItem),
 }
 
+
 #[derive(Debug, Clone)]
 pub struct EnumItem {
     pub variants: Vec<String>,

@@ -11,11 +11,12 @@ use crate::ui::components::refresh::refresh_current_menu;
 pub fn show_oneof_dialog(s: &mut Cursive, one_of: &OneOf) {
     let mut select = SelectView::new();
 
-    for (idx, variant) in one_of.variants.iter().enumerate() {
+    for (idx, _) in one_of.variants.iter().enumerate() {
+        let display = one_of.variant_display(idx);
         let label = if Some(idx) == one_of.selected_index {
-            format!("(*) {}", variant.title)
+            format!("(*) {display}")
         } else {
-            format!("( ) {}", variant.title)
+            format!("( ) {display}")
         };
         select.add_item(label, idx);
     }

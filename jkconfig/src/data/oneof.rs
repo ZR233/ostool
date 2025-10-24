@@ -29,6 +29,25 @@ impl OneOf {
             .and_then(move |idx| self.variants.get_mut(idx))
     }
 
+    pub fn variant_display(&self, idx: usize) -> String {
+        if let Some(variant) = self.variants.get(idx) {
+            match variant {
+                ElementType::Menu(menu) => menu.struct_name.clone(),
+                ElementType::Item(item) => match &item.item_type {
+                    crate::data::item::ItemType::Enum(enum_item) => enum_item
+                        .variants
+                        .first()
+                        .cloned()
+                        .unwrap_or("<Enum Item>".to_string()),
+                    _ => "<Simple Item>".to_string(),
+                },
+                ElementType::OneOf(one_of) => one_of.struct_name.clone(),
+            }
+        } else {
+            "<Invalid Variant>".to_string()
+        }
+    }
+
     pub fn get_by_field_path(&self, field_path: &[&str]) -> Option<&ElementType> {
         if field_path.is_empty() {
             return None;
