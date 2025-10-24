@@ -132,9 +132,10 @@ impl Compile {
         let _ = std::fs::remove_file(&elf_file);
 
         if let Some(ref elf) = config.elf
-            && !elf.trim().is_empty() {
-                std::fs::copy(elf, elf_file).unwrap();
-            }
+            && !elf.trim().is_empty()
+        {
+            std::fs::copy(elf, elf_file).unwrap();
+        }
 
         project.out_dir = Some(
             project

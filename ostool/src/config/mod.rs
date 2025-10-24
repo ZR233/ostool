@@ -44,9 +44,10 @@ impl ProjectConfig {
         let mut build = BuildSystem::new_by_ui(workdir);
         let arch = Arch::from_target(&target).unwrap();
         if let BuildSystem::Cargo(args) = &mut build
-            && matches!(arch, Arch::Riscv64 | Arch::Aarch64) {
-                args.kernel_is_bin = true;
-            }
+            && matches!(arch, Arch::Riscv64 | Arch::Aarch64)
+        {
+            args.kernel_is_bin = true;
+        }
 
         Self {
             compile: Compile { target, build },

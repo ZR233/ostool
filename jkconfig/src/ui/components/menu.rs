@@ -27,37 +27,60 @@ pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl Into
     info!("Created menu view for path: {}", path);
     let select = select.with_name(&menu_select_name);
 
+    // 创建标题栏
+    let mut title_text = StyledString::new();
+    title_text.append_styled("╔═══", ColorStyle::title_primary());
+    title_text.append_styled(format!(" {} ", title), Style::from(Effect::Bold));
+    title_text.append_styled("═══╗", ColorStyle::title_primary());
+    let title_view = TextView::new(title_text).center();
+
     // 创建路径显示面板
     let path_text = if path.is_empty() {
-        StyledString::styled("Path: / (Root)", ColorStyle::tertiary())
+        let mut styled = StyledString::new();
+        styled.append_styled("📂 ", ColorStyle::tertiary());
+        styled.append_styled("/ ", Style::from(Effect::Bold));
+        styled.append_styled("(Root)", ColorStyle::secondary());
+        styled
     } else {
         let mut styled = StyledString::new();
-        styled.append_styled("Path: ", ColorStyle::secondary());
-        styled.append_styled(path, ColorStyle::tertiary());
+        styled.append_styled("📂 ", ColorStyle::tertiary());
+        styled.append_styled(path, Style::from(Effect::Bold));
         styled
     };
     let path_view = TextView::new(path_text).with_name("path_text");
-
-    // 创建帮助信息显示区域
-    let help_view = TextView::new(create_help_text()).with_name("help_text");
 
     // 创建详细信息显示区域
     let detail_view = TextView::new(create_status_text())
         .with_name("detail_text")
         .scrollable()
-        .fixed_height(5);
+        .fixed_height(8);
+
+    // 创建帮助信息显示区域
+    let help_view = TextView::new(create_help_text()).with_name("help_text");
 
     // 构建主布局
     OnEventView::new(
         LinearLayout::vertical()
-            .child(TextView::new(title).center())
-            .child(Panel::new(path_view).full_width())
-            .child(DummyView)
-            .child(select.scrollable().full_width().min_height(10))
-            .child(DummyView)
-            .child(Panel::new(detail_view).title("Help").full_width())
-            .child(DummyView)
-            .child(Panel::new(help_view).full_width()),
+            .child(DummyView.fixed_height(1))
+            .child(title_view)
+            .child(DummyView.fixed_height(1))
+            .child(Panel::new(path_view).title("Current Path").full_width())
+            .child(DummyView.fixed_height(1))
+            .child(
+                Panel::new(select.scrollable())
+                    .title("Items")
+                    .full_width()
+                    .min_height(12),
+            )
+            .child(DummyView.fixed_height(1))
+            .child(Panel::new(detail_view).title("Details").full_width())
+            .child(DummyView.fixed_height(1))
+            .child(
+                Panel::new(help_view)
+                    .title("Keyboard Shortcuts")
+                    .full_width(),
+            )
+            .child(DummyView.fixed_height(1)),
     )
     .on_event(Event::Char('m'), on_change_set)
     .on_event(Event::Char('M'), on_change_set)
@@ -191,104 +214,221 @@ pub fn format_item_label(element: &ElementType) -> StyledString {
 /// 创建帮助文本（在底部状态栏显示）
 fn create_help_text() -> StyledString {
     let mut text = StyledString::new();
-    text.append_styled("Enter", Style::from(Effect::Bold));
-    text.append_plain(": Select/Edit  ");
-    text.append_styled("↑↓", Style::from(Effect::Bold));
-    text.append_plain(": Navigate  ");
-    text.append_styled("Esc", Style::from(Effect::Bold));
-    text.append_plain(": Back  ");
-    text.append_styled("S", Style::from(Effect::Bold));
-    text.append_plain(": Save  ");
-    text.append_styled("Q", Style::from(Effect::Bold));
-    text.append_plain(": Quit");
+
+    // 第一行：基本导航
+    text.append_styled("Navigation: ", Style::from(Effect::Underline));
+    text.append_plain("\n  ");
+    text.append_styled(
+        "↑↓/jk",
+        Style::from(Effect::Bold).combine(ColorStyle::tertiary()),
+    );
+    text.append_plain(" Move  ");
+    text.append_styled(
+        "Enter",
+        Style::from(Effect::Bold).combine(ColorStyle::tertiary()),
+    );
+    text.append_plain(" Select/Edit  ");
+    text.append_styled(
+        "Esc",
+        Style::from(Effect::Bold).combine(ColorStyle::tertiary()),
+    );
+    text.append_plain(" Back\n");
+
+    // 第二行：编辑操作
+    text.append_styled("Actions: ", Style::from(Effect::Underline));
+    text.append_plain("\n  ");
+    text.append_styled(
+        "C",
+        Style::from(Effect::Bold).combine(ColorStyle::tertiary()),
+    );
+    text.append_plain(" Clear value  ");
+    text.append_styled(
+        "M",
+        Style::from(Effect::Bold).combine(ColorStyle::tertiary()),
+    );
+    text.append_plain(" Toggle menu  ");
+    text.append_styled(
+        "Tab",
+        Style::from(Effect::Bold).combine(ColorStyle::tertiary()),
+    );
+    text.append_plain(" Switch OneOf\n");
+
+    // 第三行：全局操作
+    text.append_styled("Global: ", Style::from(Effect::Underline));
+    text.append_plain("\n  ");
+    text.append_styled(
+        "S",
+        Style::from(Effect::Bold).combine(ColorStyle::tertiary()),
+    );
+    text.append_plain(" Save & Exit  ");
+    text.append_styled(
+        "Q",
+        Style::from(Effect::Bold).combine(ColorStyle::tertiary()),
+    );
+    text.append_plain(" Quit  ");
+    text.append_styled(
+        "~",
+        Style::from(Effect::Bold).combine(ColorStyle::tertiary()),
+    );
+    text.append_plain(" Debug Console");
+
     text
 }
 
 /// 创建状态文本（显示当前项的详细信息）
-fn create_status_text() -> &'static str {
-    "Select an item to view details"
+fn create_status_text() -> String {
+    let mut text = String::new();
+    text.push_str("╔═══════════════════════════════════════════════\n");
+    text.push_str("║\n");
+    text.push_str("║  Welcome to JKConfig!\n");
+    text.push_str("║\n");
+    text.push_str("║  Use ↑↓ or j/k to navigate\n");
+    text.push_str("║  Press Enter to select or edit an item\n");
+    text.push_str("║\n");
+    text.push_str("╚═══════════════════════════════════════════════");
+    text
 }
 
 /// 当选择项改变时更新详细信息
 fn on_select(s: &mut Cursive, item: &ElementType) {
     let detail = match item {
         ElementType::Menu(menu) => {
-            let mut text = format!("Menu: {}\n", menu.title);
+            let mut text = String::new();
+            text.push_str("╔═ Menu ═══════════════════════════════════════\n");
+            text.push_str(&format!("║ Title: {}\n", menu.title));
             if let Some(help) = &menu.help {
-                text.push_str(&format!("\n{}", help));
+                text.push_str("║\n");
+                for line in help.lines() {
+                    text.push_str(&format!("║ {}\n", line));
+                }
             }
-            text.push_str(&format!("\n\nContains {} items", menu.children.len()));
+            text.push_str("║\n");
+            text.push_str(&format!("║ Contains {} items\n", menu.children.len()));
+            text.push_str("║ Required: ");
+            text.push_str(if menu.is_required { "Yes" } else { "No" });
+            text.push_str("\n╚═══════════════════════════════════════════════");
             text
         }
         ElementType::OneOf(one_of) => {
-            let mut text = format!("OneOf: {}\n", one_of.title);
+            let mut text = String::new();
+            text.push_str("╔═ OneOf ══════════════════════════════════════\n");
+            text.push_str(&format!("║ Title: {}\n", one_of.title));
             if let Some(help) = &one_of.help {
-                text.push_str(&format!("\n{}", help));
+                text.push_str("║\n");
+                for line in help.lines() {
+                    text.push_str(&format!("║ {}\n", line));
+                }
             }
-            text.push_str(&format!("\n\nVariants: {}", one_of.variants.len()));
+            text.push_str("║\n");
+            text.push_str(&format!("║ Variants: {}\n", one_of.variants.len()));
             if let Some(selected) = one_of.selected() {
-                text.push_str(&format!("\nCurrent: {}", selected.title));
+                text.push_str(&format!("║ Current: {}\n", selected.title));
+            } else {
+                text.push_str("║ Current: <Unset>\n");
             }
+            text.push_str("║ Tip: Press Tab to switch variants\n");
+            text.push_str("╚═══════════════════════════════════════════════");
             text
         }
         ElementType::Item(item) => {
-            let mut text = format!("Item: {}\n", item.base.title);
+            let mut text = String::new();
+            text.push_str("╔═ Item ═══════════════════════════════════════\n");
+            text.push_str(&format!("║ Name: {}\n", item.base.title));
+
             if let Some(help) = &item.base.help {
-                text.push_str(&format!("\n{}", help));
+                text.push_str("║\n");
+                for line in help.lines() {
+                    text.push_str(&format!("║ {}\n", line));
+                }
             }
+            text.push_str("║\n");
 
             match &item.item_type {
                 ItemType::Boolean { value, default } => {
-                    text.push_str("\n\nType: Boolean");
-                    text.push_str(&format!("\nCurrent: {}", value));
-                    text.push_str(&format!("\nDefault: {}", default));
+                    text.push_str("║ Type: Boolean\n");
+                    text.push_str(&format!(
+                        "║ Current: {}\n",
+                        if *value { "✓ True" } else { "✗ False" }
+                    ));
+                    text.push_str(&format!(
+                        "║ Default: {}\n",
+                        if *default { "True" } else { "False" }
+                    ));
+                    text.push_str("║\n║ Tip: Press Enter to toggle");
                 }
                 ItemType::String { value, default } => {
-                    text.push_str("\n\nType: String");
-                    if let Some(v) = value {
-                        text.push_str(&format!("\nCurrent: \"{}\"", v));
-                    }
+                    text.push_str("║ Type: String\n");
+                    text.push_str(&format!(
+                        "║ Current: {}\n",
+                        value
+                            .as_ref()
+                            .map(|v| format!("\"{}\"", v))
+                            .unwrap_or_else(|| "<Empty>".to_string())
+                    ));
                     if let Some(d) = default {
-                        text.push_str(&format!("\nDefault: \"{}\"", d));
+                        text.push_str(&format!("║ Default: \"{}\"\n", d));
                     }
+                    text.push_str("║\n║ Tip: Press Enter to edit");
                 }
                 ItemType::Number { value, default } => {
-                    text.push_str("\n\nType: Number");
-                    if let Some(v) = value {
-                        text.push_str(&format!("\nCurrent: {}", v));
-                    }
+                    text.push_str("║ Type: Number (float)\n");
+                    text.push_str(&format!(
+                        "║ Current: {}\n",
+                        value
+                            .map(|v| v.to_string())
+                            .unwrap_or_else(|| "<Empty>".to_string())
+                    ));
                     if let Some(d) = default {
-                        text.push_str(&format!("\nDefault: {}", d));
+                        text.push_str(&format!("║ Default: {}\n", d));
                     }
+                    text.push_str("║\n║ Tip: Press Enter to edit");
                 }
                 ItemType::Integer { value, default } => {
-                    text.push_str("\n\nType: Integer");
-                    if let Some(v) = value {
-                        text.push_str(&format!("\nCurrent: {}", v));
-                    }
+                    text.push_str("║ Type: Integer\n");
+                    text.push_str(&format!(
+                        "║ Current: {}\n",
+                        value
+                            .map(|v| v.to_string())
+                            .unwrap_or_else(|| "<Empty>".to_string())
+                    ));
                     if let Some(d) = default {
-                        text.push_str(&format!("\nDefault: {}", d));
+                        text.push_str(&format!("║ Default: {}\n", d));
                     }
+                    text.push_str("║\n║ Tip: Press Enter to edit");
                 }
                 ItemType::Enum(enum_item) => {
-                    text.push_str("\n\nType: Enum");
-                    text.push_str(&format!("\nOptions: {}", enum_item.variants.join(", ")));
+                    text.push_str("║ Type: Enum\n");
+                    text.push_str(&format!("║ Options: {}\n", enum_item.variants.join(", ")));
                     if let Some(val) = enum_item.value_str() {
-                        text.push_str(&format!("\nCurrent: {}", val));
+                        text.push_str(&format!("║ Current: {}\n", val));
+                    } else {
+                        text.push_str("║ Current: <Unset>\n");
                     }
+                    text.push_str("║\n║ Tip: Press Enter to select");
                 }
                 ItemType::Array(array_item) => {
-                    text.push_str("\n\nType: Array");
-                    text.push_str(&format!("\nElement Type: {}", array_item.element_type));
-                    text.push_str(&format!("\nCount: {}", array_item.values.len()));
+                    text.push_str("║ Type: Array\n");
+                    text.push_str(&format!("║ Element Type: {}\n", array_item.element_type));
+                    text.push_str(&format!("║ Count: {}\n", array_item.values.len()));
                     if !array_item.values.is_empty() {
-                        text.push_str("\nValues:");
-                        for (idx, val) in array_item.values.iter().enumerate() {
-                            text.push_str(&format!("\n  [{}] {}", idx, val));
+                        text.push_str("║ Values:\n");
+                        let max_display = 5;
+                        for (idx, val) in array_item.values.iter().take(max_display).enumerate() {
+                            text.push_str(&format!("║   [{}] {}\n", idx, val));
                         }
+                        if array_item.values.len() > max_display {
+                            text.push_str(&format!(
+                                "║   ... and {} more\n",
+                                array_item.values.len() - max_display
+                            ));
+                        }
+                    } else {
+                        text.push_str("║ Values: <Empty>\n");
                     }
+                    text.push_str("║\n║ Tip: Enter=Edit, Del=Delete item");
                 }
             }
+            text.push_str("\n╚═══════════════════════════════════════════════");
             text
         }
     };

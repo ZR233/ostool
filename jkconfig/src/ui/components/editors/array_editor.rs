@@ -1,8 +1,10 @@
 use cursive::{
     Cursive,
     event::Key,
+    theme::{ColorStyle, Effect, Style},
+    utils::markup::StyledString,
     view::{Nameable, Resizable, Scrollable},
-    views::{Dialog, DummyView, EditView, LinearLayout, OnEventView, SelectView, TextView},
+    views::{Dialog, DummyView, EditView, LinearLayout, OnEventView, Panel, SelectView, TextView},
 };
 
 use crate::{
@@ -17,31 +19,50 @@ pub fn show_array_edit(s: &mut Cursive, key: &str, title: &str, values: &[String
 
     // Add existing items to the list
     for (idx, value) in values.iter().enumerate() {
-        select.add_item(format!("[{}] {}", idx, value), idx);
+        let mut label = StyledString::new();
+        label.append_styled(format!("[{}]", idx), ColorStyle::secondary());
+        label.append_plain(" ");
+        label.append_plain(value);
+        select.add_item(label, idx);
     }
 
     // Add "Add new item" option
-    select.add_item("+ Add new item", usize::MAX);
+    let mut add_label = StyledString::new();
+    add_label.append_styled("➕ ", ColorStyle::tertiary());
+    add_label.append_styled("Add new item", Style::from(Effect::Italic));
+    select.add_item(add_label, usize::MAX);
+
+    // Create help text
+    let mut help_text = StyledString::new();
+    help_text.append_styled("Enter", Style::from(Effect::Bold));
+    help_text.append_plain(" Edit/Add  ");
+    help_text.append_styled("Del", Style::from(Effect::Bold));
+    help_text.append_plain(" Delete  ");
+    help_text.append_styled("Esc", Style::from(Effect::Bold));
+    help_text.append_plain(" Back");
 
     s.add_layer(
         OnEventView::new(
             Dialog::around(
                 LinearLayout::vertical()
-                    .child(TextView::new(format!("Edit Array: {}", title)))
+                    .child(TextView::new(format!("📋 Array Editor: {}", title)).center())
                     .child(DummyView)
                     .child(
-                        select
-                            .with_name("array_select")
-                            .scrollable()
-                            .fixed_height(15),
-                    ),
+                        Panel::new(
+                            select
+                                .with_name("array_select")
+                                .scrollable()
+                                .fixed_height(15),
+                        )
+                        .title(format!("Items ({})", values.len()))
+                        .full_width(),
+                    )
+                    .child(DummyView)
+                    .child(Panel::new(TextView::new(help_text)).full_width()),
             )
-            .title("Edit Array")
-            .button("OK", move |s| {
+            .title("Array Editor")
+            .button("Done", move |s| {
                 handle_back(s);
-            })
-            .button("Delete", move |s| {
-                on_delete(s);
             }),
         )
         .on_event(Key::Enter, move |s| {
@@ -75,23 +96,41 @@ fn on_delete(s: &mut Cursive) {
     if let Some(idx) = selection
         && *idx != usize::MAX
     {
+        // Get the value to display in confirmation
+        let value = if let Some(app) = s.user_data::<crate::data::app_data::AppData>()
+            && let Some(ElementType::Item(item)) = app.current()
+            && let ItemType::Array(array_item) = &item.item_type
+            && *idx < array_item.values.len()
+        {
+            array_item.values[*idx].clone()
+        } else {
+            return;
+        };
+
         s.add_layer(
-            Dialog::text(format!("Delete item [{}]?", idx))
-                .title("Confirm Delete")
-                .button("Yes", move |s| {
-                    if let Some(app) = s.user_data::<crate::data::app_data::AppData>()
-                        && let Some(ElementType::Item(item)) = app.current_mut()
-                        && let ItemType::Array(array_item) = &mut item.item_type
-                        && *idx < array_item.values.len()
-                    {
-                        array_item.values.remove(*idx);
-                        s.pop_layer(); // Close confirm dialog
-                        refresh_array_view(s);
-                    }
-                })
-                .button("No", |s| {
-                    s.pop_layer();
-                }),
+            Dialog::around(
+                LinearLayout::vertical()
+                    .child(TextView::new(
+                        "⚠️  Are you sure you want to delete this item?",
+                    ))
+                    .child(DummyView)
+                    .child(TextView::new(format!("  [{}] {}", idx, value))),
+            )
+            .title("Confirm Delete")
+            .button("Yes", move |s| {
+                if let Some(app) = s.user_data::<crate::data::app_data::AppData>()
+                    && let Some(ElementType::Item(item)) = app.current_mut()
+                    && let ItemType::Array(array_item) = &mut item.item_type
+                    && *idx < array_item.values.len()
+                {
+                    array_item.values.remove(*idx);
+                    s.pop_layer(); // Close confirm dialog
+                    refresh_array_view(s);
+                }
+            })
+            .button("No", |s| {
+                s.pop_layer();
+            }),
         );
     }
 }
@@ -101,12 +140,15 @@ fn show_add_item_dialog(s: &mut Cursive, key: &str) {
     s.add_layer(
         Dialog::around(
             LinearLayout::vertical()
-                .child(TextView::new("Enter new value:"))
+                .child(TextView::new("➕ Enter new value:"))
                 .child(DummyView)
-                .child(EditView::new().with_name("new_item_value").fixed_width(50)),
+                .child(
+                    Panel::new(EditView::new().with_name("new_item_value").fixed_width(48))
+                        .title("Value"),
+                ),
         )
         .title("Add Item")
-        .button("OK", move |s| {
+        .button("Add", move |s| {
             let content = s
                 .call_on_name("new_item_value", |v: &mut EditView| v.get_content())
                 .unwrap();
@@ -121,7 +163,11 @@ fn show_add_item_dialog(s: &mut Cursive, key: &str) {
                     refresh_array_view(s);
                 }
             } else {
-                s.add_layer(Dialog::info("Value cannot be empty!").dismiss_button("OK"));
+                s.add_layer(
+                    Dialog::text("⚠️  Value cannot be empty!")
+                        .title("Error")
+                        .dismiss_button("OK"),
+                );
             }
         })
         .button("Cancel", |s| {
@@ -147,17 +193,20 @@ fn show_edit_item_dialog(s: &mut Cursive, key: &str, idx: usize) {
     s.add_layer(
         Dialog::around(
             LinearLayout::vertical()
-                .child(TextView::new(format!("Edit item [{}]:", idx)))
+                .child(TextView::new(format!("✏️  Edit item [{}]:", idx)))
                 .child(DummyView)
                 .child(
-                    EditView::new()
-                        .content(current_value)
-                        .with_name("edit_item_value")
-                        .fixed_width(50),
+                    Panel::new(
+                        EditView::new()
+                            .content(current_value)
+                            .with_name("edit_item_value")
+                            .fixed_width(48),
+                    )
+                    .title("Value"),
                 ),
         )
         .title("Edit Item")
-        .button("OK", move |s| {
+        .button("Save", move |s| {
             let content = s
                 .call_on_name("edit_item_value", |v: &mut EditView| v.get_content())
                 .unwrap();
@@ -173,7 +222,11 @@ fn show_edit_item_dialog(s: &mut Cursive, key: &str, idx: usize) {
                     refresh_array_view(s);
                 }
             } else {
-                s.add_layer(Dialog::info("Value cannot be empty!").dismiss_button("OK"));
+                s.add_layer(
+                    Dialog::text("⚠️  Value cannot be empty!")
+                        .title("Error")
+                        .dismiss_button("OK"),
+                );
             }
         })
         .button("Cancel", |s| {
@@ -197,8 +250,16 @@ fn refresh_array_view(s: &mut Cursive) {
     s.call_on_name("array_select", |view: &mut SelectView<usize>| {
         view.clear();
         for (idx, value) in values.iter().enumerate() {
-            view.add_item(format!("[{}] {}", idx, value), idx);
+            let mut label = StyledString::new();
+            label.append_styled(format!("[{}]", idx), ColorStyle::secondary());
+            label.append_plain(" ");
+            label.append_plain(value);
+            view.add_item(label, idx);
         }
-        view.add_item("+ Add new item", usize::MAX);
+        // Re-add "Add new item" option
+        let mut add_label = StyledString::new();
+        add_label.append_styled("➕ ", ColorStyle::tertiary());
+        add_label.append_styled("Add new item", Style::from(Effect::Italic));
+        view.add_item(add_label, usize::MAX);
     });
 }
