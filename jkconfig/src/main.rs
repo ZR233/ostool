@@ -1,7 +1,8 @@
 extern crate log;
 
-use clap::{Arg, Command};
+use clap::{Parser, Subcommand};
 use cursive::{Cursive, CursiveExt, event::Key, views::Dialog};
+use std::path::PathBuf;
 
 use jkconfig::{
     data::AppData,
@@ -11,35 +12,69 @@ use jkconfig::{
 // mod menu_view;
 // use menu_view::MenuView;
 
+/// 命令行参数结构体
+#[derive(Parser)]
+#[command(name = "jkconfig")]
+#[command(author = "周睿 <zrufo747@outlook.com>")]
+#[command(about = "配置编辑器", long_about = None)]
+struct Cli {
+    /// config file path
+    #[arg(short = 'c', long = "config", default_value = ".config.toml")]
+    config: PathBuf,
+
+    /// schema file path, default is config file name with '-schema.json' suffix
+    #[arg(short = 's', long = "schema")]
+    schema: Option<PathBuf>,
+
+    /// 子命令
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+/// 子命令枚举
+#[derive(Subcommand)]
+enum Commands {
+    /// TUI (default)
+    Tui,
+    /// Web UI mode
+    Web {
+        /// server port
+        #[arg(short = 'p', long = "port", default_value = "3000")]
+        port: u16,
+    },
+}
+
 /// 主函数
 fn main() -> anyhow::Result<()> {
     // 解析命令行参数
-    let matches = Command::new("jkconfig")
-        .author("周睿 <zrufo747@outlook.com>")
-        .arg(
-            Arg::new("config")
-                .long("config")
-                .short('c')
-                .value_name("FILE")
-                .help("指定初始配置文件路径")
-                .default_value(".project.toml"),
-        )
-        .arg(
-            Arg::new("schema")
-                .long("schema")
-                .short('s')
-                .value_name("FILE")
-                .help("指定schema文件路径（默认基于配置文件名推导）"),
-        )
-        .get_matches();
+    let cli = Cli::parse();
 
     // 提取命令行参数
-    let config_file = matches.get_one::<String>("config").map(|s| s.as_str());
-    let schema_file = matches.get_one::<String>("schema").map(|s| s.as_str());
+    let config_path = cli.config.to_string_lossy().to_string();
+    let schema_path = cli.schema.as_ref().map(|p| p.to_string_lossy().to_string());
+
+    let config_file = Some(config_path.as_str());
+    let schema_file = schema_path.as_deref();
 
     // 初始化AppData
     let app_data = AppData::new(config_file, schema_file)?;
 
+    // 根据子命令决定运行模式
+    match cli.command {
+        Some(Commands::Web { port }) => {
+            tokio::runtime::Runtime::new()?.block_on(jkconfig::web::run_server(app_data, port))?;
+        }
+        Some(Commands::Tui) | None => {
+            // 运行TUI界面（默认行为）
+            run_tui(app_data)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// 运行TUI界面
+fn run_tui(app_data: AppData) -> anyhow::Result<()> {
     let title = app_data.root.title.clone();
     let fields = app_data.root.menu().fields();
 

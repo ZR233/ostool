@@ -8,6 +8,7 @@ use anyhow::bail;
 
 use crate::data::{menu::MenuRoot, types::ElementType};
 
+#[derive(Clone)]
 pub struct AppData {
     pub root: MenuRoot,
     pub current_key: Vec<String>,
@@ -15,7 +16,7 @@ pub struct AppData {
     pub config: PathBuf,
 }
 
-const DEFAULT_CONFIG_PATH: &str = ".project.toml";
+const DEFAULT_CONFIG_PATH: &str = ".config.toml";
 
 fn default_schema_by_init(config: &Path) -> PathBuf {
     let binding = config.file_name().unwrap().to_string_lossy();

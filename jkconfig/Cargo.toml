@@ -7,29 +7,43 @@ keywords = ["tui", "config", "json-schema", "terminal"]
 license = "MIT OR Apache-2.0"
 name = "jkconfig"
 repository = "https://github.com/ZR233/ostool"
-version = "0.1.1"
+version = "0.1.2"
+
+[[bin]]
+name = "jkconfig"
+path = "src/main.rs"
+required-features = ["web"]
 
 [dependencies]
 # Cursive TUI framework
-cursive = {version = "0.21", features = ["crossterm-backend"]}
+cursive = {workspace = true, features = ["crossterm-backend"]}
 
 # Data processing
-anyhow = "1.0"
-clap = {version = "4.0", features = ["derive"]}
-serde = {version = "1.0", features = ["derive"]}
-serde_json = "1.0"
+anyhow = {workspace = true}
+clap = {workspace = true, features = ["derive"]}
+serde = {workspace = true, features = ["derive"]}
+serde_json = {workspace = true}
 
-toml = "0.9"
+toml = {workspace = true}
 
 # Error handling
-thiserror = "2.0"
+thiserror = {workspace = true}
 
 # Logging
-log = "0.4"
+log = {workspace = true}
+
+# Web server dependencies (optional)
+axum = {version = "0.8", optional = true}
+chrono = {version = "0.4", optional = true}
+tokio = {version = "1.0", features = ["full"], optional = true}
+tower = {version = "0.5", optional = true}
+tower-http = {version = "0.5", features = ["fs", "cors"], optional = true}
+
+[features]
+default = ["web"]
+web = ["axum", "tokio", "tower", "tower-http", "chrono"]
 
 [dev-dependencies]
 env_logger = "0.11"
-schemars = {version = "1.0.4", features = ["derive"]}
-serde = {version = "1.0", features = ["derive"]}
+schemars = {workspace=true, features = ["derive"]}
 tokio-test = "0.4"
-toml = "0.9"
