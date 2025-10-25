@@ -1,6 +1,12 @@
+use std::{
+    ffi::OsString,
+    io::{BufRead, BufReader},
+    process::Stdio,
+};
+
 use anyhow::anyhow;
 use jkconfig::data::app_data::default_schema_by_init;
-use object::Object;
+use object::Architecture;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
@@ -41,9 +47,13 @@ pub async fn run_qemu(ctx: AppContext, args: &QemuArgs) -> anyhow::Result<()> {
         config.args.push("-nographic".to_string());
         if let Some(arch) = ctx.arch {
             match arch {
-                object::Architecture::Aarch64 => {
+                Architecture::Aarch64 => {
                     config.args.push("-cpu".to_string());
                     config.args.push("cortex-a53".to_string());
+                }
+                Architecture::Riscv64 => {
+                    config.args.push("-cpu".to_string());
+                    config.args.push("rv64".to_string());
                 }
                 _ => {}
             }
@@ -104,8 +114,33 @@ impl QemuRunner {
         } else if let Some(elf_path) = &self.ctx.elf_path {
             cmd.arg("-kernel").arg(elf_path);
         }
+        cmd.stdout(Stdio::piped());
+        cmd.print_cmd();
+        let mut child = cmd.spawn()?;
 
-        cmd.run()?;
+        let stdout = BufReader::new(child.stdout.take().unwrap());
+        for line in stdout.lines() {
+            let line = match line {
+                Ok(l) => l,
+                Err(e) => {
+                    println!("stdout: {:?}", e);
+                    continue;
+                }
+            };
+            // 解析输出为UTF-8
+            println!("{}", line);
+        }
+
+        let out = child.wait_with_output()?;
+
+        if !out.status.success() {
+            unsafe {
+                return Err(anyhow::anyhow!(
+                    "{}",
+                    OsString::from_encoded_bytes_unchecked(out.stderr).to_string_lossy()
+                ));
+            }
+        }
 
         // QEMU execution logic goes here
         Ok(())

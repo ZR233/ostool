@@ -4,11 +4,12 @@ use anyhow::bail;
 use colored::Colorize;
 
 pub trait ShellRunner {
+    fn print_cmd(&self);
     fn run(&mut self) -> anyhow::Result<()>;
 }
 
 impl ShellRunner for Command {
-    fn run(&mut self) -> anyhow::Result<()> {
+    fn print_cmd(&self) {
         let mut cmd_str = self.get_program().to_string_lossy().to_string();
 
         for arg in self.get_args() {
@@ -17,6 +18,10 @@ impl ShellRunner for Command {
         }
 
         println!("{}", cmd_str.purple().bold());
+    }
+
+    fn run(&mut self) -> anyhow::Result<()> {
+        self.print_cmd();
         let status = self.status()?;
         if !status.success() {
             bail!("failed with status: {status}");
