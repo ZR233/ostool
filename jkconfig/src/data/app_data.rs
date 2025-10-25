@@ -8,6 +8,7 @@ use anyhow::bail;
 
 use crate::data::{menu::MenuRoot, types::ElementType};
 
+#[derive(Clone)]
 pub struct AppData {
     pub root: MenuRoot,
     pub current_key: Vec<String>,

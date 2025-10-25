@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>jkconfig Web界面</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚙️</text></svg>">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🚀 jkconfig Web界面</h1>
+            <p class="subtitle">配置编辑器的Web版本</p>
+        </header>
+
+        <main class="main">
+            <section class="hero">
+                <div class="hero-content">
+                    <h2>Hello World! 🎉</h2>
+                    <p>欢迎使用jkconfig的Web界面！这是基于axum服务器实现的配置编辑器。</p>
+                </div>
+            </section>
+
+            <section class="features">
+                <h3>功能特性</h3>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <h4>⚙️ 配置编辑</h4>
+                        <p>支持TOML和JSON格式的配置文件编辑</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>📋 JSON Schema</h4>
+                        <p>基于JSON Schema的配置验证和提示</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>🌐 Web界面</h4>
+                        <p>现代化的Web用户界面，易于使用</p>
+                    </div>
+                    <div class="feature-card">
+                        <h4>🔧 实时预览</h4>
+                        <p>实时查看配置更改的效果</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="api-info">
+                <h3>API端点</h3>
+                <div class="api-grid">
+                    <div class="api-card">
+                        <h4>GET /api/config</h4>
+                        <p>获取当前配置信息</p>
+                        <button onclick="testApi('/api/config')" class="test-btn">测试</button>
+                    </div>
+                    <div class="api-card">
+                        <h4>GET /api/health</h4>
+                        <p>健康检查</p>
+                        <button onclick="testApi('/api/health')" class="test-btn">测试</button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="status" id="status-section">
+                <h3>系统状态</h3>
+                <div id="status-content">
+                    <p>点击上方API测试按钮查看状态...</p>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>&copy; 2024 jkconfig - 基于axum构建 | 版本 0.1.1</p>
+        </footer>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
