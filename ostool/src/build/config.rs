@@ -19,12 +19,27 @@ pub struct Custom {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct Cargo {
+    /// target triple
     pub target: String,
+    /// package name
     pub package: String,
+    /// features to enable
     pub features: Vec<String>,
+    /// log level feature
+    pub log: Option<LogLevel>,
+    /// other cargo args
     pub args: Vec<String>,
-    /// 构建前执行的命令列表
-    pub pre_build_cmd: Vec<String>,
-    /// 构建后执行的命令列表
-    pub post_build_cmd: Vec<String>,
+    /// shell commands before build
+    pub pre_build_cmds: Vec<String>,
+    /// shell commands after build
+    pub post_build_cmds: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub enum LogLevel {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
 }

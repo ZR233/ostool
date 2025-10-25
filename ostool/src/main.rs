@@ -4,9 +4,11 @@ use anyhow::Result;
 use clap::*;
 use colored::Colorize;
 
-mod utils;
+use crate::ctx::AppContext;
 
 mod build;
+mod ctx;
+mod utils;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -38,24 +40,23 @@ async fn main() -> Result<()> {
         None => current_dir()?,
     };
 
+    let ctx = AppContext {
+        workdir,
+        debug: false,
+    };
+
     match cli.command {
         SubCommands::Build { config } => {
-            println!("Building in directory: {}", workdir.display());
-            build::run_build(&workdir, config).await?;
+            build::run_build(ctx, config).await?;
         }
         SubCommands::Run => {
-            println!("Running in directory: {}", workdir.display());
             // Run logic goes here
         }
         SubCommands::CargoRun => {
-            println!("Cargo running in directory: {}", workdir.display());
             // Cargo run logic goes here
         }
         SubCommands::Defconfig => {
-            println!(
-                "Generating default config in directory: {}",
-                workdir.display()
-            );
+
             // Defconfig logic goes here
         }
     }

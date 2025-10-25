@@ -1,16 +1,21 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::anyhow;
 use jkconfig::data::app_data::default_schema_by_init;
-use tokio::{fs, process::Command};
+use tokio::fs;
+
+use crate::{ctx::AppContext, utils::ShellRunner};
 
 pub mod config;
 
-pub async fn run_build(workdir: &Path, config_path: Option<PathBuf>) -> anyhow::Result<()> {
+pub async fn run_build(
+    ctx: AppContext,
+    config_path: Option<PathBuf>,
+) -> anyhow::Result<AppContext> {
     // Build logic will be implemented here
     let config_path = match config_path {
         Some(path) => path,
-        None => workdir.join(".config.toml"),
+        None => ctx.workdir.join(".config.toml"),
     };
 
     let schema_path = default_schema_by_init(&config_path);
@@ -33,49 +38,96 @@ pub async fn run_build(workdir: &Path, config_path: Option<PathBuf>) -> anyhow::
 
     match build_config.system {
         config::BuildSystem::Custom(custom) => {
-            let mut ctx = CtxCustom {
-                ctx: BuildContext {
-                    workdir: workdir.to_path_buf(),
-                },
+            let ctx = CtxCustom {
+                ctx,
                 config: custom,
             };
-            ctx.run().await?;
+            ctx.run().await
         }
-        config::BuildSystem::Cargo(cargo) => todo!(),
+        config::BuildSystem::Cargo(cargo) => {
+            let ctx = CtxCargo { ctx, config: cargo };
+            ctx.run().await
+        }
     }
-
-    Ok(())
-}
-
-struct BuildContext {
-    workdir: PathBuf,
 }
 
 struct CtxCustom {
-    ctx: BuildContext,
+    ctx: AppContext,
     config: config::Custom,
 }
 
 impl CtxCustom {
-    async fn run(&mut self) -> anyhow::Result<()> {
-        self.run_pre_build_cmd().await?;
+    async fn run(self) -> anyhow::Result<AppContext> {
+        self.ctx.shell_run_cmd(&self.config.build_cmd)?;
+        Ok(self.ctx)
+    }
+}
 
-        Ok(())
+struct CtxCargo {
+    ctx: AppContext,
+    config: config::Cargo,
+}
+
+impl CtxCargo {
+    async fn run(self) -> anyhow::Result<AppContext> {
+        for cmd in &self.config.pre_build_cmds {
+            self.ctx.shell_run_cmd(cmd)?;
+        }
+
+        let mut features = self.config.features.clone();
+        if let Some(log_level) = &self.log_level_feature() {
+            features.push(log_level.to_string());
+        }
+
+        let mut cmd = self.ctx.command("cargo");
+        cmd.arg("build");
+        cmd.arg("-p");
+        cmd.arg(&self.config.package);
+        cmd.arg("--target");
+        cmd.arg(&self.config.target);
+        if !features.is_empty() {
+            cmd.arg("--features");
+            cmd.arg(features.join(","));
+        }
+        for arg in &self.config.args {
+            cmd.arg(arg);
+        }
+        if !self.ctx.debug {
+            cmd.arg("--release");
+        }
+
+        cmd.run()?;
+
+        for cmd in &self.config.post_build_cmds {
+            self.ctx.shell_run_cmd(cmd)?;
+        }
+
+        Ok(self.ctx)
     }
 
-    async fn run_pre_build_cmd(&self) -> anyhow::Result<()> {
-        println!("Running pre-build command: {}", self.config.build_cmd);
-        let mut cmd = self.config.build_cmd.split_whitespace();
-        let mut command = Command::new(cmd.next().unwrap());
-        for arg in cmd {
-            command.arg(arg);
-        }
-        command.current_dir(&self.ctx.workdir);
-        let status = command.status().await?;
-        if !status.success() {
-            anyhow::bail!("Pre-build command failed with status: {}", status);
-        }
+    fn log_level_feature(&self) -> Option<String> {
+        let level = self.config.log.clone()?;
 
-        Ok(())
+        let meta = self.ctx.metadata().ok()?;
+        let pkg = meta
+            .packages
+            .iter()
+            .find(|p| p.name == self.config.package)?;
+        let mut has_log = false;
+        for dep in &pkg.dependencies {
+            if dep.name == "log" {
+                has_log = true;
+                break;
+            }
+        }
+        if has_log {
+            Some(format!(
+                "log/{}max_level_{}",
+                if self.ctx.debug { "" } else { "release_" },
+                format!("{:?}", level).to_lowercase()
+            ))
+        } else {
+            None
+        }
     }
 }
