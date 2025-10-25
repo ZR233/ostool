@@ -3,156 +3,60 @@ use std::{env::current_dir, path::PathBuf, thread::sleep, time::Duration};
 use anyhow::Result;
 use clap::*;
 use colored::Colorize;
-use project::Project;
-use step::{CargoTestPrepare, Compile, Qemu, Step, Tftp, Uboot, UbootConfig};
 
-mod cmd;
-mod config;
-mod env;
-mod project;
-mod shell;
-mod step;
-mod ui;
+mod utils;
+
+mod build;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
     #[arg(short, long)]
-    workdir: Option<String>,
+    workdir: Option<PathBuf>,
     #[command(subcommand)]
     command: SubCommands,
 }
 
 #[derive(Subcommand)]
 enum SubCommands {
-    Build,
-    Run(RunArgs),
-    BoardTest,
-    CargoTest(TestArgs),
-    Defconfig(cmd::defconfig::Cmd),
-}
-#[derive(Args, Debug)]
-struct RunArgs {
-    #[command(subcommand)]
-    command: RunSubCommands,
+    Build {
+        /// Path to the build configuration file
+        #[arg(short, long)]
+        config: Option<PathBuf>,
+    },
+    Run,
+    CargoRun,
+    Defconfig,
 }
 
-#[derive(Subcommand, Debug)]
-enum RunSubCommands {
-    Qemu(QemuArgs),
-    Uboot,
-    Tftp,
-}
-
-#[derive(Args, Debug, Default)]
-struct TestArgs {
-    elf: String,
-    mode: Option<String>,
-    #[arg(long)]
-    show_output: bool,
-    #[arg(long)]
-    uboot: bool,
-    #[arg(long)]
-    no_run: bool,
-}
-
-#[derive(Args, Debug, Default)]
-struct QemuArgs {
-    #[arg(short, long)]
-    debug: bool,
-    #[arg(long)]
-    dtb: bool,
-}
-
-fn main() -> Result<()> {
-    env_logger::builder()
-        .format_module_path(false)
-        .filter_level(log::LevelFilter::Info)
-        .init();
-
+#[tokio::main]
+async fn main() -> Result<()> {
     let cli = Cli::parse();
-    let workdir = cli
-        .workdir
-        .map(PathBuf::from)
-        .unwrap_or(current_dir().unwrap());
 
-    env::prepere_deps();
-
-    let mut keep_run = false;
-
-    let mut project = Project::new(workdir);
-    project.prepere_deps();
-
-    let mut steps: Vec<Box<dyn Step>> = vec![];
+    let workdir = match cli.workdir {
+        Some(dir) => dir,
+        None => current_dir()?,
+    };
 
     match cli.command {
-        SubCommands::Build => {
-            project.config_with_file().unwrap();
-            steps.push(Compile::new_boxed(false));
+        SubCommands::Build { config } => {
+            println!("Building in directory: {}", workdir.display());
+            build::run_build(&workdir, config).await?;
         }
-        SubCommands::CargoTest(args) => {
-            project.is_print_cmd = false;
-
-            steps.push(CargoTestPrepare::new_boxed(args.elf, args.uboot));
-            if args.uboot {
-                steps.push(Uboot::new_boxed(true));
-            } else {
-                steps.push(Qemu::new_boxed(
-                    QemuArgs {
-                        debug: args.no_run,
-                        dtb: false,
-                    },
-                    true,
-                ));
-            }
+        SubCommands::Run => {
+            println!("Running in directory: {}", workdir.display());
+            // Run logic goes here
         }
-        SubCommands::BoardTest => {
-            project.board_test_config().unwrap();
-            steps.push(Compile::new_boxed(false));
-
-            let config = project.config.as_mut().unwrap();
-            steps.push(Uboot::new_boxed(false));
+        SubCommands::CargoRun => {
+            println!("Cargo running in directory: {}", workdir.display());
+            // Cargo run logic goes here
         }
-        SubCommands::Run(run_args) => {
-            project.config_with_file().unwrap();
-
-            match run_args.command {
-                RunSubCommands::Qemu(args) => {
-                    steps.push(Compile::new_boxed(args.debug));
-                    steps.push(Qemu::new_boxed(args, false));
-                }
-                RunSubCommands::Uboot => {
-                    steps.push(Compile::new_boxed(false));
-
-                    let config = project.config.as_mut().unwrap();
-                    if config.uboot.is_none() {
-                        config.uboot = Some(UbootConfig::config_by_select());
-                        project.save_config();
-                    }
-
-                    steps.push(Uboot::new_boxed(false));
-                }
-                RunSubCommands::Tftp => {
-                    steps.push(Compile::new_boxed(false));
-                    steps.push(Tftp::new_boxed());
-                    keep_run = true;
-                }
-            };
-        }
-        SubCommands::Defconfig(cmd) => {
-            cmd.run(&mut project);
-        }
-    }
-
-    for step in &mut steps {
-        if let Err(skip) = step.run(&mut project) {
-            println!("{}", format!("warn: {}", skip).yellow());
-        }
-    }
-
-    if keep_run {
-        loop {
-            sleep(Duration::from_secs(1));
+        SubCommands::Defconfig => {
+            println!(
+                "Generating default config in directory: {}",
+                workdir.display()
+            );
+            // Defconfig logic goes here
         }
     }
 

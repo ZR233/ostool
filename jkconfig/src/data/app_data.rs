@@ -18,7 +18,7 @@ pub struct AppData {
 
 const DEFAULT_CONFIG_PATH: &str = ".config.toml";
 
-fn default_schema_by_init(config: &Path) -> PathBuf {
+pub fn default_schema_by_init(config: &Path) -> PathBuf {
     let binding = config.file_name().unwrap().to_string_lossy();
     let mut name_split = binding.split(".").collect::<Vec<_>>();
     if name_split.len() > 1 {
