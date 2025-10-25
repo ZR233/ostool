@@ -32,7 +32,10 @@ pub struct Cargo {
     /// shell commands before build
     pub pre_build_cmds: Vec<String>,
     /// shell commands after build
+    /// `KERNEL_ELF` env var is set to the built ELF path
     pub post_build_cmds: Vec<String>,
+    /// whether to output as binary
+    pub to_bin: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]

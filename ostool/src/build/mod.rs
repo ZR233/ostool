@@ -69,7 +69,7 @@ struct CtxCargo {
 }
 
 impl CtxCargo {
-    async fn run(self) -> anyhow::Result<AppContext> {
+    async fn run(mut self) -> anyhow::Result<AppContext> {
         for cmd in &self.config.pre_build_cmds {
             self.ctx.shell_run_cmd(cmd)?;
         }
@@ -85,6 +85,8 @@ impl CtxCargo {
         cmd.arg(&self.config.package);
         cmd.arg("--target");
         cmd.arg(&self.config.target);
+        cmd.arg("-Z");
+        cmd.arg("unstable-options");
         if !features.is_empty() {
             cmd.arg("--features");
             cmd.arg(features.join(","));
@@ -97,6 +99,28 @@ impl CtxCargo {
         }
 
         cmd.run()?;
+
+        let elf_path = self
+            .ctx
+            .workdir
+            .join("target")
+            .join(&self.config.target)
+            .join(if self.ctx.debug { "debug" } else { "release" })
+            .join(&self.config.package);
+
+        self.ctx.set_elf_path(elf_path.clone()).await;
+
+        if self.config.to_bin {
+            let bin_path = elf_path.with_extension("bin");
+            let mut objcopy_cmd = self.ctx.command("rust-objcopy");
+            objcopy_cmd.arg("--strip-all");
+            objcopy_cmd.arg("-O");
+            objcopy_cmd.arg("binary");
+            objcopy_cmd.arg(elf_path);
+            objcopy_cmd.arg(&bin_path);
+            objcopy_cmd.run()?;
+            self.ctx.bin_path = Some(bin_path);
+        }
 
         for cmd in &self.config.post_build_cmds {
             self.ctx.shell_run_cmd(cmd)?;
