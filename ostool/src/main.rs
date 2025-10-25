@@ -28,7 +28,6 @@ enum SubCommands {
     },
     Run(RunArgs),
     CargoRun,
-    Defconfig,
 }
 
 #[derive(Args, Debug)]
@@ -89,10 +88,6 @@ async fn main() -> Result<()> {
         }
         SubCommands::CargoRun => {
             // Cargo run logic goes here
-        }
-        SubCommands::Defconfig => {
-
-            // Defconfig logic goes here
         }
     }
 
