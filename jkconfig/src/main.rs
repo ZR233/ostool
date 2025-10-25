@@ -18,11 +18,11 @@ use jkconfig::{
 #[command(author = "周睿 <zrufo747@outlook.com>")]
 #[command(about = "配置编辑器", long_about = None)]
 struct Cli {
-    /// 指定初始配置文件路径
-    #[arg(short = 'c', long = "config", default_value = ".project.toml")]
+    /// config file path
+    #[arg(short = 'c', long = "config", default_value = ".config.toml")]
     config: PathBuf,
 
-    /// 指定schema文件路径（默认基于配置文件名推导）
+    /// schema file path, default is config file name with '-schema.json' suffix
     #[arg(short = 's', long = "schema")]
     schema: Option<PathBuf>,
 
@@ -34,11 +34,11 @@ struct Cli {
 /// 子命令枚举
 #[derive(Subcommand)]
 enum Commands {
-    /// 启动TUI界面（默认行为）
+    /// TUI (default)
     Tui,
-    /// 启动Web服务器
+    /// Web UI mode
     Web {
-        /// 服务器端口
+        /// server port
         #[arg(short = 'p', long = "port", default_value = "3000")]
         port: u16,
     },
