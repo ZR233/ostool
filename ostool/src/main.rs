@@ -3,11 +3,7 @@ use std::{env::current_dir, path::PathBuf};
 use anyhow::Result;
 use clap::*;
 
-use ostool::{
-    build,
-    ctx::AppContext,
-    run::{self, qemu::RunQemuArgs},
-};
+use ostool::{build, ctx::AppContext, run::qemu::RunQemuArgs};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]

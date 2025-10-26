@@ -6,14 +6,13 @@ use std::time::Duration;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
+    terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode},
 };
 use serialport::SerialPort;
 
 pub struct SerialTerm {
     tx: Arc<Mutex<Box<dyn SerialPort>>>,
     rx: Arc<Mutex<Box<dyn SerialPort>>>,
-    exit_requested: bool,
 }
 
 // 特殊键序列状态
@@ -28,7 +27,6 @@ impl SerialTerm {
         SerialTerm {
             tx: Arc::new(Mutex::new(tx)),
             rx: Arc::new(Mutex::new(rx)),
-            exit_requested: false,
         }
     }
 
@@ -61,9 +59,7 @@ impl SerialTerm {
         let exit_flag_rx = exit_flag.clone();
 
         // 启动串口接收线程
-        let rx_handle = thread::spawn(move || {
-            Self::handle_serial_receive(rx_port, exit_flag_rx)
-        });
+        let rx_handle = thread::spawn(move || Self::handle_serial_receive(rx_port, exit_flag_rx));
 
         // 主线程处理键盘输入
         let mut key_state = KeySequenceState::Normal;
@@ -75,36 +71,37 @@ impl SerialTerm {
             }
 
             // 非阻塞读取键盘事件
-            if event::poll(Duration::from_millis(10))? {
-                if let Event::Key(key) = event::read()? {
-                    if key.kind == KeyEventKind::Press {
-                        // 检测 Ctrl+A+x 退出序列
-                        match key_state {
-                            KeySequenceState::Normal => {
-                                if key.code == KeyCode::Char('a') && key.modifiers.contains(KeyModifiers::CONTROL) {
-                                    key_state = KeySequenceState::CtrlAPressed;
-                                } else {
-                                    // 普通按键，发送到串口
-                                    Self::send_key_to_serial(&tx_port, key)?;
-                                }
-                            }
-                            KeySequenceState::CtrlAPressed => {
-                                if key.code == KeyCode::Char('x') {
-                                    // 用户请求退出
-                                    eprintln!("\n检测到退出快捷键 Ctrl+A+x");
-                                    *exit_flag.lock().unwrap() = true;
-                                    break;
-                                } else {
-                                    // 不是x键，发送上一个按键并重置状态
-                                    if let KeyCode::Char('a') = key.code {
-                                        // 如果还是 Ctrl+A，保持状态
-                                    } else {
-                                        // 发送 Ctrl+A 和当前按键
-                                        Self::send_ctrl_a_to_serial(&tx_port)?;
-                                        Self::send_key_to_serial(&tx_port, key)?;
-                                        key_state = KeySequenceState::Normal;
-                                    }
-                                }
+            if event::poll(Duration::from_millis(10))?
+                && let Event::Key(key) = event::read()?
+                && key.kind == KeyEventKind::Press
+            {
+                // 检测 Ctrl+A+x 退出序列
+                match key_state {
+                    KeySequenceState::Normal => {
+                        if key.code == KeyCode::Char('a')
+                            && key.modifiers.contains(KeyModifiers::CONTROL)
+                        {
+                            key_state = KeySequenceState::CtrlAPressed;
+                        } else {
+                            // 普通按键，发送到串口
+                            Self::send_key_to_serial(&tx_port, key)?;
+                        }
+                    }
+                    KeySequenceState::CtrlAPressed => {
+                        if key.code == KeyCode::Char('x') {
+                            // 用户请求退出
+                            eprintln!("\n检测到退出快捷键 Ctrl+A+x");
+                            *exit_flag.lock().unwrap() = true;
+                            break;
+                        } else {
+                            // 不是x键，发送上一个按键并重置状态
+                            if let KeyCode::Char('a') = key.code {
+                                // 如果还是 Ctrl+A，保持状态
+                            } else {
+                                // 发送 Ctrl+A 和当前按键
+                                Self::send_ctrl_a_to_serial(&tx_port)?;
+                                Self::send_key_to_serial(&tx_port, key)?;
+                                key_state = KeySequenceState::Normal;
                             }
                         }
                     }
@@ -220,18 +217,18 @@ impl SerialTerm {
             let ctrl_char = match c {
                 'a'..='z' => ((c as u8 - b'a') + 1) as char,
                 'A'..='Z' => ((c as u8 - b'A') + 1) as char,
-                '2' => '\x00',        // Ctrl+2 (Null)
-                '3' => '\x1b',        // Ctrl+3 (Esc)
-                '4' => '\x1c',        // Ctrl+4 (File Separator)
-                '5' => '\x1d',        // Ctrl+5 (Group Separator)
-                '6' => '\x1e',        // Ctrl+6 (Record Separator)
-                '7' => '\x1f',        // Ctrl+7 (Unit Separator)
-                '8' => '\x7f',        // Ctrl+8 (Delete)
-                '?' => '\x7f',        // Ctrl+? (Delete)
-                '[' => '\x1b',        // Ctrl+[ (Esc)
-                ']' => '\x1d',        // Ctrl+] (Group Separator)
-                '^' => '\x1e',        // Ctrl+^ (Record Separator)
-                '_' => '\x1f',        // Ctrl+_ (Unit Separator)
+                '2' => '\x00', // Ctrl+2 (Null)
+                '3' => '\x1b', // Ctrl+3 (Esc)
+                '4' => '\x1c', // Ctrl+4 (File Separator)
+                '5' => '\x1d', // Ctrl+5 (Group Separator)
+                '6' => '\x1e', // Ctrl+6 (Record Separator)
+                '7' => '\x1f', // Ctrl+7 (Unit Separator)
+                '8' => '\x7f', // Ctrl+8 (Delete)
+                '?' => '\x7f', // Ctrl+? (Delete)
+                '[' => '\x1b', // Ctrl+[ (Esc)
+                ']' => '\x1d', // Ctrl+] (Group Separator)
+                '^' => '\x1e', // Ctrl+^ (Record Separator)
+                '_' => '\x1f', // Ctrl+_ (Unit Separator)
                 _ => c,
             };
             bytes.push(ctrl_char as u8);
@@ -404,15 +401,15 @@ impl SerialTerm {
                 if modifiers.contains(KeyModifiers::SHIFT) {
                     bytes.extend_from_slice(&[0x1b, b'[']);
                     bytes.extend_from_slice(f_sequence);
-                    bytes.extend_from_slice(&[b';', b'2', b'~']);
+                    bytes.extend_from_slice(b";2~");
                 } else if modifiers.contains(KeyModifiers::ALT) {
                     bytes.extend_from_slice(&[0x1b, b'[']);
                     bytes.extend_from_slice(f_sequence);
-                    bytes.extend_from_slice(&[b';', b'3', b'~']);
+                    bytes.extend_from_slice(b";3~");
                 } else if modifiers.contains(KeyModifiers::CONTROL) {
                     bytes.extend_from_slice(&[0x1b, b'[']);
                     bytes.extend_from_slice(f_sequence);
-                    bytes.extend_from_slice(&[b';', b'5', b'~']);
+                    bytes.extend_from_slice(b";5~");
                 } else {
                     bytes.extend_from_slice(&[0x1b, b'[']);
                     bytes.extend_from_slice(f_sequence);
@@ -427,15 +424,15 @@ impl SerialTerm {
                 if modifiers.contains(KeyModifiers::SHIFT) {
                     bytes.extend_from_slice(&[0x1b, b'[']);
                     bytes.extend_from_slice(f_str.as_bytes());
-                    bytes.extend_from_slice(&[b';', b'2', b'~']);
+                    bytes.extend_from_slice(b";2~");
                 } else if modifiers.contains(KeyModifiers::ALT) {
                     bytes.extend_from_slice(&[0x1b, b'[']);
                     bytes.extend_from_slice(f_str.as_bytes());
-                    bytes.extend_from_slice(&[b';', b'3', b'~']);
+                    bytes.extend_from_slice(b";3~");
                 } else if modifiers.contains(KeyModifiers::CONTROL) {
                     bytes.extend_from_slice(&[0x1b, b'[']);
                     bytes.extend_from_slice(f_str.as_bytes());
-                    bytes.extend_from_slice(&[b';', b'5', b'~']);
+                    bytes.extend_from_slice(b";5~");
                 } else {
                     bytes.extend_from_slice(&[0x1b, b'[']);
                     bytes.extend_from_slice(f_str.as_bytes());
