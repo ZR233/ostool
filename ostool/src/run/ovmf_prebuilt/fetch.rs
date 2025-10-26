@@ -1,5 +1,5 @@
 use super::{Error, Source};
-use log::info;
+use indicatif::{ProgressBar, ProgressStyle};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{self, Cursor, Read};
@@ -72,13 +72,66 @@ fn download_url(url: &str) -> Result<Vec<u8>, Error> {
         .get(url)
         .call()
         .map_err(|err| Error::Request(Box::new(err)))?;
+
+    // Get content length if available
+    let content_length = resp
+        .headers()
+        .get("content-length")
+        .and_then(|s| s.to_str().ok())
+        .and_then(|s| s.parse::<u64>().ok());
+
+    // Create progress bar
+    let progress = if let Some(total) = content_length {
+        let pb = ProgressBar::new(total);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{msg}\n{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
+                .unwrap()
+                .progress_chars("#>-"),
+        );
+        pb.set_message(format!(
+            "Downloading {}",
+            url.split('/').next_back().unwrap_or("file")
+        ));
+        pb
+    } else {
+        let pb = ProgressBar::new_spinner();
+        pb.set_style(
+            ProgressStyle::default_spinner()
+                .template("{msg} {spinner:.green} [{elapsed_precise}] {bytes} ({bytes_per_sec})")
+                .unwrap(),
+        );
+        pb.set_message(format!(
+            "Downloading {}",
+            url.split('/').next_back().unwrap_or("file")
+        ));
+        pb
+    };
+
     let mut data = Vec::with_capacity(MAX_DOWNLOAD_SIZE_IN_BYTES);
-    resp.into_body()
+    let mut reader = resp
+        .into_body()
         .into_reader()
         // Limit the size of the download.
-        .take(MAX_DOWNLOAD_SIZE_IN_BYTES.try_into().unwrap())
-        .read_to_end(&mut data)
-        .map_err(Error::Download)?;
+        .take(MAX_DOWNLOAD_SIZE_IN_BYTES.try_into().unwrap());
+
+    // Read in chunks and update progress
+    let mut buffer = [0u8; 8192];
+    loop {
+        match reader.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(n) => {
+                data.extend_from_slice(&buffer[..n]);
+                progress.inc(n as u64);
+            }
+            Err(e) => {
+                progress.finish_and_clear();
+                return Err(Error::Download(e));
+            }
+        }
+    }
+
+    progress.finish_with_message(format!("Downloaded {} bytes", data.len()));
     info!("received {} bytes", data.len());
 
     Ok(data)

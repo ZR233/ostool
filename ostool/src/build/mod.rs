@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-use anyhow::anyhow;
 use jkconfig::data::app_data::default_schema_by_init;
 use tokio::fs;
 

@@ -2,7 +2,8 @@ use std::{path::PathBuf, process::Command};
 
 use anyhow::anyhow;
 use cargo_metadata::Metadata;
-use object::{Architecture, Object};
+use colored::Colorize;
+use object::{Architecture, Object, ObjectSegment};
 use tokio::fs;
 
 use crate::utils::ShellRunner;
@@ -67,13 +68,65 @@ impl AppContext {
     pub fn objcopy_output_bin(&mut self) -> anyhow::Result<PathBuf> {
         let elf_path = self.elf_path.as_ref().ok_or(anyhow!("elf not exist"))?;
         let bin_path = elf_path.with_extension("bin");
-        let mut objcopy_cmd = self.command("rust-objcopy");
-        objcopy_cmd.arg("--strip-all");
-        objcopy_cmd.arg("-O");
-        objcopy_cmd.arg("binary");
-        objcopy_cmd.arg(elf_path);
-        objcopy_cmd.arg(&bin_path);
-        objcopy_cmd.run()?;
+        println!(
+            "{}",
+            format!(
+                "Converting ELF to BIN format...\r\n  elf: {}\r\n  bin: {}",
+                elf_path.display(),
+                bin_path.display()
+            )
+            .bold()
+            .purple()
+        );
+
+        // Read ELF file
+        let binary_data =
+            std::fs::read(elf_path).map_err(|e| anyhow!("Failed to read ELF file: {}", e))?;
+
+        // Parse ELF file
+        let obj_file = object::File::parse(binary_data.as_slice())
+            .map_err(|e| anyhow!("Failed to parse ELF file: {}", e))?;
+
+        // Extract loadable segments and write to binary file
+        let mut binary_output = Vec::new();
+        let mut min_addr = u64::MAX;
+        let mut max_addr = 0u64;
+
+        // First pass: find memory range
+        for segment in obj_file.segments() {
+            // Only include loadable segments
+            if segment.size() > 0 {
+                let addr = segment.address();
+                min_addr = min_addr.min(addr);
+                max_addr = max_addr.max(addr + segment.size());
+            }
+        }
+
+        if min_addr == u64::MAX {
+            return Err(anyhow!("No loadable segments found in ELF file"));
+        }
+
+        // Allocate buffer for binary output
+        let total_size = (max_addr - min_addr) as usize;
+        binary_output.resize(total_size, 0u8);
+
+        // Second pass: copy segment data
+        for segment in obj_file.segments() {
+            if let Ok(data) = segment.data()
+                && !data.is_empty()
+            {
+                let addr = segment.address();
+                let offset = (addr - min_addr) as usize;
+                if offset + data.len() <= binary_output.len() {
+                    binary_output[offset..offset + data.len()].copy_from_slice(data);
+                }
+            }
+        }
+
+        // Write binary file
+        std::fs::write(&bin_path, binary_output)
+            .map_err(|e| anyhow!("Failed to write binary file: {}", e))?;
+
         self.bin_path = Some(bin_path.clone());
         Ok(bin_path)
     }
