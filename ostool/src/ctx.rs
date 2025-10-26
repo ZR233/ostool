@@ -1,5 +1,6 @@
 use std::{path::PathBuf, process::Command};
 
+use anyhow::anyhow;
 use cargo_metadata::Metadata;
 use object::{Architecture, Object};
 use tokio::fs;
@@ -61,5 +62,19 @@ impl AppContext {
             }
         };
         self.arch = Some(file.architecture())
+    }
+
+    pub fn objcopy_output_bin(&mut self) -> anyhow::Result<PathBuf> {
+        let elf_path = self.elf_path.as_ref().ok_or(anyhow!("elf not exist"))?;
+        let bin_path = elf_path.with_extension("bin");
+        let mut objcopy_cmd = self.command("rust-objcopy");
+        objcopy_cmd.arg("--strip-all");
+        objcopy_cmd.arg("-O");
+        objcopy_cmd.arg("binary");
+        objcopy_cmd.arg(elf_path);
+        objcopy_cmd.arg(&bin_path);
+        objcopy_cmd.run()?;
+        self.bin_path = Some(bin_path.clone());
+        Ok(bin_path)
     }
 }

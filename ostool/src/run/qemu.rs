@@ -12,12 +12,18 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
 
-use crate::{ctx::AppContext, utils::ShellRunner};
+use crate::{
+    ctx::AppContext,
+    run::ovmf_prebuilt::{Arch, FileType, Prebuilt, Source},
+    utils::ShellRunner,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Default)]
 pub struct QemuConfig {
     pub args: Vec<String>,
     pub uefi: bool,
+    /// objcopy output as binary
+    pub to_bin: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -50,7 +56,10 @@ pub async fn run_qemu(ctx: AppContext, args: RunQemuArgs) -> anyhow::Result<()> 
         let config: QemuConfig = toml::from_str(&config_content)?;
         config
     } else {
-        let mut config = QemuConfig::default();
+        let mut config = QemuConfig {
+            to_bin: true,
+            ..Default::default()
+        };
         config.args.push("-nographic".to_string());
         if let Some(arch) = ctx.arch {
             match arch {
@@ -88,6 +97,10 @@ struct QemuRunner {
 
 impl QemuRunner {
     async fn run(&mut self) -> anyhow::Result<()> {
+        if self.config.to_bin {
+            self.ctx.objcopy_output_bin()?;
+        }
+
         let arch = self.detect_arch()?;
 
         let mut machine = "virt".to_string();
@@ -114,6 +127,10 @@ impl QemuRunner {
 
         if self.ctx.debug {
             cmd.arg("-s").arg("-S");
+        }
+
+        if let Some(bios) = self.bios().await? {
+            cmd.arg("-bios").arg(bios);
         }
 
         if let Some(bin_path) = &self.ctx.bin_path {
@@ -161,5 +178,38 @@ impl QemuRunner {
         Err(anyhow!(
             "Please specify `arch` in QEMU config or provide a valid ELF file."
         ))
+    }
+
+    async fn bios(&self) -> anyhow::Result<Option<PathBuf>> {
+        if self.config.uefi {
+            Ok(Some(self.preper_ovmf().await?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn preper_ovmf(&self) -> anyhow::Result<PathBuf> {
+        let arch =
+            self.ctx.arch.as_ref().ok_or_else(|| {
+                anyhow::anyhow!("Cannot determine architecture for OVMF preparation")
+            })?;
+        let tmp = std::env::temp_dir();
+        let bios_dir = tmp.join("ostool").join("ovmf");
+        fs::create_dir_all(&bios_dir).await?;
+
+        println!("Preparing OVMF firmware for architecture: {:?}", arch);
+        let prebuilt = Prebuilt::fetch(Source::LATEST, &bios_dir)?;
+        let arch = match arch {
+            Architecture::X86_64 => Arch::X64,
+            Architecture::Aarch64 => Arch::Aarch64,
+            Architecture::Riscv64 => Arch::Riscv64,
+            Architecture::LoongArch64 => Arch::LoongArch64,
+            Architecture::I386 => Arch::Ia32,
+            o => return Err(anyhow::anyhow!("OVMF is not supported for {o:?} ",)),
+        };
+
+        let bios_path = prebuilt.get_file(arch, FileType::Code);
+
+        Ok(bios_path)
     }
 }

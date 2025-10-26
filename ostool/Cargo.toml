@@ -41,3 +41,8 @@ tftpd = "0.5"
 tokio = {workspace = true, features = ["full"]}
 toml = {workspace = true}
 uboot-shell = {version = "0.1.9", path = "../uboot-shell"}
+
+lzma-rs = "0.3"
+sha2 = "0.10"
+tar = "0.4"
+ureq = "3.0"

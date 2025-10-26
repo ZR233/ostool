@@ -117,15 +117,7 @@ impl CtxCargo {
         self.ctx.set_elf_path(elf_path.clone()).await;
 
         if self.config.to_bin {
-            let bin_path = elf_path.with_extension("bin");
-            let mut objcopy_cmd = self.ctx.command("rust-objcopy");
-            objcopy_cmd.arg("--strip-all");
-            objcopy_cmd.arg("-O");
-            objcopy_cmd.arg("binary");
-            objcopy_cmd.arg(elf_path);
-            objcopy_cmd.arg(&bin_path);
-            objcopy_cmd.run()?;
-            self.ctx.bin_path = Some(bin_path);
+            self.ctx.objcopy_output_bin()?;
         }
 
         for cmd in &self.config.post_build_cmds {
