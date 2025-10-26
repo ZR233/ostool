@@ -1,5 +1,5 @@
 [workspace]
-exclude = ["assets/*"]
+exclude = ["assets/*", "fit_test"]
 members = ["ostool", "uboot-shell", "jkconfig", "mkimage"]
 resolver = "3"
 

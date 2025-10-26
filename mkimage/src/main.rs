@@ -2,7 +2,6 @@
 
 use clap::Parser;
 use mkimage::cli::{run_cli, Args};
-use mkimage::error::Result;
 
 fn main() {
     let args = Args::parse();

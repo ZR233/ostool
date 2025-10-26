@@ -1902,6 +1902,7 @@ dependencies = [
  "jkconfig",
  "log",
  "lzma-rs",
+ "mkimage",
  "network-interface",
  "object",
  "ratatui",

@@ -1,14 +1,31 @@
-use std::{path::PathBuf, thread, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    thread,
+    time::Duration,
+};
 
-use crossterm::terminal::{disable_raw_mode, is_raw_mode_enabled};
+use byte_unit::Byte;
+use colored::Colorize;
+use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use jkconfig::data::app_data::default_schema_by_init;
+use log::{info, warn};
+use mkimage::{fit::builder::convenience, image_types::Compression};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serialport::SerialPort;
-use tokio::{fs, spawn, task::spawn_blocking};
+use tokio::fs;
 use uboot_shell::UbootShell;
 
 use crate::{ctx::AppContext, sterm::SerialTerm};
+
+/// FIT image 生成相关的错误消息常量
+mod errors {
+    pub const KERNEL_READ_ERROR: &str = "读取 kernel 文件失败";
+    pub const DTB_READ_ERROR: &str = "读取 DTB 文件失败";
+    pub const FIT_BUILD_ERROR: &str = "构建 FIT image 失败";
+    pub const FIT_SAVE_ERROR: &str = "保存 FIT image 失败";
+    pub const DIR_ERROR: &str = "无法获取 kernel 文件目录";
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
 pub struct UbootConfig {
@@ -16,7 +33,7 @@ pub struct UbootConfig {
     /// e.g., /dev/ttyUSB0 on linux, COM3 on Windows
     pub serial: String,
     pub baud_rate: i64,
-    pub dtb_file: String,
+    pub dtb_file: Option<String>,
     /// Kernel load address
     /// if not specified, use U-Boot env variable 'loadaddr'
     pub kernel_load_addr: Option<String>,
@@ -105,6 +122,107 @@ struct Runner {
 }
 
 impl Runner {
+    /// 生成压缩的 FIT image 包含 kernel 和 FDT
+    ///
+    /// # 参数
+    /// - `kernel_path`: kernel 文件路径
+    /// - `dtb_path`: DTB 文件路径（可选）
+    /// - `output_dir`: 输出目录
+    /// - `kernel_load_addr`: kernel 加载地址
+    ///
+    /// # 返回值
+    /// 返回生成的 FIT image 文件路径
+    async fn generate_fit_image(
+        &self,
+        kernel_path: &Path,
+        dtb_path: Option<&Path>,
+        kernel_load_addr: u64,
+    ) -> anyhow::Result<PathBuf> {
+        info!("begin gen FIT image...");
+        // 生成压缩的 FIT image
+        let output_dir = kernel_path
+            .parent()
+            .and_then(|p| p.to_str())
+            .ok_or(anyhow!(errors::DIR_ERROR))?;
+
+        // 读取 kernel 数据
+        let kernel_data = fs::read(kernel_path).await.map_err(|e| {
+            anyhow!(
+                "{} {}: {}",
+                errors::KERNEL_READ_ERROR,
+                kernel_path.display(),
+                e
+            )
+        })?;
+
+        info!(
+            "已读取 kernel 文件: {} (大小: {:.2})",
+            kernel_path.display(),
+            Byte::from(kernel_data.len())
+        );
+
+        // 处理 DTB 文件
+        let fdt_result = if let Some(dtb_path) = dtb_path {
+            match fs::read(dtb_path).await {
+                Ok(data) => {
+                    info!(
+                        "已读取 DTB 文件: {} (大小: {:.2})",
+                        dtb_path.display(),
+                        Byte::from(data.len())
+                    );
+                    Some(data)
+                }
+                Err(e) => {
+                    return Err(anyhow!(
+                        "{} {}: {}",
+                        errors::DTB_READ_ERROR,
+                        dtb_path.display(),
+                        e
+                    ));
+                }
+            }
+        } else {
+            warn!("未指定 DTB 文件，将生成仅包含 kernel 的 FIT image");
+            None
+        };
+
+        // 计算 FDT 加载地址（kernel 加载地址 + 32MB，标准偏移）
+        let (fdt_data, fdt_load_addr) = if let Some(data) = fdt_result {
+            (data, kernel_load_addr + 0x02000000)
+        } else {
+            (vec![], 0) // 未使用时不关心
+        };
+
+        // 使用 mkimage 创建压缩的 FIT
+        let fit_builder = convenience::compressed_kernel_fdt(
+            kernel_data,
+            fdt_data,
+            kernel_load_addr,
+            kernel_load_addr, // entry = loadaddr
+            fdt_load_addr,
+            Compression::Gzip,
+        );
+
+        // 构建 FIT 数据
+        let fit_data = fit_builder
+            .build()
+            .map_err(|e| anyhow!("{}: {}", errors::FIT_BUILD_ERROR, e))?;
+
+        // 保存到文件
+        let output_path = Path::new(output_dir).join("image.fit");
+        fs::write(&output_path, fit_data).await.map_err(|e| {
+            anyhow!(
+                "{} {}: {}",
+                errors::FIT_SAVE_ERROR,
+                output_path.display(),
+                e
+            )
+        })?;
+
+        info!("FIT image 生成成功: {}", output_path.display());
+        Ok(output_path)
+    }
+
     async fn run(&mut self) -> anyhow::Result<()> {
         self.preper_regex()?;
         self.ctx.objcopy_output_bin()?;
@@ -162,6 +280,15 @@ impl Runner {
         });
 
         info!("kernel load addr: {loadaddr:#x}");
+        let dtb = self.config.dtb_file.clone();
+        if let Some(ref dtb_file) = dtb {
+            info!("Using DTB from: {}", dtb_file);
+        }
+
+        let dtb_path = dtb.as_ref().map(Path::new);
+        let fitimage = self.generate_fit_image(kernel, dtb_path, loadaddr).await?;
+
+        Self::uboot_loady(&mut uboot, loadaddr as usize, fitimage);
 
         drop(uboot);
 
@@ -198,5 +325,27 @@ impl Runner {
         }
 
         Ok(())
+    }
+
+    fn uboot_loady(uboot: &mut UbootShell, addr: usize, file: impl Into<PathBuf>) {
+        println!("{}", "\r\nsend file".green());
+
+        let pb = ProgressBar::new(100);
+        pb.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+        .unwrap()
+        .with_key("eta", |state: &ProgressState, w: &mut dyn core::fmt::Write| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap())
+        .progress_chars("#>-"));
+
+        let res = uboot
+            .loady(addr, file, |x, a| {
+                pb.set_length(a as _);
+                pb.set_position(x as _);
+            })
+            .unwrap();
+
+        pb.finish_with_message("upload done");
+
+        println!("{}", res);
+        println!("send ok");
     }
 }
