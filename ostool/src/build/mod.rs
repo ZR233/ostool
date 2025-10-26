@@ -81,6 +81,12 @@ impl CtxCargo {
 
         let mut cmd = self.ctx.command("cargo");
         cmd.arg("build");
+
+        if let Some(extra_config_path) = self.cargo_extra_config().await? {
+            cmd.arg("--config");
+            cmd.arg(extra_config_path);
+        }
+
         cmd.arg("-p");
         cmd.arg(&self.config.package);
         cmd.arg("--target");
@@ -153,5 +159,112 @@ impl CtxCargo {
         } else {
             None
         }
+    }
+
+    async fn cargo_extra_config(&self) -> anyhow::Result<Option<String>> {
+        let s = match self.config.extra_config.as_ref() {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+
+        // Check if it's a URL (starts with http:// or https://)
+        if s.starts_with("http://") || s.starts_with("https://") {
+            // Convert GitHub URL to raw content URL if needed
+            let download_url = Self::convert_to_raw_url(s);
+
+            // Download to temp directory
+            match self.download_config_to_temp(&download_url).await {
+                Ok(path) => Ok(Some(path)),
+                Err(e) => {
+                    eprintln!("Failed to download config from {}: {}", s, e);
+                    Err(e)
+                }
+            }
+        } else {
+            // It's a local path, return as is
+            Ok(Some(s.clone()))
+        }
+    }
+
+    /// Convert GitHub URL to raw content URL
+    /// Supports:
+    /// - https://github.com/user/repo/blob/branch/path/file -> https://raw.githubusercontent.com/user/repo/branch/path/file
+    /// - https://raw.githubusercontent.com/... (already raw, no change)
+    /// - Other URLs: no change
+    fn convert_to_raw_url(url: &str) -> String {
+        // Already a raw URL
+        if url.contains("raw.githubusercontent.com") || url.contains("raw.github.com") {
+            return url.to_string();
+        }
+
+        // Convert github.com/user/repo/blob/... to raw.githubusercontent.com/user/repo/...
+        if url.contains("github.com") && url.contains("/blob/") {
+            let converted = url
+                .replace("github.com", "raw.githubusercontent.com")
+                .replace("/blob/", "/");
+            println!("Converting GitHub URL to raw: {} -> {}", url, converted);
+            return converted;
+        }
+
+        // Not a GitHub URL or already in correct format
+        url.to_string()
+    }
+
+    async fn download_config_to_temp(&self, url: &str) -> anyhow::Result<String> {
+        use std::time::SystemTime;
+
+        println!("Downloading cargo config from: {}", url);
+
+        // Get system temp directory
+        let temp_dir = std::env::temp_dir();
+
+        // Generate filename with timestamp
+        let timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // Extract filename from URL or use default
+        let url_path = url.split('/').next_back().unwrap_or("config.toml");
+        let filename = format!("cargo_config_{}_{}", timestamp, url_path);
+        let target_path = temp_dir.join(filename);
+
+        // Create reqwest client
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .map_err(|e| anyhow!("Failed to create HTTP client: {}", e))?;
+
+        // Build request with User-Agent for GitHub
+        let mut request = client.get(url);
+
+        if url.contains("github.com") || url.contains("githubusercontent.com") {
+            // GitHub requires User-Agent
+            request = request.header("User-Agent", "ostool-cargo-downloader");
+        }
+
+        // Download the file
+        let response = request
+            .send()
+            .await
+            .map_err(|e| anyhow!("Failed to download from {}: {}", url, e))?;
+
+        if !response.status().is_success() {
+            return Err(anyhow!("HTTP error {}: {}", response.status(), url));
+        }
+
+        let content = response
+            .bytes()
+            .await
+            .map_err(|e| anyhow!("Failed to read response body: {}", e))?;
+
+        // Write to temp file
+        tokio::fs::write(&target_path, content)
+            .await
+            .map_err(|e| anyhow!("Failed to write to temp file: {}", e))?;
+
+        println!("Config downloaded to: {}", target_path.display());
+
+        Ok(target_path.to_string_lossy().to_string())
     }
 }

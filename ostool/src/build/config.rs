@@ -27,6 +27,9 @@ pub struct Cargo {
     pub features: Vec<String>,
     /// log level feature
     pub log: Option<LogLevel>,
+    /// extra cargo .config.toml file
+    /// can be url or local path
+    pub extra_config: Option<String>,
     /// other cargo args
     pub args: Vec<String>,
     /// shell commands before build

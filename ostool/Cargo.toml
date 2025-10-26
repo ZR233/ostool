@@ -7,7 +7,7 @@ license = "MIT OR Apache-2.0"
 name = "ostool"
 readme = "../README.md"
 repository = "https://github.com/ZR233/ostool"
-version = "0.7.29"
+version = "0.8.0"
 
 [dependencies]
 anyhow = {workspace = true, features = ["backtrace"]}
@@ -18,16 +18,17 @@ colored = "3"
 crossterm = "0.29"
 env_logger = {workspace = true}
 indicatif = "0.18"
+jkconfig = {version = "0.1", path = "../jkconfig"}
 log = {workspace = true}
 network-interface = "2"
 object = "0.37"
 ratatui = "0.29"
+reqwest = {version = "0.12", default-features = false, features = ["rustls-tls"]}
+schemars = {workspace = true, features = ["derive"]}
 serde = {workspace = true, features = ["derive"]}
 serde_json = {workspace = true}
 serialport = "4.6"
 tftpd = "0.5"
+tokio = {workspace = true, features = ["full"]}
 toml = {workspace = true}
 uboot-shell = {version = "0.1.9", path = "../uboot-shell"}
-tokio = {workspace = true, features = ["full"]}
-schemars = {workspace = true, features = ["derive"]}
-jkconfig = {version = "0.1", path = "../jkconfig"}
