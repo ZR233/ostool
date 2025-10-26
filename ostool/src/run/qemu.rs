@@ -2,14 +2,17 @@ use std::{
     ffi::OsString,
     io::{BufRead, BufReader},
     path::PathBuf,
-    process::Stdio,
+    process::{Child, Stdio},
 };
 
 use anyhow::anyhow;
+use colored::Colorize;
+use crossterm::terminal::disable_raw_mode;
 use jkconfig::data::app_data::default_schema_by_init;
 use object::Architecture;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::io::{self, Write};
 use tokio::fs;
 
 use crate::{
@@ -24,6 +27,8 @@ pub struct QemuConfig {
     pub uefi: bool,
     /// objcopy output as binary
     pub to_bin: bool,
+    pub success_regex: Vec<String>,
+    pub fail_regex: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -83,6 +88,8 @@ pub async fn run_qemu(ctx: AppContext, args: RunQemuArgs) -> anyhow::Result<()> 
         config,
         args: vec![],
         dtbdump: args.dtb_dump,
+        success_regex: vec![],
+        fail_regex: vec![],
     };
     runner.run().await?;
     Ok(())
@@ -93,10 +100,14 @@ struct QemuRunner {
     config: QemuConfig,
     args: Vec<String>,
     dtbdump: bool,
+    success_regex: Vec<regex::Regex>,
+    fail_regex: Vec<regex::Regex>,
 }
 
 impl QemuRunner {
     async fn run(&mut self) -> anyhow::Result<()> {
+        self.preper_regex()?;
+
         if self.config.to_bin {
             self.ctx.objcopy_output_bin()?;
         }
@@ -142,6 +153,8 @@ impl QemuRunner {
         cmd.print_cmd();
         let mut child = cmd.spawn()?;
 
+        let mut qemu_result: Option<anyhow::Result<()>> = None;
+
         let stdout = BufReader::new(child.stdout.take().unwrap());
         for line in stdout.lines() {
             let line = match line {
@@ -151,13 +164,13 @@ impl QemuRunner {
                     continue;
                 }
             };
-            // 解析输出为UTF-8
-            println!("{}", line);
+            self.on_qemu_output(&line, &mut child, &mut qemu_result)?;
         }
 
         let out = child.wait_with_output()?;
-
-        if !out.status.success() {
+        if let Some(res) = qemu_result {
+            res?;
+        } else if !out.status.success() {
             unsafe {
                 return Err(anyhow::anyhow!(
                     "{}",
@@ -165,8 +178,6 @@ impl QemuRunner {
                 ));
             }
         }
-
-        // QEMU execution logic goes here
         Ok(())
     }
 
@@ -211,5 +222,84 @@ impl QemuRunner {
         let bios_path = prebuilt.get_file(arch, FileType::Code);
 
         Ok(bios_path)
+    }
+
+    fn on_qemu_output(
+        &self,
+        line: &str,
+        child: &mut Child,
+        res: &mut Option<anyhow::Result<()>>,
+    ) -> anyhow::Result<()> {
+        // Process QEMU output line here
+        println!("{}", line);
+
+        for regex in &self.fail_regex {
+            if regex.is_match(line) {
+                *res = Some(Err(anyhow!(
+                    "Detected failure pattern '{}' in QEMU output.",
+                    regex.as_str()
+                )));
+
+                self.kill_qemu(child)?;
+                return Ok(());
+            }
+        }
+
+        for regex in &self.success_regex {
+            if regex.is_match(line) {
+                *res = Some(Ok(()));
+                println!(
+                    "{}",
+                    format!(
+                        "Detected success pattern '{}' in QEMU output, terminating QEMU.",
+                        regex.as_str()
+                    )
+                    .green()
+                );
+                self.kill_qemu(child)?;
+                return Ok(());
+            }
+        }
+
+        Ok(())
+    }
+
+    fn kill_qemu(&self, child: &mut Child) -> anyhow::Result<()> {
+        child.kill()?;
+
+        // 尝试恢复终端状态
+        let _ = disable_raw_mode();
+
+        // 使用 stty 命令恢复终端回显 (最可靠的方法)
+        let _ = std::process::Command::new("stty")
+            .arg("echo")
+            .arg("icanon")
+            .status();
+
+        // 刷新输出
+        let _ = io::stdout().flush();
+        println!();
+
+        Ok(())
+    }
+
+    fn preper_regex(&mut self) -> anyhow::Result<()> {
+        // Prepare regex patterns if needed
+        // Compile success regex patterns
+        for pattern in self.config.success_regex.iter() {
+            // Compile and store the regex
+            let regex =
+                regex::Regex::new(pattern).map_err(|e| anyhow!("success regex error: {e}"))?;
+            self.success_regex.push(regex);
+        }
+
+        // Compile fail regex patterns
+        for pattern in self.config.fail_regex.iter() {
+            // Compile and store the regex
+            let regex = regex::Regex::new(pattern).map_err(|e| anyhow!("fail regex error: {e}"))?;
+            self.fail_regex.push(regex);
+        }
+
+        Ok(())
     }
 }

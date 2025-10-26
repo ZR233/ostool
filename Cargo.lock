@@ -1820,6 +1820,7 @@ dependencies = [
  "network-interface",
  "object",
  "ratatui",
+ "regex",
  "reqwest",
  "schemars",
  "serde",

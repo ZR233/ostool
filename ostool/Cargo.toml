@@ -9,7 +9,6 @@ readme = "../README.md"
 repository = "https://github.com/ZR233/ostool"
 version = "0.8.0"
 
-
 [[bin]]
 name = "ostool"
 path = "src/main.rs"
@@ -43,6 +42,7 @@ toml = {workspace = true}
 uboot-shell = {version = "0.1.9", path = "../uboot-shell"}
 
 lzma-rs = "0.3"
+regex = "1"
 sha2 = "0.10"
 tar = "0.4"
 ureq = "3.0"
