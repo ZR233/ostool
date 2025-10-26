@@ -8,7 +8,7 @@ use serialport::SerialPort;
 use tokio::{fs, spawn, task::spawn_blocking};
 use uboot_shell::UbootShell;
 
-use crate::ctx::AppContext;
+use crate::{ctx::AppContext, sterm::SerialTerm};
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
 pub struct UbootConfig {
@@ -133,7 +133,8 @@ impl Runner {
         let tx = rx
             .try_clone()
             .map_err(|e| anyhow!("Failed to clone serial port: {e}"))?;
-        let mut shell = SerialShell::new(tx, rx);
+        let mut shell = SerialTerm::new(tx, rx);
+        shell.run().await?;
 
         Ok(())
     }
@@ -157,25 +158,4 @@ impl Runner {
 
         Ok(())
     }
-}
-
-struct SerialShell {
-    tx: Box<dyn SerialPort>,
-    rx: Box<dyn SerialPort>,
-}
-
-impl SerialShell {
-    fn new(tx: Box<dyn SerialPort>, rx: Box<dyn SerialPort>) -> Self {
-        SerialShell { tx, rx }
-    }
-
-    fn run(&mut self) -> anyhow::Result<()> {
-        // Implement serial shell interaction logic here
-
-        Ok(())
-    }
-}
-
-impl Drop for SerialShell {
-    fn drop(&mut self) {}
 }
