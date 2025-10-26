@@ -2,7 +2,7 @@
 //!
 //! Demonstrates creating a complete FIT image with kernel, FDT, and ramdisk.
 
-use mkimage::{FitImageBuilder, FitImageConfig, ComponentConfig};
+use mkimage::{ComponentConfig, FitImageBuilder, FitImageConfig};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== 完整FIT镜像测试 ===");
@@ -41,15 +41,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_kernel(
             ComponentConfig::new("linux", kernel_data.as_bytes().to_vec())
                 .with_load_address(0x80080000)
-                .with_entry_point(0x80080000)
+                .with_entry_point(0x80080000),
         )
         .with_fdt(
             ComponentConfig::new("devicetree", fdt_data.as_bytes().to_vec())
-                .with_load_address(0x82000000)
+                .with_load_address(0x82000000),
         )
         .with_ramdisk(
             ComponentConfig::new("initramfs", ramdisk_data.as_bytes().to_vec())
-                .with_load_address(0x84000000)
+                .with_load_address(0x84000000),
         )
         .with_kernel_compression(true);
 
@@ -79,15 +79,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_kernel(
             ComponentConfig::new("linux", kernel_data.as_bytes().to_vec())
                 .with_load_address(0x80080000)
-                .with_entry_point(0x80080000)
+                .with_entry_point(0x80080000),
         )
         .with_fdt(
             ComponentConfig::new("devicetree", fdt_data.as_bytes().to_vec())
-                .with_load_address(0x82000000)
+                .with_load_address(0x82000000),
         )
         .with_ramdisk(
             ComponentConfig::new("initramfs", ramdisk_data.as_bytes().to_vec())
-                .with_load_address(0x84000000)
+                .with_load_address(0x84000000),
         )
         .with_kernel_compression(false);
 

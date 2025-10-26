@@ -6,7 +6,7 @@ use ostool::{
     ctx::AppContext,
     run::{
         qemu,
-        uboot::{self, RunUbootArgs, UbootConfig},
+        uboot::{self, RunUbootArgs},
     },
 };
 

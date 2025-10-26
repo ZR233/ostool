@@ -28,16 +28,16 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
-pub mod fit;
 pub mod compression;
 pub mod crc;
 pub mod error;
+pub mod fit;
 
 // Re-export main types for convenience
-pub use fit::{FitImageBuilder, FitImageConfig, ComponentConfig};
 pub use compression::traits::CompressionInterface;
 pub use crc::calculate_crc32;
 pub use error::{MkImageError, Result};
+pub use fit::{ComponentConfig, FitImageBuilder, FitImageConfig};
 
 /// Current version of the mkimage implementation
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

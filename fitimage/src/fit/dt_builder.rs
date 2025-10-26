@@ -3,7 +3,7 @@
 //! Handles the creation of U-Boot compatible device tree structures for FIT images.
 
 use crate::error::Result;
-use crate::fit::config::{FitImageConfig, ComponentConfig};
+use crate::fit::config::{ComponentConfig, FitImageConfig};
 
 /// Simple device tree builder that creates FIT-compatible device trees manually
 pub struct DeviceTreeBuilder {
@@ -13,9 +13,7 @@ pub struct DeviceTreeBuilder {
 impl DeviceTreeBuilder {
     /// Create a new device tree builder
     pub fn new() -> Result<Self> {
-        Ok(Self {
-            buffer: Vec::new(),
-        })
+        Ok(Self { buffer: Vec::new() })
     }
 
     /// Build a FIT device tree from configuration
@@ -77,7 +75,12 @@ impl DeviceTreeBuilder {
     }
 
     /// Add kernel component
-    fn add_kernel_component(&mut self, name: &str, component: &ComponentConfig, compress: bool) -> Result<()> {
+    fn add_kernel_component(
+        &mut self,
+        name: &str,
+        component: &ComponentConfig,
+        compress: bool,
+    ) -> Result<()> {
         self.write_node_start(name);
         self.write_property_string("description", "Linux Kernel");
         self.write_property_string("type", "kernel");
@@ -150,7 +153,8 @@ impl DeviceTreeBuilder {
         if name.is_empty() {
             self.buffer.extend_from_slice(b"ROOT_START:");
         } else {
-            self.buffer.extend_from_slice(format!("NODE_START:{}:", name).as_bytes());
+            self.buffer
+                .extend_from_slice(format!("NODE_START:{}:", name).as_bytes());
         }
     }
 
@@ -161,22 +165,26 @@ impl DeviceTreeBuilder {
 
     /// Write string property
     fn write_property_string(&mut self, name: &str, value: &str) {
-        self.buffer.extend_from_slice(format!("PROP_STR:{}={}:", name, value).as_bytes());
+        self.buffer
+            .extend_from_slice(format!("PROP_STR:{}={}:", name, value).as_bytes());
     }
 
     /// Write u32 property
     fn write_property_u32(&mut self, name: &str, value: u32) {
-        self.buffer.extend_from_slice(format!("PROP_U32:{}=0x{:08x}:", name, value).as_bytes());
+        self.buffer
+            .extend_from_slice(format!("PROP_U32:{}=0x{:08x}:", name, value).as_bytes());
     }
 
     /// Write u64 property
     fn write_property_u64(&mut self, name: &str, value: u64) {
-        self.buffer.extend_from_slice(format!("PROP_U64:{}=0x{:016x}:", name, value).as_bytes());
+        self.buffer
+            .extend_from_slice(format!("PROP_U64:{}=0x{:016x}:", name, value).as_bytes());
     }
 
     /// Write data property
     fn write_property_data(&mut self, name: &str, data: &[u8]) {
-        self.buffer.extend_from_slice(format!("PROP_DATA:{}=len{}:", name, data.len()).as_bytes());
+        self.buffer
+            .extend_from_slice(format!("PROP_DATA:{}=len{}:", name, data.len()).as_bytes());
         self.buffer.extend_from_slice(data);
         self.buffer.extend_from_slice(b":PROP_DATA_END:");
     }
@@ -215,7 +223,7 @@ impl Default for DeviceTreeBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fit::config::{FitImageConfig, ComponentConfig};
+    use crate::fit::config::{ComponentConfig, FitImageConfig};
 
     #[test]
     fn test_dt_builder() {
@@ -223,7 +231,7 @@ mod tests {
             .with_kernel(
                 ComponentConfig::new("test-kernel", vec![1, 2, 3, 4])
                     .with_load_address(0x80080000)
-                    .with_entry_point(0x80080000)
+                    .with_entry_point(0x80080000),
             )
             .with_kernel_compression(true);
 

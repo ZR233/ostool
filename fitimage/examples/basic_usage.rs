@@ -2,7 +2,7 @@
 //!
 //! Demonstrates how to create a FIT image with kernel and device tree.
 
-use mkimage::{FitImageBuilder, FitImageConfig, ComponentConfig};
+use mkimage::{ComponentConfig, FitImageBuilder, FitImageConfig};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create some sample kernel data
@@ -16,12 +16,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_kernel(
             ComponentConfig::new("kernel", kernel_data.to_vec())
                 .with_load_address(0x80080000)
-                .with_entry_point(0x80080000)
+                .with_entry_point(0x80080000),
         )
-        .with_fdt(
-            ComponentConfig::new("fdt", fdt_data.to_vec())
-                .with_load_address(0x82000000)
-        )
+        .with_fdt(ComponentConfig::new("fdt", fdt_data.to_vec()).with_load_address(0x82000000))
         .with_kernel_compression(false);
 
     // Build FIT image
@@ -30,7 +27,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("FIT image created successfully!");
     println!("Size: {} bytes", fit_data.len());
-    println!("First 16 bytes: {:02x?}", &fit_data[..16.min(fit_data.len())]);
+    println!(
+        "First 16 bytes: {:02x?}",
+        &fit_data[..16.min(fit_data.len())]
+    );
 
     // Verify device tree magic
     if fit_data.len() >= 4 && &fit_data[0..4] == b"\xd0\x0d\xfe\xed" {

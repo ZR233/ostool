@@ -24,44 +24,25 @@ pub enum MkImageError {
     Io(#[from] std::io::Error),
 
     #[error("CRC32 checksum mismatch: expected {expected:08x}, calculated {calculated:08x}")]
-    CrcMismatch {
-        expected: u32,
-        calculated: u32,
-    },
+    CrcMismatch { expected: u32, calculated: u32 },
 
     #[error("Invalid magic number: expected {expected:08x}, found {found:08x}")]
-    InvalidMagic {
-        expected: u32,
-        found: u32,
-    },
+    InvalidMagic { expected: u32, found: u32 },
 
     #[error("Image header too large: {size} bytes (max {max} bytes)")]
-    HeaderTooLarge {
-        size: usize,
-        max: usize,
-    },
+    HeaderTooLarge { size: usize, max: usize },
 
     #[error("Image name too long: {len} bytes (max {max} bytes)")]
-    NameTooLong {
-        len: usize,
-        max: usize,
-    },
+    NameTooLong { len: usize, max: usize },
 
     #[error("Data size too large: {size} bytes (max {max} bytes)")]
-    DataTooLarge {
-        size: u64,
-        max: u64,
-    },
+    DataTooLarge { size: u64, max: u64 },
 
     #[error("Invalid load address: 0x{address:x}")]
-    InvalidLoadAddress {
-        address: u64,
-    },
+    InvalidLoadAddress { address: u64 },
 
     #[error("Invalid entry point: 0x{address:x}")]
-    InvalidEntryPoint {
-        address: u64,
-    },
+    InvalidEntryPoint { address: u64 },
 
     #[error("Failed to parse configuration: {0}")]
     ConfigParse(String),
@@ -102,7 +83,10 @@ impl MkImageError {
 
     /// Create a CRC mismatch error
     pub fn crc_mismatch(expected: u32, calculated: u32) -> Self {
-        Self::CrcMismatch { expected, calculated }
+        Self::CrcMismatch {
+            expected,
+            calculated,
+        }
     }
 
     /// Create an invalid magic number error
@@ -135,7 +119,6 @@ impl MkImageError {
         Self::FitSerialization(msg.into())
     }
 }
-
 
 impl From<flate2::CompressError> for MkImageError {
     fn from(err: flate2::CompressError) -> Self {

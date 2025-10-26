@@ -225,7 +225,10 @@ pub fn verify_crc32(data: &[u8]) -> Result<()> {
     if calculated_crc == expected_crc {
         Ok(())
     } else {
-        Err(crate::error::MkImageError::crc_mismatch(expected_crc, calculated_crc))
+        Err(crate::error::MkImageError::crc_mismatch(
+            expected_crc,
+            calculated_crc,
+        ))
     }
 }
 
@@ -287,7 +290,11 @@ mod tests {
         let result = verify_crc32(&data);
         assert!(result.is_err());
 
-        if let Err(crate::error::MkImageError::CrcMismatch { expected, calculated }) = result {
+        if let Err(crate::error::MkImageError::CrcMismatch {
+            expected,
+            calculated,
+        }) = result
+        {
             assert_eq!(calculated, 0xEC4AC3D0);
             assert_eq!(expected, 0x00000000);
         } else {
@@ -308,7 +315,7 @@ mod tests {
         let buffer = Vec::new();
         let mut writer = Crc32Writer::new(buffer);
 
-          writer.write_all(data).unwrap();
+        writer.write_all(data).unwrap();
 
         let crc = writer.crc32();
         assert_eq!(crc, 0xEC4AC3D0);

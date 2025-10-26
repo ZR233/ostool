@@ -2,8 +2,8 @@
 //!
 //! Main interface for building FIT images from configuration.
 
-use crate::compression::traits::CompressionInterface;
 use crate::compression::gzip::GzipCompressor;
+use crate::compression::traits::CompressionInterface;
 use crate::error::Result;
 use crate::fit::config::FitImageConfig;
 use crate::fit::dt_builder::DeviceTreeBuilder;
@@ -70,7 +70,7 @@ impl Default for FitImageBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fit::config::{FitImageConfig, ComponentConfig};
+    use crate::fit::config::{ComponentConfig, FitImageConfig};
 
     #[test]
     fn test_fit_builder() {
@@ -78,12 +78,9 @@ mod tests {
             .with_kernel(
                 ComponentConfig::new("kernel", vec![1, 2, 3, 4, 5])
                     .with_load_address(0x80080000)
-                    .with_entry_point(0x80080000)
+                    .with_entry_point(0x80080000),
             )
-            .with_fdt(
-                ComponentConfig::new("fdt", vec![6, 7, 8, 9])
-                    .with_load_address(0x82000000)
-            )
+            .with_fdt(ComponentConfig::new("fdt", vec![6, 7, 8, 9]).with_load_address(0x82000000))
             .with_kernel_compression(false);
 
         let mut builder = FitImageBuilder::new();
@@ -103,7 +100,7 @@ mod tests {
             .with_kernel(
                 ComponentConfig::new("kernel", kernel_data.clone())
                     .with_load_address(0x80080000)
-                    .with_entry_point(0x80080000)
+                    .with_entry_point(0x80080000),
             )
             .with_kernel_compression(true);
 

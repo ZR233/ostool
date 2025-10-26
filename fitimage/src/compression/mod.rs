@@ -2,5 +2,5 @@
 //!
 //! 提供各种压缩算法的统一接口，支持gzip、bzip2、lzma等格式
 
-pub mod traits;
 pub mod gzip;
+pub mod traits;

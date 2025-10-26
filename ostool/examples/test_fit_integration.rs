@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("创建测试文件完成");
 
     // 使用新的mkimage API（模拟uboot.rs中的逻辑）
-    use fitimage::{FitImageBuilder, FitImageConfig, ComponentConfig};
+    use fitimage::{ComponentConfig, FitImageBuilder, FitImageConfig};
 
     let kernel_load_addr = 0x80080000u64;
 
@@ -38,8 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 构建FIT配置（和uboot.rs中一样）
     let fdt_load_addr = kernel_load_addr + 0x02000000;
-    let fdt_component = ComponentConfig::new("fdt", dtb_data)
-        .with_load_address(fdt_load_addr);
+    let fdt_component = ComponentConfig::new("fdt", dtb_data).with_load_address(fdt_load_addr);
 
     let fit_config = FitImageConfig::new("ostool FIT Image")
         .with_kernel(kernel_component)
@@ -55,7 +54,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::write(&output_path, fit_data).await?;
 
     println!("✅ FIT image 生成成功: {}", output_path.display());
-    println!("✅ 文件大小: {} bytes", fs::metadata(&output_path).await?.len());
+    println!(
+        "✅ 文件大小: {} bytes",
+        fs::metadata(&output_path).await?.len()
+    );
 
     // 验证设备树魔数
     let fit_data = fs::read(&output_path).await?;

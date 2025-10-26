@@ -4,9 +4,9 @@
 
 use std::io::{Read, Write};
 
-use crate::error::Result;
 use crate::compression::traits::CompressionInterface;
-use flate2::{write::GzEncoder, Compression as GzipLevel, read::GzDecoder};
+use crate::error::Result;
+use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzipLevel};
 
 /// Gzip压缩器
 /// 支持可配置的压缩级别
@@ -17,23 +17,27 @@ pub struct GzipCompressor {
     enabled: bool,
 }
 
-impl GzipCompressor {
-    /// 创建默认gzip压缩器
-    pub fn default() -> Self {
-        Self::new(6) // 默认压缩级别6
+impl Default for GzipCompressor {
+    fn default() -> Self {
+        Self::new(6) //
     }
+}
 
+impl GzipCompressor {
     /// 创建指定压缩级别的gzip压缩器
     pub fn new(level: u8) -> Self {
         Self {
             level: level.clamp(0, 9), // 限制在0-9范围内
-            enabled: level > 0,         // 级别0表示不压缩
+            enabled: level > 0,       // 级别0表示不压缩
         }
     }
 
     /// 创建禁用压缩的实例
     pub fn new_disabled() -> Self {
-        Self { level: 0, enabled: false }
+        Self {
+            level: 0,
+            enabled: false,
+        }
     }
 
     /// 获取flate2的压缩级别
@@ -60,15 +64,13 @@ impl CompressionInterface for GzipCompressor {
 
         let mut encoder = GzEncoder::new(Vec::new(), self.get_compression_level());
 
-        encoder.write_all(data)
-            .map_err(|e| crate::error::MkImageError::compression_error(
-                format!("Gzip compression failed: {}", e)
-            ))?;
+        encoder.write_all(data).map_err(|e| {
+            crate::error::MkImageError::compression_error(format!("Gzip compression failed: {}", e))
+        })?;
 
-        encoder.finish()
-            .map_err(|e| crate::error::MkImageError::compression_error(
-                format!("Gzip finish failed: {}", e)
-            ))
+        encoder.finish().map_err(|e| {
+            crate::error::MkImageError::compression_error(format!("Gzip finish failed: {}", e))
+        })
     }
 
     fn decompress(&self, compressed_data: &[u8]) -> Result<Vec<u8>> {
@@ -80,15 +82,16 @@ impl CompressionInterface for GzipCompressor {
         let mut decoder = GzDecoder::new(compressed_data);
         let mut buffer = Vec::new();
 
-        decoder.read_to_end(&mut buffer)
-            .map_err(|e| crate::error::MkImageError::compression_error(
-                format!("Gzip decompression failed: {}", e)
-            ))?;
+        decoder.read_to_end(&mut buffer).map_err(|e| {
+            crate::error::MkImageError::compression_error(format!(
+                "Gzip decompression failed: {}",
+                e
+            ))
+        })?;
 
         Ok(buffer)
     }
 
-  
     fn get_name(&self) -> &'static str {
         if self.enabled {
             "gzip"
@@ -110,12 +113,22 @@ mod tests {
         let original_bytes = original_data.as_bytes();
 
         // 测试压缩
-        let compressed = compressor.compress(original_bytes).expect("Compression should succeed");
-        assert!(compressed.len() < original_bytes.len(), "Compressed data should be smaller");
+        let compressed = compressor
+            .compress(original_bytes)
+            .expect("Compression should succeed");
+        assert!(
+            compressed.len() < original_bytes.len(),
+            "Compressed data should be smaller"
+        );
 
         // 测试解压缩
-        let decompressed = compressor.decompress(&compressed).expect("Decompression should succeed");
-        assert_eq!(decompressed, original_bytes, "Decompressed data should match original");
+        let decompressed = compressor
+            .decompress(&compressed)
+            .expect("Decompression should succeed");
+        assert_eq!(
+            decompressed, original_bytes,
+            "Decompressed data should match original"
+        );
     }
 
     #[test]
@@ -124,11 +137,21 @@ mod tests {
         let original_data = b"Hello, World!";
 
         // 禁用压缩时应该返回原数据
-        let compressed = compressor.compress(original_data).expect("Compression should succeed");
-        assert_eq!(compressed, original_data, "Disabled compression should return original data");
+        let compressed = compressor
+            .compress(original_data)
+            .expect("Compression should succeed");
+        assert_eq!(
+            compressed, original_data,
+            "Disabled compression should return original data"
+        );
 
-        let decompressed = compressor.decompress(&compressed).expect("Decompression should succeed");
-        assert_eq!(decompressed, original_data, "Decompressed data should match original");
+        let decompressed = compressor
+            .decompress(&compressed)
+            .expect("Decompression should succeed");
+        assert_eq!(
+            decompressed, original_data,
+            "Decompressed data should match original"
+        );
     }
 
     #[test]

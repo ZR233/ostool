@@ -6,10 +6,10 @@ use std::{
 
 use byte_unit::Byte;
 use colored::Colorize;
+use fitimage::{ComponentConfig, FitImageBuilder, FitImageConfig};
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use jkconfig::data::app_data::default_schema_by_init;
 use log::{info, warn};
-use fitimage::{ComponentConfig, FitImageBuilder, FitImageConfig};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
