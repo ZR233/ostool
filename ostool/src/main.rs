@@ -79,14 +79,14 @@ async fn main() -> Result<()> {
             build::run_build(ctx, config).await?;
         }
         SubCommands::Run(args) => {
-            match args.command {
-                RunSubCommands::Qemu(args) => {
-                    let ctx = build::run_build(ctx, args.build_config.clone()).await?;
-                    run::qemu::run_qemu(ctx, args.into()).await?;
-                }
-                RunSubCommands::Uboot => todo!(),
-                RunSubCommands::Tftp => todo!(),
-            }
+            // match args.command {
+            //     RunSubCommands::Qemu(args) => {
+            //         let ctx = build::run_build(ctx, args.build_config.clone()).await?;
+            //         run::qemu::run_qemu(ctx, args.into()).await?;
+            //     }
+            //     RunSubCommands::Uboot => todo!(),
+            //     RunSubCommands::Tftp => todo!(),
+            // }
 
             // Run logic goes here
         }
@@ -103,6 +103,7 @@ impl From<QemuArgs> for RunQemuArgs {
         RunQemuArgs {
             qemu_config: value.qemu_config,
             dtb_dump: value.dtb_dump,
+            show_output: true,
         }
     }
 }

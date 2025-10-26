@@ -35,6 +35,7 @@ pub struct QemuConfig {
 pub struct RunQemuArgs {
     pub qemu_config: Option<PathBuf>,
     pub dtb_dump: bool,
+    pub show_output: bool,
 }
 
 pub async fn run_qemu(ctx: AppContext, args: RunQemuArgs) -> anyhow::Result<()> {

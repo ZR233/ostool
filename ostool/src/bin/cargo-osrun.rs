@@ -1,7 +1,13 @@
 use std::{env, path::PathBuf, process::exit};
 
-use clap::Parser;
-use ostool::{ctx::AppContext, run::qemu};
+use clap::{Parser, Subcommand};
+use ostool::{
+    ctx::AppContext,
+    run::{
+        qemu,
+        uboot::{self, RunUbootArgs, UbootConfig},
+    },
+};
 
 #[derive(Debug, Parser, Clone)]
 struct RunnerArgs {
@@ -18,23 +24,42 @@ struct RunnerArgs {
     /// Path to the binary to run on the device
     elf: PathBuf,
 
-    #[arg(long("show-output"))]
-    show_output: bool,
+    #[command(subcommand)]
+    command: SubCommands,
+}
 
-    #[arg(long)]
-    no_run: bool,
+#[derive(Subcommand, Debug, Clone)]
+enum SubCommands {
+    Qemu {
+        /// Path to the configuration file, default to '.qemu.toml'
+        #[arg(short, long)]
+        config: Option<PathBuf>,
+        /// Dump DTB file
+        #[arg(long)]
+        dtb_dump: bool,
 
-    /// Path to the qemu configuration file
-    #[arg(short, long)]
-    config: Option<PathBuf>,
+        #[arg(long("show-output"))]
+        show_output: bool,
 
-    /// Dump DTB file
-    #[arg(long)]
-    dtb_dump: bool,
+        #[arg(long)]
+        no_run: bool,
 
-    #[arg(allow_hyphen_values = true)]
-    /// Arguments to be run
-    runner_args: Vec<String>,
+        #[arg(allow_hyphen_values = true)]
+        /// Arguments to be run
+        runner_args: Vec<String>,
+    },
+    Uboot {
+        /// Path to the configuration file, default to '.uboot.toml'
+        #[arg(short, long)]
+        config: Option<PathBuf>,
+
+        #[arg(long("show-output"))]
+        show_output: bool,
+
+        #[arg(allow_hyphen_values = true)]
+        /// Arguments to be run
+        runner_args: Vec<String>,
+    },
 }
 
 #[tokio::main]
@@ -50,20 +75,45 @@ async fn main() -> anyhow::Result<()> {
 
     let mut app = AppContext {
         workdir,
-        debug: args.no_run,
         ..Default::default()
     };
 
     app.set_elf_path(args.elf).await;
 
-    qemu::run_qemu(
-        app,
-        qemu::RunQemuArgs {
-            qemu_config: args.config,
-            dtb_dump: args.dtb_dump,
-        },
-    )
-    .await?;
+    match args.command {
+        SubCommands::Qemu {
+            config,
+            dtb_dump,
+            no_run,
+            show_output,
+            ..
+        } => {
+            app.debug = no_run;
+            qemu::run_qemu(
+                app,
+                qemu::RunQemuArgs {
+                    qemu_config: config,
+                    dtb_dump,
+                    show_output,
+                },
+            )
+            .await?;
+        }
+        SubCommands::Uboot {
+            config,
+            show_output,
+            ..
+        } => {
+            uboot::run_qemu(
+                app,
+                RunUbootArgs {
+                    config,
+                    show_output,
+                },
+            )
+            .await?;
+        }
+    }
 
     Ok(())
 }

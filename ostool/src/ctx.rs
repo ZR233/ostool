@@ -8,7 +8,7 @@ use tokio::fs;
 
 use crate::utils::ShellRunner;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct AppContext {
     pub workdir: PathBuf,
     pub debug: bool,
