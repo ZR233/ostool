@@ -186,7 +186,7 @@ where
 ///
 /// # Returns
 ///
-/// A new Vec<u8> containing the original data plus the CRC32 checksum
+/// A new `Vec<u8>` containing the original data plus the CRC32 checksum
 pub fn append_crc32(mut data: Vec<u8>) -> Vec<u8> {
     let crc = calculate_crc32(&data);
     let _ = data.write_u32::<LittleEndian>(crc);

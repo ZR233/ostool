@@ -136,12 +136,6 @@ impl MkImageError {
     }
 }
 
-// 实现From trait用于错误转换
-impl From<serde_json::Error> for MkImageError {
-    fn from(err: serde_json::Error) -> Self {
-        Self::FitSerialization(format!("JSON serialization error: {}", err))
-    }
-}
 
 impl From<flate2::CompressError> for MkImageError {
     fn from(err: flate2::CompressError) -> Self {

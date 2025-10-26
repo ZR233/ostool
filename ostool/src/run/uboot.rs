@@ -9,10 +9,9 @@ use colored::Colorize;
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use jkconfig::data::app_data::default_schema_by_init;
 use log::{info, warn};
-use mkimage::{fit::builder::convenience, image_types::Compression};
+use fitimage::{ComponentConfig, FitImageBuilder, FitImageConfig};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serialport::SerialPort;
 use tokio::fs;
 use uboot_shell::UbootShell;
 
@@ -127,7 +126,6 @@ impl Runner {
     /// # 参数
     /// - `kernel_path`: kernel 文件路径
     /// - `dtb_path`: DTB 文件路径（可选）
-    /// - `output_dir`: 输出目录
     /// - `kernel_load_addr`: kernel 加载地址
     ///
     /// # 返回值
@@ -161,8 +159,18 @@ impl Runner {
             Byte::from(kernel_data.len())
         );
 
+        // 创建 kernel 组件配置
+        let kernel_component = ComponentConfig::new("kernel", kernel_data)
+            .with_load_address(kernel_load_addr)
+            .with_entry_point(kernel_load_addr);
+
+        // 开始构建 FIT 配置
+        let mut fit_config = FitImageConfig::new("ostool FIT Image")
+            .with_kernel(kernel_component)
+            .with_kernel_compression(true);
+
         // 处理 DTB 文件
-        let fdt_result = if let Some(dtb_path) = dtb_path {
+        if let Some(dtb_path) = dtb_path {
             match fs::read(dtb_path).await {
                 Ok(data) => {
                     info!(
@@ -170,7 +178,10 @@ impl Runner {
                         dtb_path.display(),
                         Byte::from(data.len())
                     );
-                    Some(data)
+
+                    let fdt_component = ComponentConfig::new("fdt", data);
+
+                    fit_config = fit_config.with_fdt(fdt_component);
                 }
                 Err(e) => {
                     return Err(anyhow!(
@@ -183,29 +194,12 @@ impl Runner {
             }
         } else {
             warn!("未指定 DTB 文件，将生成仅包含 kernel 的 FIT image");
-            None
-        };
+        }
 
-        // 计算 FDT 加载地址（kernel 加载地址 + 32MB，标准偏移）
-        let (fdt_data, fdt_load_addr) = if let Some(data) = fdt_result {
-            (data, kernel_load_addr + 0x02000000)
-        } else {
-            (vec![], 0) // 未使用时不关心
-        };
-
-        // 使用 mkimage 创建压缩的 FIT
-        let fit_builder = convenience::compressed_kernel_fdt(
-            kernel_data,
-            fdt_data,
-            kernel_load_addr,
-            kernel_load_addr, // entry = loadaddr
-            fdt_load_addr,
-            Compression::Gzip,
-        );
-
-        // 构建 FIT 数据
-        let fit_data = fit_builder
-            .build()
+        // 使用新的 mkimage API 构建 FIT image
+        let mut builder = FitImageBuilder::new();
+        let fit_data = builder
+            .build(fit_config)
             .map_err(|e| anyhow!("{}: {}", errors::FIT_BUILD_ERROR, e))?;
 
         // 保存到文件

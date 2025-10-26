@@ -5,7 +5,6 @@
 use std::io::{Read, Write};
 
 use crate::error::Result;
-use crate::image_types::Compression;
 use crate::compression::traits::CompressionInterface;
 use flate2::{write::GzEncoder, Compression as GzipLevel, read::GzDecoder};
 
@@ -89,14 +88,7 @@ impl CompressionInterface for GzipCompressor {
         Ok(buffer)
     }
 
-    fn get_compression_type(&self) -> Compression {
-        if self.enabled {
-            Compression::Gzip
-        } else {
-            Compression::None
-        }
-    }
-
+  
     fn get_name(&self) -> &'static str {
         if self.enabled {
             "gzip"
@@ -113,15 +105,17 @@ mod tests {
     #[test]
     fn test_gzip_compression() {
         let compressor = GzipCompressor::new(6);
-        let original_data = b"Hello, World! This is a test string for gzip compression.";
+        // 使用更大的数据以确保压缩效果
+        let original_data = "Hello, World! This is a test string for gzip compression. ".repeat(10);
+        let original_bytes = original_data.as_bytes();
 
         // 测试压缩
-        let compressed = compressor.compress(original_data).expect("Compression should succeed");
-        assert!(compressed.len() < original_data.len(), "Compressed data should be smaller");
+        let compressed = compressor.compress(original_bytes).expect("Compression should succeed");
+        assert!(compressed.len() < original_bytes.len(), "Compressed data should be smaller");
 
         // 测试解压缩
         let decompressed = compressor.decompress(&compressed).expect("Decompression should succeed");
-        assert_eq!(decompressed, original_data, "Decompressed data should match original");
+        assert_eq!(decompressed, original_bytes, "Decompressed data should match original");
     }
 
     #[test]
@@ -138,13 +132,11 @@ mod tests {
     }
 
     #[test]
-    fn test_compression_type() {
+    fn test_compressor_name() {
         let enabled_compressor = GzipCompressor::new(6);
-        assert_eq!(enabled_compressor.get_compression_type(), Compression::Gzip);
         assert_eq!(enabled_compressor.get_name(), "gzip");
 
         let disabled_compressor = GzipCompressor::new_disabled();
-        assert_eq!(disabled_compressor.get_compression_type(), Compression::None);
         assert_eq!(disabled_compressor.get_name(), "none");
     }
 }

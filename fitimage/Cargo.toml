@@ -1,0 +1,31 @@
+[package]
+name = "fitimage"
+version = "0.1.0"
+edition = "2021"
+authors = ["周睿 <zrufo747@outlook.com>"]
+description = "A Rust library for creating U-Boot compatible FIT images"
+license = "MIT OR Apache-2.0"
+categories = ["embedded", "development-tools", "os"]
+keywords = ["u-boot", "boot", "fit-image", "embedded"]
+repository = "https://github.com/ZR233/ostool"
+
+[dependencies]
+# 核心依赖
+crc = "3.0"
+byteorder = "1.4"
+thiserror = "2.0"
+anyhow = "1.0"
+
+# 设备树相关依赖
+device_tree = "1.1"
+vm-fdt = "0.3"
+
+# 压缩支持
+flate2 = { version = "1.0", features = ["zlib"] }
+
+# 序列化支持
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+tempfile = "3.0"
+hex = "0.4"

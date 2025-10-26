@@ -40,7 +40,7 @@ tftpd = "0.5"
 tokio = {workspace = true, features = ["full"]}
 toml = {workspace = true}
 uboot-shell = {version = "0.1.9", path = "../uboot-shell"}
-mkimage = {version = "0.1", path = "../mkimage"}
+fitimage = {version = "0.1", path = "../fitimage"}
 
 lzma-rs = "0.3"
 regex = "1"
