@@ -1,6 +1,7 @@
 use std::{
     ffi::OsString,
     io::{BufRead, BufReader},
+    path::PathBuf,
     process::Stdio,
 };
 
@@ -11,15 +12,21 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
 
-use crate::{QemuArgs, ctx::AppContext, utils::ShellRunner};
+use crate::{ctx::AppContext, utils::ShellRunner};
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Default)]
 pub struct QemuConfig {
-    pub arch: Option<String>,
     pub args: Vec<String>,
+    pub uefi: bool,
 }
 
-pub async fn run_qemu(ctx: AppContext, args: &QemuArgs) -> anyhow::Result<()> {
+#[derive(Debug, Clone)]
+pub struct RunQemuArgs {
+    pub qemu_config: Option<PathBuf>,
+    pub dtb_dump: bool,
+}
+
+pub async fn run_qemu(ctx: AppContext, args: RunQemuArgs) -> anyhow::Result<()> {
     // Build logic will be implemented here
     let config_path = match args.qemu_config.clone() {
         Some(path) => path,
@@ -147,10 +154,6 @@ impl QemuRunner {
     }
 
     fn detect_arch(&self) -> anyhow::Result<String> {
-        if let Some(arch) = &self.config.arch {
-            return Ok(arch.clone());
-        }
-
         if let Some(arch) = &self.ctx.arch {
             return Ok(format!("{:?}", arch).to_lowercase());
         }

@@ -3,12 +3,11 @@ use std::{env::current_dir, path::PathBuf};
 use anyhow::Result;
 use clap::*;
 
-use crate::ctx::AppContext;
-
-mod build;
-mod ctx;
-mod run;
-mod utils;
+use ostool::{
+    build,
+    ctx::AppContext,
+    run::{self, qemu::RunQemuArgs},
+};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -78,7 +77,7 @@ async fn main() -> Result<()> {
             match args.command {
                 RunSubCommands::Qemu(args) => {
                     let ctx = build::run_build(ctx, args.build_config.clone()).await?;
-                    run::qemu::run_qemu(ctx, &args).await?;
+                    run::qemu::run_qemu(ctx, args.into()).await?;
                 }
                 RunSubCommands::Uboot => todo!(),
                 RunSubCommands::Tftp => todo!(),
@@ -92,4 +91,13 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+impl From<QemuArgs> for RunQemuArgs {
+    fn from(value: QemuArgs) -> Self {
+        RunQemuArgs {
+            qemu_config: value.qemu_config,
+            dtb_dump: value.dtb_dump,
+        }
+    }
 }
