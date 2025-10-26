@@ -8,7 +8,8 @@ use tar::Archive;
 use ureq::Agent;
 
 /// User-Agent header to send with download requests.
-const USER_AGENT: &str = "https://github.com/rust-osdev/ovmf-prebuilt";
+// const USER_AGENT: &str = "https://github.com/rust-osdev/ovmf-prebuilt";
+const USER_AGENT: &str = "https://gitee.com/zr233/ovmf-prebuilt";
 
 /// Maximum number of bytes to download (10 MiB).
 const MAX_DOWNLOAD_SIZE_IN_BYTES: usize = 10 * 1024 * 1024;
@@ -25,7 +26,8 @@ pub(crate) fn update_cache(source: Source, prebuilt_dir: &Path) -> Result<(), Er
         return Ok(());
     }
 
-    let base_url = "https://github.com/rust-osdev/ovmf-prebuilt/releases/download";
+    // let base_url = "https://github.com/rust-osdev/ovmf-prebuilt/releases/download";
+    let base_url = "https://gitee.com/zr233/ovmf-prebuilt/releases/download";
     let url = format!(
         "{base_url}/{release}/{release}-bin.tar.xz",
         release = source.tag
