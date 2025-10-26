@@ -2,7 +2,7 @@
 //!
 //! Demonstrates creating a complete FIT image with kernel, FDT, and ramdisk.
 
-use mkimage::{ComponentConfig, FitImageBuilder, FitImageConfig};
+use fitimage::{ComponentConfig, FitImageBuilder, FitImageConfig};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== 完整FIT镜像测试 ===");

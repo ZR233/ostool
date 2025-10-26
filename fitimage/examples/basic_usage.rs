@@ -2,7 +2,7 @@
 //!
 //! Demonstrates how to create a FIT image with kernel and device tree.
 
-use mkimage::{ComponentConfig, FitImageBuilder, FitImageConfig};
+use fitimage::{ComponentConfig, FitImageBuilder, FitImageConfig};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create some sample kernel data

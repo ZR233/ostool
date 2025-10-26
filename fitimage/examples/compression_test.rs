@@ -2,7 +2,7 @@
 //!
 //! Demonstrates FIT image creation with gzip compression.
 
-use mkimage::{ComponentConfig, FitImageBuilder, FitImageConfig};
+use fitimage::{ComponentConfig, FitImageBuilder, FitImageConfig};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create larger sample kernel data to see compression effects
