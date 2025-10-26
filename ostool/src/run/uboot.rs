@@ -29,6 +29,18 @@ pub struct UbootConfig {
     pub fail_regex: Vec<String>,
 }
 
+impl UbootConfig {
+    pub fn kernel_load_addr_int(&self) -> Option<u64> {
+        self.kernel_load_addr.as_ref().and_then(|addr_str| {
+            if addr_str.starts_with("0x") || addr_str.starts_with("0X") {
+                u64::from_str_radix(&addr_str[2..], 16).ok()
+            } else {
+                addr_str.parse::<u64>().ok()
+            }
+        })
+    }
+}
+
 #[derive(Default, Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct Net {
     pub interface: String,
@@ -122,6 +134,34 @@ impl Runner {
         }
 
         let mut uboot = handle.join().unwrap()?;
+
+        if self.config.net.is_some()
+            && let Ok(output) = uboot.cmd("net list")
+        {
+            let device_list = output.strip_prefix("net list").unwrap_or(&output).trim();
+
+            if device_list.is_empty() {
+                let _ = uboot.cmd_without_reply("bootdev hunt ethernet");
+            }
+        }
+
+        let loadaddr = self.config.kernel_load_addr_int().unwrap_or_else(|| {
+            uboot
+                .env_int("loadaddr")
+                .map(|o| o as u64)
+                .unwrap_or_else(|_e| {
+                    info!("$loadaddr not found");
+
+                    let loadaddr = uboot
+                        .env_int("kernel_addr_r")
+                        .expect("kernel_addr_r not found");
+                    uboot.set_env("loadaddr", format!("{loadaddr:#x}")).unwrap();
+                    info!("$loadaddr set to {:#x} (kernel_addr_r)", loadaddr);
+                    loadaddr as u64
+                })
+        });
+
+        info!("kernel load addr: {loadaddr:#x}");
 
         drop(uboot);
 

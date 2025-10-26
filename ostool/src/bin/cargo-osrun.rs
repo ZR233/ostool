@@ -1,6 +1,7 @@
 use std::{env, path::PathBuf, process::exit};
 
 use clap::{Parser, Subcommand};
+use log::LevelFilter;
 use ostool::{
     ctx::AppContext,
     run::{
@@ -64,6 +65,11 @@ enum SubCommands {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    env_logger::builder()
+        .format_module_path(false)
+        .filter_level(LevelFilter::Info)
+        .init();
+
     if env::var("CARGO").is_err() {
         eprintln!("This binary may only be called via `cargo ndk-runner`.");
         exit(1);
