@@ -134,9 +134,7 @@ impl Runner {
             .try_clone()
             .map_err(|e| anyhow!("Failed to clone serial port: {e}"))?;
 
-        let history ="SerialTerm \r\n  Ctrl + A + X to exit\r\n";
-
-        let mut shell = SerialTerm::new(tx, rx, history);
+        let mut shell = SerialTerm::new(tx, rx);
         shell.run().await?;
 
         Ok(())
