@@ -3,7 +3,11 @@ use std::{env::current_dir, path::PathBuf};
 use anyhow::Result;
 use clap::*;
 
-use ostool::{build, ctx::AppContext, run::qemu::RunQemuArgs};
+use ostool::{
+    build,
+    ctx::AppContext,
+    run::{self, qemu::RunQemuArgs, uboot::RunUbootArgs},
+};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -22,11 +26,13 @@ enum SubCommands {
         config: Option<PathBuf>,
     },
     Run(RunArgs),
-    CargoRun,
 }
 
 #[derive(Args, Debug)]
 struct RunArgs {
+    /// Path to the build configuration file, default to `.config.toml`
+    #[arg(short, long)]
+    config: Option<PathBuf>,
     #[command(subcommand)]
     command: RunSubCommands,
 }
@@ -34,14 +40,12 @@ struct RunArgs {
 #[derive(Subcommand, Debug)]
 enum RunSubCommands {
     Qemu(QemuArgs),
-    Uboot,
-    Tftp,
+    Uboot(UbootArgs),
 }
 
 #[derive(Args, Debug, Default)]
 struct QemuArgs {
-    #[arg(short, long)]
-    build_config: Option<PathBuf>,
+    /// Path to the qemu configuration file, default to '.qemu.toml'
     #[arg(short, long)]
     qemu_config: Option<PathBuf>,
     #[arg(short, long)]
@@ -49,6 +53,13 @@ struct QemuArgs {
     /// Dump DTB file
     #[arg(long)]
     dtb_dump: bool,
+}
+
+#[derive(Args, Debug)]
+struct UbootArgs {
+    /// Path to the uboot configuration file, default to '.uboot.toml'
+    #[arg(short, long)]
+    uboot_config: Option<PathBuf>,
 }
 
 #[tokio::main]
@@ -75,19 +86,15 @@ async fn main() -> Result<()> {
             build::run_build(ctx, config).await?;
         }
         SubCommands::Run(args) => {
-            // match args.command {
-            //     RunSubCommands::Qemu(args) => {
-            //         let ctx = build::run_build(ctx, args.build_config.clone()).await?;
-            //         run::qemu::run_qemu(ctx, args.into()).await?;
-            //     }
-            //     RunSubCommands::Uboot => todo!(),
-            //     RunSubCommands::Tftp => todo!(),
-            // }
-
-            // Run logic goes here
-        }
-        SubCommands::CargoRun => {
-            // Cargo run logic goes here
+            let ctx = build::run_build(ctx, args.config.clone()).await?;
+            match args.command {
+                RunSubCommands::Qemu(args) => {
+                    run::qemu::run_qemu(ctx, args.into()).await?;
+                }
+                RunSubCommands::Uboot(args) => {
+                    run::uboot::run_uboot(ctx, args.into()).await?;
+                }
+            }
         }
     }
 
@@ -99,6 +106,15 @@ impl From<QemuArgs> for RunQemuArgs {
         RunQemuArgs {
             qemu_config: value.qemu_config,
             dtb_dump: value.dtb_dump,
+            show_output: true,
+        }
+    }
+}
+
+impl From<UbootArgs> for RunUbootArgs {
+    fn from(value: UbootArgs) -> Self {
+        RunUbootArgs {
+            config: value.uboot_config,
             show_output: true,
         }
     }
