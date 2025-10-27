@@ -23,7 +23,7 @@ byte-unit = "5.1"
 cargo_metadata = "0.23"
 clap = {workspace = true, features = ["derive"]}
 colored = "3"
-crossterm = "0.29"
+crossterm = {workspace = true}
 env_logger = {workspace = true}
 indicatif = "0.18"
 jkconfig = {version = "0.1", path = "../jkconfig"}

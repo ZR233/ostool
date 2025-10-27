@@ -8,11 +8,13 @@ use crossterm::{
     execute,
     terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode},
 };
-use serialport::SerialPort;
+
+type Tx = Box<dyn Write + Send>;
+type Rx = Box<dyn Read + Send>;
 
 pub struct SerialTerm {
-    tx: Arc<Mutex<Box<dyn SerialPort>>>,
-    rx: Arc<Mutex<Box<dyn SerialPort>>>,
+    tx: Arc<Mutex<Tx>>,
+    rx: Arc<Mutex<Rx>>,
 }
 
 // 特殊键序列状态
@@ -23,7 +25,7 @@ enum KeySequenceState {
 }
 
 impl SerialTerm {
-    pub fn new(tx: Box<dyn SerialPort>, rx: Box<dyn SerialPort>) -> Self {
+    pub fn new(tx: Tx, rx: Rx) -> Self {
         SerialTerm {
             tx: Arc::new(Mutex::new(tx)),
             rx: Arc::new(Mutex::new(rx)),
@@ -33,7 +35,7 @@ impl SerialTerm {
     pub async fn run(&mut self) -> anyhow::Result<()> {
         // 启用raw模式
         enable_raw_mode()?;
-        execute!(io::stdout(), Clear(ClearType::All))?;
+        // execute!(io::stdout(), Clear(ClearType::All))?;
 
         // 设置清理函数
         let cleanup_needed = true;
@@ -116,7 +118,7 @@ impl SerialTerm {
     }
 
     fn handle_serial_receive(
-        rx_port: Arc<Mutex<Box<dyn SerialPort>>>,
+        rx_port: Arc<Mutex<Rx>>,
         exit_flag: Arc<Mutex<bool>>,
     ) -> io::Result<()> {
         let mut buffer = [0u8; 1024];
@@ -153,7 +155,7 @@ impl SerialTerm {
     }
 
     fn send_key_to_serial(
-        tx_port: &Arc<Mutex<Box<dyn SerialPort>>>,
+        tx_port: &Arc<Mutex<Tx>>,
         key: crossterm::event::KeyEvent,
     ) -> io::Result<()> {
         let mut bytes = Vec::new();
@@ -443,7 +445,7 @@ impl SerialTerm {
         }
     }
 
-    fn send_ctrl_a_to_serial(tx_port: &Arc<Mutex<Box<dyn SerialPort>>>) -> io::Result<()> {
+    fn send_ctrl_a_to_serial(tx_port: &Arc<Mutex<Tx>>) -> io::Result<()> {
         tx_port.lock().unwrap().write_all(&[0x01])?; // Ctrl+A
         tx_port.lock().unwrap().flush()?;
         Ok(())

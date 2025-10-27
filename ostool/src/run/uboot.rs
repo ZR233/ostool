@@ -283,17 +283,11 @@ impl Runner {
         let fitimage = self.generate_fit_image(kernel, dtb_path, loadaddr).await?;
 
         Self::uboot_loady(&mut uboot, loadaddr as usize, fitimage);
-
+        let tx = uboot.tx.take().unwrap();
+        let rx = uboot.rx.take().unwrap();
         drop(uboot);
 
         println!("Interacting with U-Boot shell...");
-        let rx = serialport::new(&self.config.serial, self.config.baud_rate as _)
-            .timeout(Duration::from_millis(200))
-            .open()
-            .map_err(|e| anyhow!("Failed to open serial port: {e}"))?;
-        let tx = rx
-            .try_clone()
-            .map_err(|e| anyhow!("Failed to clone serial port: {e}"))?;
 
         let mut shell = SerialTerm::new(tx, rx);
         shell.run().await?;
