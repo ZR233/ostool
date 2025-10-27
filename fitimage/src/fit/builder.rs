@@ -20,33 +20,23 @@ impl FitImageBuilder {
     /// Build a FIT image from configuration
     pub fn build(&mut self, mut config: FitImageConfig) -> Result<Vec<u8>> {
         // Apply compression to kernel if requested
-        if config.compress_kernel {
-            if let Some(ref mut kernel) = config.kernel {
+        if let Some(ref mut kernel) = config.kernel {
+            if kernel.compression {
                 let compressor = GzipCompressor::default();
                 kernel.data = compressor.compress(&kernel.data)?;
             }
         }
+        if let Some(ref mut fdt) = config.fdt {
+            if fdt.compression {
+                let compressor = GzipCompressor::default();
+                fdt.data = compressor.compress(&fdt.data)?;
+            }
+        }
 
-        // Build standard FDT structure
-        let mut dt_builder = StandardFdtBuilder::new()?;
-        dt_builder.build_fit_tree(&config)?;
-
-        // Generate FIT image data
-        let fit_data = dt_builder.finalize()?;
-
-        Ok(fit_data)
-    }
-
-    /// Build FIT image with custom compressor
-    pub fn build_with_compressor(
-        &mut self,
-        mut config: FitImageConfig,
-        compressor: Box<dyn CompressionInterface>,
-    ) -> Result<Vec<u8>> {
-        // Apply compression to kernel if requested
-        if config.compress_kernel {
-            if let Some(ref mut kernel) = config.kernel {
-                kernel.data = compressor.compress(&kernel.data)?;
+        if let Some(ref mut ramdisk) = config.ramdisk {
+            if ramdisk.compression {
+                let compressor = GzipCompressor::default();
+                ramdisk.data = compressor.compress(&ramdisk.data)?;
             }
         }
 
@@ -80,8 +70,7 @@ mod tests {
                     .with_load_address(0x80080000)
                     .with_entry_point(0x80080000),
             )
-            .with_fdt(ComponentConfig::new("fdt", vec![6, 7, 8, 9]).with_load_address(0x82000000))
-            .with_kernel_compression(false);
+            .with_fdt(ComponentConfig::new("fdt", vec![6, 7, 8, 9]).with_load_address(0x82000000));
 
         let mut builder = FitImageBuilder::new();
         let fit_data = builder.build(config).unwrap();
@@ -96,13 +85,11 @@ mod tests {
     #[test]
     fn test_fit_builder_with_compression() {
         let kernel_data = vec![1, 2, 3, 4, 5];
-        let config = FitImageConfig::new("Test FIT Image")
-            .with_kernel(
-                ComponentConfig::new("kernel", kernel_data.clone())
-                    .with_load_address(0x80080000)
-                    .with_entry_point(0x80080000),
-            )
-            .with_kernel_compression(true);
+        let config = FitImageConfig::new("Test FIT Image").with_kernel(
+            ComponentConfig::new("kernel", kernel_data.clone())
+                .with_load_address(0x80080000)
+                .with_entry_point(0x80080000),
+        );
 
         let mut builder = FitImageBuilder::new();
         let fit_data = builder.build(config).unwrap();

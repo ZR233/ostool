@@ -1,5 +1,5 @@
+use fitimage::{ComponentConfig, FitImageBuilder, FitImageConfig};
 use std::process::Command;
-use fitimage::{FitImageBuilder, FitImageConfig, ComponentConfig};
 
 /// 测试修复后的默认配置格式
 #[test]
@@ -15,13 +15,9 @@ fn test_fixed_default_config_format() -> Result<(), Box<dyn std::error::Error>> 
         .with_kernel(
             ComponentConfig::new("kernel", kernel_data.to_vec())
                 .with_load_address(0x80080000)
-                .with_entry_point(0x80080000)
+                .with_entry_point(0x80080000),
         )
-        .with_fdt(
-            ComponentConfig::new("fdt", fdt_data.to_vec())
-                .with_load_address(0x82000000)
-        )
-        .with_kernel_compression(false);
+        .with_fdt(ComponentConfig::new("fdt", fdt_data.to_vec()).with_load_address(0x82000000));
 
     // 生成 FIT image
     let mut builder = FitImageBuilder::new();
@@ -35,7 +31,7 @@ fn test_fixed_default_config_format() -> Result<(), Box<dyn std::error::Error>> 
 
     // 使用 dtc 检查结构
     let dtc_output = Command::new("dtc")
-        .args(&["-I", "dtb", "-O", "dts", temp_path])
+        .args(["-I", "dtb", "-O", "dts", temp_path])
         .output()?;
 
     if dtc_output.status.success() {
@@ -56,13 +52,14 @@ fn test_fixed_default_config_format() -> Result<(), Box<dyn std::error::Error>> 
             panic!("修复失败：配置格式不正确");
         }
     } else {
-        panic!("dtc 解析失败: {}", String::from_utf8_lossy(&dtc_output.stderr));
+        panic!(
+            "dtc 解析失败: {}",
+            String::from_utf8_lossy(&dtc_output.stderr)
+        );
     }
 
     // 使用 dumpimage 验证兼容性
-    let dump_output = Command::new("dumpimage")
-        .args(&["-l", temp_path])
-        .output()?;
+    let dump_output = Command::new("dumpimage").args(["-l", temp_path]).output()?;
 
     if dump_output.status.success() {
         let dump_content = String::from_utf8_lossy(&dump_output.stdout);
@@ -84,7 +81,10 @@ fn test_fixed_default_config_format() -> Result<(), Box<dyn std::error::Error>> 
             panic!("dumpimage 兼容性验证失败");
         }
     } else {
-        panic!("dumpimage 解析失败: {}", String::from_utf8_lossy(&dump_output.stderr));
+        panic!(
+            "dumpimage 解析失败: {}",
+            String::from_utf8_lossy(&dump_output.stderr)
+        );
     }
 
     // 清理临时文件

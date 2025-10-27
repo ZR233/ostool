@@ -1,10 +1,9 @@
-
+use anyhow::{Context, Result};
+use fitimage::{ComponentConfig, FitImageBuilder, FitImageConfig};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
 use tempfile::TempDir;
-use anyhow::{Result, Context};
-use fitimage::{FitImageBuilder, FitImageConfig, ComponentConfig};
 
 /// 测试完整的 FIT image 生成和验证流程
 ///
@@ -31,8 +30,11 @@ fn test_fit_image_standard_compliance() -> Result<()> {
     let kernel_data = fs::read(test_dir.join("kernel.txt"))?;
     let fdt_data = fs::read(test_dir.join("dtb.txt"))?;
 
-    println!("测试数据准备完成: kernel={} bytes, fdt={} bytes",
-             kernel_data.len(), fdt_data.len());
+    println!(
+        "测试数据准备完成: kernel={} bytes, fdt={} bytes",
+        kernel_data.len(),
+        fdt_data.len()
+    );
 
     // 步骤1: 使用系统 mkimage 生成标准 FIT image
     let mkimage_fit_path = temp_dir.path().join("mkimage.fit");
@@ -74,17 +76,27 @@ fn generate_mkimage_fit_image(output_path: &Path, test_dir: &Path) -> Result<()>
         .output()
         .with_context(|| "执行 mkimage 命令失败")?;
 
-    println!("mkimage stdout: {}", String::from_utf8_lossy(&output.stdout));
-    println!("mkimage stderr: {}", String::from_utf8_lossy(&output.stderr));
+    println!(
+        "mkimage stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    println!(
+        "mkimage stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     println!("mkimage exit code: {}", output.status);
 
     if !output.status.success() {
-        anyhow::bail!("mkimage 执行失败: {}",
-                     String::from_utf8_lossy(&output.stderr));
+        anyhow::bail!(
+            "mkimage 执行失败: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
-    println!("✅ 标准 mkimage FIT image 生成成功: {}",
-             output_path.display());
+    println!(
+        "✅ 标准 mkimage FIT image 生成成功: {}",
+        output_path.display()
+    );
     Ok(())
 }
 
@@ -100,37 +112,37 @@ fn generate_rust_fit_image(output_path: &Path, kernel_data: &[u8], fdt_data: &[u
                 .with_type("kernel")
                 .with_arch("arm64")
                 .with_os("linux")
-                .with_compression("none")
                 .with_load_address(0x90100000)
-                .with_entry_point(0x90100000)
+                .with_entry_point(0x90100000),
         )
         .with_fdt(
             ComponentConfig::new("fdt", fdt_data.to_vec())
                 .with_description("This fdt")
                 .with_type("flat_dt")
-                .with_arch("arm64")
-                .with_compression("none")
+                .with_arch("arm64"),
         )
         .with_default_config("config-ostool")
-        .with_configuration("config-ostool", "ostool configuration",
-                           Some("kernel"), Some("fdt"), None::<String>)
-        .with_kernel_compression(false);
+        .with_configuration(
+            "config-ostool",
+            "ostool configuration",
+            Some("kernel"),
+            Some("fdt"),
+            None::<String>,
+        );
 
     let mut builder = FitImageBuilder::new();
-    let fit_data = builder.build(config)
+    let fit_data = builder
+        .build(config)
         .with_context(|| "构建 FIT image 失败")?;
 
-    fs::write(output_path, fit_data)
-        .with_context(|| "写入 FIT image 文件失败")?;
+    fs::write(output_path, fit_data).with_context(|| "写入 FIT image 文件失败")?;
 
-    println!("✅ 项目代码 FIT image 生成成功: {}",
-             output_path.display());
+    println!("✅ 项目代码 FIT image 生成成功: {}", output_path.display());
     Ok(())
 }
 
 /// 使用 dumpimage 工具对比两个 FIT image
-fn compare_fit_images(mkimage_path: &Path, rust_path: &Path,
-                     temp_dir: &Path) -> Result<()> {
+fn compare_fit_images(mkimage_path: &Path, rust_path: &Path, temp_dir: &Path) -> Result<()> {
     println!("🔍 使用 dumpimage 工具对比 FIT image...");
 
     // 使用 dumpimage 提取 mkimage FIT image 的信息
@@ -142,8 +154,10 @@ fn compare_fit_images(mkimage_path: &Path, rust_path: &Path,
         .with_context(|| "执行 dumpimage on mkimage FIT 失败")?;
 
     if !output1.status.success() {
-        anyhow::bail!("dumpimage mkimage FIT 失败: {}",
-                     String::from_utf8_lossy(&output1.stderr));
+        anyhow::bail!(
+            "dumpimage mkimage FIT 失败: {}",
+            String::from_utf8_lossy(&output1.stderr)
+        );
     }
 
     fs::write(&mkimage_dump_path, &output1.stdout)?;
@@ -157,8 +171,10 @@ fn compare_fit_images(mkimage_path: &Path, rust_path: &Path,
         .with_context(|| "执行 dumpimage on rust FIT 失败")?;
 
     if !output2.status.success() {
-        anyhow::bail!("dumpimage rust FIT 失败: {}",
-                     String::from_utf8_lossy(&output2.stderr));
+        anyhow::bail!(
+            "dumpimage rust FIT 失败: {}",
+            String::from_utf8_lossy(&output2.stderr)
+        );
     }
 
     fs::write(&rust_dump_path, &output2.stdout)?;
@@ -182,20 +198,33 @@ fn compare_fit_images(mkimage_path: &Path, rust_path: &Path,
 /// 验证 dumpimage 输出的兼容性
 fn validate_dump_compatibility(mkimage_dump: &str, rust_dump: &str) -> Result<()> {
     // 检查是否包含必要的 FIT image 标识
-    assert!(mkimage_dump.contains("FIT") || mkimage_dump.contains("Flattened"),
-            "mkimage 输出应包含 FIT 标识");
-    assert!(rust_dump.contains("FIT") || rust_dump.contains("Flattened"),
-            "rust 输出应包含 FIT 标识");
+    assert!(
+        mkimage_dump.contains("FIT") || mkimage_dump.contains("Flattened"),
+        "mkimage 输出应包含 FIT 标识"
+    );
+    assert!(
+        rust_dump.contains("FIT") || rust_dump.contains("Flattened"),
+        "rust 输出应包含 FIT 标识"
+    );
 
     // 检查配置名称
-    assert!(mkimage_dump.contains("config-ostool") || rust_dump.contains("config-ostool"),
-            "应包含 config-ostool 配置");
+    assert!(
+        mkimage_dump.contains("config-ostool") || rust_dump.contains("config-ostool"),
+        "应包含 config-ostool 配置"
+    );
 
     // 检查内核和 FDT 组件
-    assert!(mkimage_dump.contains("kernel") || rust_dump.contains("kernel"),
-            "应包含 kernel 组件");
-    assert!(mkimage_dump.contains("fdt") || rust_dump.contains("fdt") || mkimage_dump.contains("flat_dt") || rust_dump.contains("flat_dt"),
-            "应包含 fdt 组件");
+    assert!(
+        mkimage_dump.contains("kernel") || rust_dump.contains("kernel"),
+        "应包含 kernel 组件"
+    );
+    assert!(
+        mkimage_dump.contains("fdt")
+            || rust_dump.contains("fdt")
+            || mkimage_dump.contains("flat_dt")
+            || rust_dump.contains("flat_dt"),
+        "应包含 fdt 组件"
+    );
 
     println!("✅ dumpimage 输出兼容性验证通过");
     Ok(())
@@ -207,14 +236,17 @@ fn validate_fit_image_structure(fit_path: &Path, description: &str) -> Result<()
         .with_context(|| format!("读取 FIT image 失败: {}", fit_path.display()))?;
 
     // 验证文件大小
-    assert!(data.len() > 0, "FIT image 不应为空");
+    assert!(!data.is_empty(), "FIT image 不应为空");
     println!("{}: {} bytes", description, data.len());
 
     // 验证设备树魔数 (0xd00dfeed)
     if data.len() >= 4 {
         let magic = u32::from_be_bytes([data[0], data[1], data[2], data[3]]);
-        assert_eq!(magic, 0xd00dfeed,
-                  "设备树魔数不正确，期望 0xd00dfeed，实际 0x{:08x}", magic);
+        assert_eq!(
+            magic, 0xd00dfeed,
+            "设备树魔数不正确，期望 0xd00dfeed，实际 0x{:08x}",
+            magic
+        );
         println!("✅ {} 设备树魔数验证通过", description);
     }
 
@@ -225,9 +257,12 @@ fn validate_fit_image_structure(fit_path: &Path, description: &str) -> Result<()
         .output()
         .with_context(|| format!("dumpimage 验证失败: {}", fit_path.display()))?;
 
-    assert!(output.status.success(),
-            "dumpimage 应能成功读取 {}: {}",
-            description, String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "dumpimage 应能成功读取 {}: {}",
+        description,
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     println!("✅ {} 基本结构验证通过", description);
     Ok(())
@@ -246,25 +281,24 @@ fn test_fit_image_basic_functionality() -> Result<()> {
         .with_kernel(
             ComponentConfig::new("kernel", kernel_data.to_vec())
                 .with_load_address(0x80080000)
-                .with_entry_point(0x80080000)
+                .with_entry_point(0x80080000),
         )
-        .with_fdt(
-            ComponentConfig::new("fdt", fdt_data.to_vec())
-                .with_load_address(0x82000000)
-        )
+        .with_fdt(ComponentConfig::new("fdt", fdt_data.to_vec()).with_load_address(0x82000000))
         .with_default_config("default")
-        .with_configuration("default", "Default configuration",
-                           Some("kernel"), Some("fdt"), None::<String>)
-        .with_kernel_compression(false);
-
+        .with_configuration(
+            "default",
+            "Default configuration",
+            Some("kernel"),
+            Some("fdt"),
+            None::<String>,
+        );
     // 生成 FIT image
     let mut builder = FitImageBuilder::new();
     let fit_data = builder.build(config)?;
 
     // 验证结果
     assert!(!fit_data.is_empty(), "FIT image 数据不应为空");
-    assert_eq!(fit_data[0..4], [0xd0, 0x0d, 0xfe, 0xed],
-              "设备树魔数不正确");
+    assert_eq!(fit_data[0..4], [0xd0, 0x0d, 0xfe, 0xed], "设备树魔数不正确");
 
     println!("✅ FIT image 基本功能测试通过");
     Ok(())

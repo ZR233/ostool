@@ -175,7 +175,7 @@ impl Runner {
                     .with_type("kernel")
                     .with_arch(arch)
                     .with_os("linux")
-                    .with_compression("gzip")
+                    .with_compression(true)
                     .with_load_address(kernel_load_addr)
                     .with_entry_point(kernel_entry_addr),
             );
@@ -195,8 +195,7 @@ impl Runner {
                         ComponentConfig::new("fdt", data)
                             .with_description("This fdt")
                             .with_type("flat_dt")
-                            .with_arch(arch)
-                            .with_compression("none"),
+                            .with_arch(arch),
                     );
                 }
                 Err(e) => {
@@ -220,8 +219,7 @@ impl Runner {
                 Some("kernel"),
                 fdt_name,
                 None::<String>,
-            )
-            .with_kernel_compression(true);
+            );
 
         // 使用新的 mkimage API 构建 FIT image
         let mut builder = FitImageBuilder::new();

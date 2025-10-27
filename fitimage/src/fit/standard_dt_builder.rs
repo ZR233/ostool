@@ -4,9 +4,7 @@
 
 use crate::error::Result;
 use crate::fit::config::{ComponentConfig, FitImageConfig};
-use crate::fit::{
-    FdtHeader, FdtToken, FdtTokenUtils, MemReserveEntry, StringTable, FDT_MAGIC,
-};
+use crate::fit::{FdtHeader, FdtToken, FdtTokenUtils, MemReserveEntry, StringTable};
 use crate::hash::{calculate_hashes, default_hash_algorithms};
 
 /// Standard FDT builder that creates U-Boot compatible FIT images
@@ -56,10 +54,13 @@ impl StandardFdtBuilder {
         self.begin_node("")?;
 
         // Add root properties to match mkimage standard
-        self.add_property_u32("timestamp", std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as u32)?;
+        self.add_property_u32(
+            "timestamp",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as u32,
+        )?;
         self.add_property_string("description", &config.description)?;
         self.add_property_u32("#address-cells", 1)?;
         self.add_property_u32("#size-cells", 1)?;
@@ -91,7 +92,7 @@ impl StandardFdtBuilder {
         if let Some(ref kernel) = config.kernel {
             // Use standard naming without prefix to match mkimage
             let node_name = kernel.name.clone();
-            self.add_kernel_image(&node_name, kernel, config.compress_kernel)?;
+            self.add_kernel_image(&node_name, kernel)?;
             component_names.push(("kernel", node_name));
         }
 
@@ -146,20 +147,20 @@ impl StandardFdtBuilder {
             }
 
             // Add specified configurations
-            for (config_name, (description, kernel_name, fdt_name, ramdisk_name)) in &config.configurations {
+            for (config_name, val) in &config.configurations {
                 self.begin_node(config_name)?;
-                self.add_property_string("description", description)?;
+                self.add_property_string("description", &val.description)?;
 
                 // Add component references
-                if let Some(kernel_ref) = kernel_name {
+                if let Some(ref kernel_ref) = val.kernel {
                     self.add_property_string("kernel", kernel_ref)?;
                 }
 
-                if let Some(fdt_ref) = fdt_name {
+                if let Some(ref fdt_ref) = val.fdt {
                     self.add_property_string("fdt", fdt_ref)?;
                 }
 
-                if let Some(ramdisk_ref) = ramdisk_name {
+                if let Some(ref ramdisk_ref) = val.ramdisk {
                     self.add_property_string("ramdisk", ramdisk_ref)?;
                 }
 
@@ -171,12 +172,7 @@ impl StandardFdtBuilder {
     }
 
     /// Add kernel image node
-    fn add_kernel_image(
-        &mut self,
-        name: &str,
-        component: &ComponentConfig,
-        compress: bool,
-    ) -> Result<()> {
+    fn add_kernel_image(&mut self, name: &str, component: &ComponentConfig) -> Result<()> {
         self.begin_node(name)?;
 
         // Use custom description if provided, otherwise default
@@ -208,10 +204,10 @@ impl StandardFdtBuilder {
         }
 
         // Use custom compression if provided, otherwise default
-        if let Some(ref comp_str) = component.compression {
-            self.add_property_string("compression", comp_str)?;
+        if component.compression {
+            self.add_property_string("compression", "gzip")?;
         } else {
-            self.add_property_string("compression", if compress { "gzip" } else { "none" })?;
+            self.add_property_string("compression", "none")?;
         }
 
         if let Some(load_addr) = component.load_address {
@@ -259,8 +255,8 @@ impl StandardFdtBuilder {
         }
 
         // Use custom compression if provided, otherwise default
-        if let Some(ref comp_str) = component.compression {
-            self.add_property_string("compression", comp_str)?;
+        if component.compression {
+            self.add_property_string("compression", "gzip")?;
         } else {
             self.add_property_string("compression", "none")?;
         }
@@ -286,7 +282,12 @@ impl StandardFdtBuilder {
         self.add_property_string("type", "ramdisk")?;
         self.add_property_string("arch", "arm64")?;
         self.add_property_string("os", "linux")?;
-        self.add_property_string("compression", "none")?;
+        // Use custom compression if provided, otherwise default
+        if component.compression {
+            self.add_property_string("compression", "gzip")?;
+        } else {
+            self.add_property_string("compression", "none")?;
+        }
 
         if let Some(load_addr) = component.load_address {
             // Use 32-bit address format for arm64 to match mkimage standard
@@ -344,7 +345,11 @@ impl StandardFdtBuilder {
         let name_offset = self.string_table.add_string(name);
 
         FdtToken::Prop.write_to_buffer(&mut self.struct_buffer);
-        FdtTokenUtils::write_prop_header(&mut self.struct_buffer, value.len() as u32 + 1, name_offset)?;
+        FdtTokenUtils::write_prop_header(
+            &mut self.struct_buffer,
+            value.len() as u32 + 1,
+            name_offset,
+        )?;
         FdtTokenUtils::write_string(&mut self.struct_buffer, value)?;
         Ok(())
     }
@@ -389,7 +394,7 @@ impl StandardFdtBuilder {
 
         // Calculate offsets to match mkimage layout: [Header][Mem Reserve Map][FDT Structure][String Table]
         let off_dt_struct = header_size + mem_rsvmap_size;
-        let off_mem_rsvmap = header_size;  // Memory reserve map comes right after header
+        let off_mem_rsvmap = header_size; // Memory reserve map comes right after header
         let off_dt_strings = off_dt_struct + struct_size;
         let total_size = off_dt_strings + strings_size;
 
@@ -433,7 +438,10 @@ impl Default for StandardFdtBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fit::config::{ComponentConfig, FitImageConfig};
+    use crate::fit::{
+        config::{ComponentConfig, FitImageConfig},
+        FDT_MAGIC,
+    };
 
     #[test]
     fn test_standard_fdt_builder() {
@@ -444,10 +452,8 @@ mod tests {
                     .with_entry_point(0x80080000),
             )
             .with_fdt(
-                ComponentConfig::new("test-fdt", vec![5, 6, 7, 8, 9])
-                    .with_load_address(0x82000000),
-            )
-            .with_kernel_compression(false);
+                ComponentConfig::new("test-fdt", vec![5, 6, 7, 8, 9]).with_load_address(0x82000000),
+            );
 
         let mut builder = StandardFdtBuilder::new().unwrap();
         builder.build_fit_tree(&config).unwrap();
@@ -464,12 +470,20 @@ mod tests {
         header_bytes.copy_from_slice(&fdt_data[0..40]);
 
         // Extract magic number (big-endian)
-        let magic = u32::from_be_bytes([header_bytes[0], header_bytes[1], header_bytes[2], header_bytes[3]]);
+        let magic = u32::from_be_bytes([
+            header_bytes[0],
+            header_bytes[1],
+            header_bytes[2],
+            header_bytes[3],
+        ]);
         assert_eq!(magic, FDT_MAGIC);
 
         // Extract total size
         let total_size = u32::from_be_bytes([
-            header_bytes[4], header_bytes[5], header_bytes[6], header_bytes[7]
+            header_bytes[4],
+            header_bytes[5],
+            header_bytes[6],
+            header_bytes[7],
         ]);
         assert_eq!(total_size as usize, fdt_data.len());
     }
@@ -490,14 +504,8 @@ mod tests {
     #[test]
     fn test_string_table_deduplication() {
         let config = FitImageConfig::new("Test FIT")
-            .with_kernel(
-                ComponentConfig::new("test", vec![1, 2, 3])
-                    .with_load_address(0x80000000),
-            )
-            .with_fdt(
-                ComponentConfig::new("test", vec![4, 5, 6])
-                    .with_load_address(0x82000000),
-            );
+            .with_kernel(ComponentConfig::new("test", vec![1, 2, 3]).with_load_address(0x80000000))
+            .with_fdt(ComponentConfig::new("test", vec![4, 5, 6]).with_load_address(0x82000000));
 
         let mut builder = StandardFdtBuilder::new().unwrap();
         builder.build_fit_tree(&config).unwrap();
