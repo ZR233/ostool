@@ -119,7 +119,7 @@ impl StandardFdtBuilder {
         // Add configurations from the config
         if config.configurations.is_empty() {
             // Create default configuration if none specified
-            self.begin_node("default")?;
+            self.begin_node("config-1")?;
             self.add_property_string("description", "Default configuration")?;
 
             // Add component references using standard naming
@@ -138,7 +138,7 @@ impl StandardFdtBuilder {
             self.end_node()?;
 
             // Set default configuration reference
-            self.add_property_string("default", "default")?;
+            self.add_property_string("default", "config-1")?;
         } else {
             // Set default configuration reference first (before config nodes)
             if let Some(ref default_config) = config.default_config {

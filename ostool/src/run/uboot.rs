@@ -160,15 +160,26 @@ impl Runner {
             Byte::from(kernel_data.len())
         );
 
-        // 创建 kernel 组件配置
-        let kernel_component = ComponentConfig::new("kernel", kernel_data)
-            .with_load_address(kernel_load_addr)
-            .with_entry_point(kernel_entry_addr);
+        let arch = match self.ctx.arch.as_ref().unwrap() {
+            object::Architecture::Aarch64 => "arm64",
+            object::Architecture::Arm => "arm",
+            object::Architecture::LoongArch64 => "loongarch64",
+            _ => todo!(),
+        };
 
-        // 开始构建 FIT 配置
-        let mut fit_config = FitImageConfig::new("ostool FIT Image")
-            .with_kernel(kernel_component)
-            .with_kernel_compression(true);
+        // 创建配置，与 test.its 文件中的参数一致
+        let mut config = FitImageConfig::new("Various kernels, ramdisks and FDT blobs")
+            .with_kernel(
+                ComponentConfig::new("kernel", kernel_data)
+                    .with_description("This kernel")
+                    .with_type("kernel")
+                    .with_arch(arch)
+                    .with_os("linux")
+                    .with_compression("gzip")
+                    .with_load_address(kernel_load_addr)
+                    .with_entry_point(kernel_entry_addr),
+            );
+        let mut fdt_name = None;
 
         // 处理 DTB 文件
         if let Some(dtb_path) = dtb_path {
@@ -179,10 +190,14 @@ impl Runner {
                         dtb_path.display(),
                         Byte::from(data.len())
                     );
-
-                    let fdt_component = ComponentConfig::new("fdt", data);
-
-                    fit_config = fit_config.with_fdt(fdt_component);
+                    fdt_name = Some("fdt");
+                    config = config.with_fdt(
+                        ComponentConfig::new("fdt", data)
+                            .with_description("This fdt")
+                            .with_type("flat_dt")
+                            .with_arch(arch)
+                            .with_compression("none"),
+                    );
                 }
                 Err(e) => {
                     return Err(anyhow!(
@@ -197,10 +212,21 @@ impl Runner {
             warn!("未指定 DTB 文件，将生成仅包含 kernel 的 FIT image");
         }
 
+        config = config
+            .with_default_config("config-ostool")
+            .with_configuration(
+                "config-ostool",
+                "ostool configuration",
+                Some("kernel"),
+                fdt_name,
+                None::<String>,
+            )
+            .with_kernel_compression(true);
+
         // 使用新的 mkimage API 构建 FIT image
         let mut builder = FitImageBuilder::new();
         let fit_data = builder
-            .build(fit_config)
+            .build(config)
             .map_err(|e| anyhow!("{}: {}", errors::FIT_BUILD_ERROR, e))?;
 
         // 保存到文件
