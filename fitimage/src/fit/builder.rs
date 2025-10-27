@@ -6,7 +6,7 @@ use crate::compression::gzip::GzipCompressor;
 use crate::compression::traits::CompressionInterface;
 use crate::error::Result;
 use crate::fit::config::FitImageConfig;
-use crate::fit::dt_builder::DeviceTreeBuilder;
+use crate::fit::standard_dt_builder::StandardFdtBuilder;
 
 /// Main FIT image builder
 pub struct FitImageBuilder;
@@ -27,8 +27,8 @@ impl FitImageBuilder {
             }
         }
 
-        // Build device tree
-        let mut dt_builder = DeviceTreeBuilder::new()?;
+        // Build standard FDT structure
+        let mut dt_builder = StandardFdtBuilder::new()?;
         dt_builder.build_fit_tree(&config)?;
 
         // Generate FIT image data
@@ -50,8 +50,8 @@ impl FitImageBuilder {
             }
         }
 
-        // Build device tree
-        let mut dt_builder = DeviceTreeBuilder::new()?;
+        // Build standard FDT structure
+        let mut dt_builder = StandardFdtBuilder::new()?;
         dt_builder.build_fit_tree(&config)?;
 
         // Generate FIT image data
