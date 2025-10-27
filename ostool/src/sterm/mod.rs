@@ -5,8 +5,7 @@ use std::time::Duration;
 
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
-    execute,
-    terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode},
+    terminal::{disable_raw_mode, enable_raw_mode},
 };
 
 type Tx = Box<dyn Write + Send>;

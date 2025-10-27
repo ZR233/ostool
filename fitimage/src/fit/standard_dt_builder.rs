@@ -62,7 +62,7 @@ impl StandardFdtBuilder {
                 .as_secs() as u32,
         )?;
         self.add_property_string("description", &config.description)?;
-        self.add_property_u32("#address-cells", 1)?;
+        self.add_property_u32("#address-cells", 2)?;
         self.add_property_u32("#size-cells", 1)?;
 
         // Add images node
@@ -212,12 +212,12 @@ impl StandardFdtBuilder {
 
         if let Some(load_addr) = component.load_address {
             // Use 32-bit address format for arm64 to match mkimage standard
-            self.add_property_u32("load", load_addr as u32)?;
+            self.add_property_u64("load", load_addr)?;
         }
 
         if let Some(entry_addr) = component.entry_point {
             // Use 32-bit address format for arm64 to match mkimage standard
-            self.add_property_u32("entry", entry_addr as u32)?;
+            self.add_property_u64("entry", entry_addr)?;
         }
 
         self.add_property_data("data", &component.data)?;
@@ -263,7 +263,7 @@ impl StandardFdtBuilder {
 
         if let Some(load_addr) = component.load_address {
             // Use 32-bit address format for arm64 to match mkimage standard
-            self.add_property_u32("load", load_addr as u32)?;
+            self.add_property_u64("load", load_addr)?;
         }
 
         self.add_property_data("data", &component.data)?;
@@ -291,7 +291,7 @@ impl StandardFdtBuilder {
 
         if let Some(load_addr) = component.load_address {
             // Use 32-bit address format for arm64 to match mkimage standard
-            self.add_property_u32("load", load_addr as u32)?;
+            self.add_property_u64("load", load_addr)?;
         }
 
         self.add_property_data("data", &component.data)?;
