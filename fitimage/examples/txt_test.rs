@@ -23,8 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .with_entry_point(0x40080000),
         )
         .with_fdt(
-            ComponentConfig::new("fdt", fdt_data.as_bytes().to_vec())
-                .with_load_address(0x42000000),
+            ComponentConfig::new("fdt", fdt_data.as_bytes().to_vec()).with_load_address(0x42000000),
         )
         .with_ramdisk(
             ComponentConfig::new("ramdisk", ramfs_data.as_bytes().to_vec())
@@ -60,8 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .with_entry_point(0x40080000),
         )
         .with_fdt(
-            ComponentConfig::new("fdt", fdt_data.as_bytes().to_vec())
-                .with_load_address(0x42000000),
+            ComponentConfig::new("fdt", fdt_data.as_bytes().to_vec()).with_load_address(0x42000000),
         )
         .with_ramdisk(
             ComponentConfig::new("ramdisk", ramfs_data.as_bytes().to_vec())
@@ -75,7 +73,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("压缩版本大小: {} bytes", fit_data_compressed.len());
     println!("非压缩版本大小: {} bytes", fit_data.len());
     let savings = fit_data.len() - fit_data_compressed.len();
-    println!("节省空间: {} bytes ({}%)", savings, (savings * 100) / fit_data.len());
+    println!(
+        "节省空间: {} bytes ({}%)",
+        savings,
+        (savings * 100) / fit_data.len()
+    );
     println!("✅ 压缩版本已保存到: ../test_txt_fit_compressed.fit");
 
     println!("\n=== 测试完成 ===");

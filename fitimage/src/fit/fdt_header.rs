@@ -40,10 +40,10 @@ pub struct FdtHeader {
     /// Size in bytes of the structure block
     pub size_dt_struct: u32,
     /// Additional fields to match mkimage's 56-byte header
-    pub reserved0: u32,  // Reserved/padding field
-    pub reserved1: u32,  // Reserved/padding field
-    pub reserved2: u32,  // Reserved/padding field
-    pub reserved3: u32,  // Reserved/padding field
+    pub reserved0: u32, // Reserved/padding field
+    pub reserved1: u32, // Reserved/padding field
+    pub reserved2: u32, // Reserved/padding field
+    pub reserved3: u32, // Reserved/padding field
 }
 
 impl FdtHeader {
@@ -51,15 +51,15 @@ impl FdtHeader {
     pub fn new() -> Self {
         Self {
             magic: FDT_MAGIC,
-            totalsize: 0, // Will be calculated later
-            off_dt_struct: 0, // Will be calculated later
+            totalsize: 0,      // Will be calculated later
+            off_dt_struct: 0,  // Will be calculated later
             off_dt_strings: 0, // Will be calculated later
             off_mem_rsvmap: 0, // Will be calculated later
             version: FDT_VERSION,
             last_comp_version: FDT_LAST_COMP_VERSION,
             boot_cpuid_phys: 0,
             size_dt_strings: 0, // Will be calculated later
-            size_dt_struct: 0, // Will be calculated later
+            size_dt_struct: 0,  // Will be calculated later
             // Initialize reserved fields to zero to match mkimage
             reserved0: 0,
             reserved1: 0,

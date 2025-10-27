@@ -84,9 +84,7 @@ fn test_configuration_naming_compatibility() -> Result<(), Box<dyn std::error::E
         }
 
         // 使用 dumpimage 检查
-        let dump_output = Command::new("dumpimage")
-            .args(["-l", temp_path])
-            .output()?;
+        let dump_output = Command::new("dumpimage").args(["-l", temp_path]).output()?;
 
         if dump_output.status.success() {
             let dump_content = String::from_utf8_lossy(&dump_output.stdout);

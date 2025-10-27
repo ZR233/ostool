@@ -135,7 +135,10 @@ mod tests {
 
         let sha1 = HashAlgorithm::Sha1;
         assert_eq!(sha1.as_str(), "sha1");
-        assert_eq!(sha1.calculate(data), "0a0a9f2a6772942557ab5355d76af442f8f65e01");
+        assert_eq!(
+            sha1.calculate(data),
+            "0a0a9f2a6772942557ab5355d76af442f8f65e01"
+        );
 
         let crc32 = HashAlgorithm::Crc32;
         assert_eq!(crc32.as_str(), "crc32");

@@ -10,12 +10,13 @@ use fitimage::{ComponentConfig, FitImageBuilder, FitImageConfig};
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use jkconfig::data::app_data::default_schema_by_init;
 use log::{info, warn};
+use network_interface::{Addr, NetworkInterface, NetworkInterfaceConfig};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
 use uboot_shell::UbootShell;
 
-use crate::{ctx::AppContext, sterm::SerialTerm};
+use crate::{ctx::AppContext, run::tftp, sterm::SerialTerm};
 
 /// FIT image 生成相关的错误消息常量
 mod errors {
@@ -69,7 +70,7 @@ pub struct RunUbootArgs {
     pub show_output: bool,
 }
 
-pub async fn run_qemu(ctx: AppContext, args: RunUbootArgs) -> anyhow::Result<()> {
+pub async fn run_uboot(ctx: AppContext, args: RunUbootArgs) -> anyhow::Result<()> {
     // Build logic will be implemented here
     let config_path = match args.config.clone() {
         Some(path) => path,
@@ -136,8 +137,10 @@ impl Runner {
         dtb_path: Option<&Path>,
         kernel_load_addr: u64,
         kernel_entry_addr: u64,
+        fdt_load_addr: Option<u64>,
+        _ramfs_load_addr: Option<u64>,
     ) -> anyhow::Result<PathBuf> {
-        info!("begin gen FIT image...");
+        info!("Making FIT image...");
         // 生成压缩的 FIT image
         let output_dir = kernel_path
             .parent()
@@ -155,7 +158,7 @@ impl Runner {
         })?;
 
         info!(
-            "已读取 kernel 文件: {} (大小: {:.2})",
+            "kernel: {} (size: {:.2})",
             kernel_path.display(),
             Byte::from(kernel_data.len())
         );
@@ -191,12 +194,18 @@ impl Runner {
                         Byte::from(data.len())
                     );
                     fdt_name = Some("fdt");
-                    config = config.with_fdt(
-                        ComponentConfig::new("fdt", data)
-                            .with_description("This fdt")
-                            .with_type("flat_dt")
-                            .with_arch(arch),
-                    );
+
+                    // Can not compress DTB, U-Boot will not accept it
+                    let mut fdt_config = ComponentConfig::new("fdt", data.clone())
+                        .with_description("This fdt")
+                        .with_type("flat_dt")
+                        .with_arch(arch);
+
+                    if let Some(addr) = fdt_load_addr {
+                        fdt_config = fdt_config.with_load_address(addr);
+                    }
+
+                    config = config.with_fdt(fdt_config);
                 }
                 Err(e) => {
                     return Err(anyhow!(
@@ -238,7 +247,7 @@ impl Runner {
             )
         })?;
 
-        info!("FIT image 生成成功: {}", output_path.display());
+        info!("FIT image ok: {}", output_path.display());
         Ok(output_path)
     }
 
@@ -249,7 +258,13 @@ impl Runner {
         let kernel = self.ctx.bin_path.as_ref().ok_or(anyhow!("bin not exist"))?;
 
         info!("Starting U-Boot runner...");
-        info!("Loading kernel from: {}", kernel.display());
+
+        info!("kernel from: {}", kernel.display());
+        if self.config.net.is_some() {
+            tftp::run_tftp_server(&self.ctx)?;
+        }
+
+        let ip_string = self.detect_tftp_ip();
 
         let rx = serialport::new(&self.config.serial, self.config.baud_rate as _)
             .timeout(Duration::from_millis(200))
@@ -272,24 +287,49 @@ impl Runner {
 
         let mut uboot = handle.join().unwrap()?;
 
-        if self.config.net.is_some()
+        if let Some(ref ip) = ip_string
             && let Ok(output) = uboot.cmd("net list")
         {
             let device_list = output.strip_prefix("net list").unwrap_or(&output).trim();
 
             if device_list.is_empty() {
-                let _ = uboot.cmd_without_reply("bootdev hunt ethernet");
+                let _ = uboot.cmd("bootdev hunt ethernet");
             }
+
+            info!("Board network ok");
+
+            if let Some(ref board_ip) = self.config.net.as_ref().unwrap().board_ip {
+                uboot.set_env("ipaddr", board_ip)?;
+            } else {
+                uboot.cmd("dhcp")?;
+            }
+
+            uboot.set_env("serverip", ip.clone())?;
+        }
+
+        let mut fdt_load_addr = None;
+        let mut ramfs_load_addr = None;
+
+        if let Ok(addr) = uboot.env_int("fdt_addr_r") {
+            fdt_load_addr = Some(addr as u64);
+        }
+
+        if let Ok(addr) = uboot.env_int("ramdisk_addr_r") {
+            ramfs_load_addr = Some(addr as u64);
         }
 
         let loadaddr = if let Ok(addr) = uboot.env_int("loadaddr") {
             info!("Found $loadaddr: {addr:#x}");
             addr as u64
+        } else if let Ok(addr) = uboot.env_int("kernel_comp_addr_r") {
+            uboot.set_env("loadaddr", format!("{addr:#x}"))?;
+            info!("Set $loadaddr to kernel_comp_addr_r: {addr:#x}");
+            addr as u64
         } else {
-            let loadaddr = uboot.env_int("kernel_comp_addr_r")? as u64;
-            uboot.set_env("loadaddr", format!("{loadaddr:#x}"))?;
-            info!("Set $loadaddr to kernel_comp_addr_r: {loadaddr:#x}");
-            loadaddr
+            let addr = uboot.env_int("kernel_addr_c")? as u64;
+            uboot.set_env("loadaddr", format!("{addr:#x}"))?;
+            info!("Set $loadaddr to kernel_addr_c: {addr:#x}");
+            addr
         };
 
         let kernel_entry = if let Some(entry) = self.config.kernel_load_addr_int() {
@@ -310,18 +350,35 @@ impl Runner {
 
         let dtb_path = dtb.as_ref().map(Path::new);
         let fitimage = self
-            .generate_fit_image(kernel, dtb_path, kernel_entry, kernel_entry)
+            .generate_fit_image(
+                kernel,
+                dtb_path,
+                kernel_entry,
+                kernel_entry,
+                fdt_load_addr,
+                ramfs_load_addr,
+            )
             .await?;
 
-        Self::uboot_loady(&mut uboot, loadaddr as usize, fitimage);
+        if self.config.net.is_some() {
+            info!("TFTP upload FIT image to board...");
+            let filename = fitimage.file_name().unwrap().to_str().unwrap();
+
+            let tftp_cmd = format!("tftp {filename}");
+            uboot.cmd(&tftp_cmd)?;
+            uboot.cmd_without_reply("bootm")?;
+        } else {
+            info!("No TFTP config, using loady to upload FIT image...");
+            Self::uboot_loady(&mut uboot, loadaddr as usize, fitimage);
+            uboot.cmd_without_reply("bootm")?;
+        }
+
         let tx = uboot.tx.take().unwrap();
         let rx = uboot.rx.take().unwrap();
 
-        // bootm ${loadaddr}#default
-
         drop(uboot);
 
-        println!("Interacting with U-Boot shell...");
+        println!("{}", "Interacting with U-Boot shell...".green());
 
         let mut shell = SerialTerm::new(tx, rx);
         shell.run().await?;
@@ -347,6 +404,32 @@ impl Runner {
         }
 
         Ok(())
+    }
+
+    fn detect_tftp_ip(&self) -> Option<String> {
+        let net = self.config.net.as_ref()?;
+
+        let mut ip_string = String::new();
+
+        let interfaces = NetworkInterface::show().unwrap();
+        for interface in interfaces.iter() {
+            if interface.name == net.interface {
+                let addr_list: Vec<Addr> = interface.addr.to_vec();
+                for one in addr_list {
+                    if let Addr::V4(v4_if_addr) = one {
+                        ip_string = v4_if_addr.ip.to_string();
+                    }
+                }
+            }
+        }
+
+        if ip_string.is_empty() {
+            panic!("Cannot detect IP address for interface: {}", net.interface);
+        }
+
+        info!("TFTP : {}", ip_string);
+
+        Some(ip_string)
     }
 
     fn uboot_loady(uboot: &mut UbootShell, addr: usize, file: impl Into<PathBuf>) {

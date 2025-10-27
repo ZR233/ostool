@@ -68,6 +68,7 @@ async fn main() -> anyhow::Result<()> {
     env_logger::builder()
         .format_module_path(false)
         .filter_level(LevelFilter::Info)
+        .parse_default_env()
         .init();
 
     if env::var("CARGO").is_err() {
@@ -110,7 +111,7 @@ async fn main() -> anyhow::Result<()> {
             show_output,
             ..
         } => {
-            uboot::run_qemu(
+            uboot::run_uboot(
                 app,
                 RunUbootArgs {
                     config,

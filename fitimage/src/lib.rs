@@ -39,7 +39,7 @@ pub use compression::traits::CompressionInterface;
 pub use crc::calculate_crc32;
 pub use error::{MkImageError, Result};
 pub use fit::{ComponentConfig, FitImageBuilder, FitImageConfig};
-pub use hash::{HashAlgorithm, HashResult, calculate_hashes, default_hash_algorithms};
+pub use hash::{calculate_hashes, default_hash_algorithms, HashAlgorithm, HashResult};
 
 /// Current version of the mkimage implementation
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
