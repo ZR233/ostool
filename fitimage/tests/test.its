@@ -1,0 +1,52 @@
+/*
+ * U-Boot uImage source file with multiple kernels, ramdisks and FDT blobs
+ */
+
+/dts-v1/;
+
+/ {
+	description = "Various kernels, ramdisks and FDT blobs";
+	#address-cells = <1>;
+
+	images {
+		kernel {
+			description = "This kernel";
+			data = /incbin/("./kernel.txt");
+			type = "kernel";
+			arch = "arm64";
+			os = "linux";
+			compression = "none";
+			load = <0x90100000>;
+			entry = <0x90100000>;
+			hash-1 {
+				algo = "md5";
+			};
+			hash-2 {
+				algo = "sha1";
+			};
+		};
+
+		fdt {
+			description = "This fdt";
+			data = /incbin/("./dtb.txt");
+			type = "flat_dt";
+			arch = "arm64";
+			compression = "none";
+			hash-1 {
+				algo = "crc32";
+			};
+		};
+
+        
+	};
+
+	configurations {
+		default = "config-ostool";
+
+		config-ostool {
+			description = "ostool configuration";
+			kernel = "kernel";
+			fdt = "fdt";
+		};
+	};
+};
