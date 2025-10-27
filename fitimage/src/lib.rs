@@ -32,12 +32,14 @@ pub mod compression;
 pub mod crc;
 pub mod error;
 pub mod fit;
+pub mod hash;
 
 // Re-export main types for convenience
 pub use compression::traits::CompressionInterface;
 pub use crc::calculate_crc32;
 pub use error::{MkImageError, Result};
 pub use fit::{ComponentConfig, FitImageBuilder, FitImageConfig};
+pub use hash::{HashAlgorithm, HashResult, calculate_hashes, default_hash_algorithms};
 
 /// Current version of the mkimage implementation
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

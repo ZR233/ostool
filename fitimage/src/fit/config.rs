@@ -21,6 +21,12 @@ pub struct FitImageConfig {
 
     /// Whether to compress the kernel with gzip
     pub compress_kernel: bool,
+
+    /// Default configuration name
+    pub default_config: Option<String>,
+
+    /// Configurations mapping (name -> (description, kernel, fdt, ramdisk))
+    pub configurations: std::collections::HashMap<String, (String, Option<String>, Option<String>, Option<String>)>,
 }
 
 /// Configuration for a single component (kernel, fdt, ramdisk)
@@ -31,6 +37,21 @@ pub struct ComponentConfig {
 
     /// Raw data of the component
     pub data: Vec<u8>,
+
+    /// Description of the component
+    pub description: Option<String>,
+
+    /// Component type (kernel, flat_dt, ramdisk, etc.)
+    pub component_type: Option<String>,
+
+    /// Architecture (arm, arm64, etc.)
+    pub arch: Option<String>,
+
+    /// OS type (linux, etc.)
+    pub os: Option<String>,
+
+    /// Compression type (none, gzip, etc.)
+    pub compression: Option<String>,
 
     /// Load address in memory
     pub load_address: Option<u64>,
@@ -45,9 +66,44 @@ impl ComponentConfig {
         Self {
             name: name.into(),
             data,
+            description: None,
+            component_type: None,
+            arch: None,
+            os: None,
+            compression: None,
             load_address: None,
             entry_point: None,
         }
+    }
+
+    /// Set description
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    /// Set component type
+    pub fn with_type(mut self, component_type: impl Into<String>) -> Self {
+        self.component_type = Some(component_type.into());
+        self
+    }
+
+    /// Set architecture
+    pub fn with_arch(mut self, arch: impl Into<String>) -> Self {
+        self.arch = Some(arch.into());
+        self
+    }
+
+    /// Set OS type
+    pub fn with_os(mut self, os: impl Into<String>) -> Self {
+        self.os = Some(os.into());
+        self
+    }
+
+    /// Set compression type
+    pub fn with_compression(mut self, compression: impl Into<String>) -> Self {
+        self.compression = Some(compression.into());
+        self
     }
 
     /// Set load address
@@ -72,6 +128,8 @@ impl FitImageConfig {
             fdt: None,
             ramdisk: None,
             compress_kernel: false,
+            default_config: None,
+            configurations: std::collections::HashMap::new(),
         }
     }
 
@@ -98,6 +156,23 @@ impl FitImageConfig {
         self.compress_kernel = compress;
         self
     }
+
+    /// Set default configuration
+    pub fn with_default_config(mut self, default: impl Into<String>) -> Self {
+        self.default_config = Some(default.into());
+        self
+    }
+
+    /// Add a configuration
+    pub fn with_configuration(mut self, name: impl Into<String>, description: impl Into<String>,
+                             kernel: Option<impl Into<String>>, fdt: Option<impl Into<String>>,
+                             ramdisk: Option<impl Into<String>>) -> Self {
+        self.configurations.insert(name.into(), (description.into(),
+                                                  kernel.map(Into::into),
+                                                  fdt.map(Into::into),
+                                                  ramdisk.map(Into::into)));
+        self
+    }
 }
 
 #[cfg(test)]
@@ -121,12 +196,38 @@ mod tests {
     #[test]
     fn test_component_config() {
         let component = ComponentConfig::new("test", vec![1, 2, 3])
+            .with_description("Test component")
+            .with_type("kernel")
+            .with_arch("arm64")
+            .with_os("linux")
+            .with_compression("none")
             .with_load_address(0x80000)
             .with_entry_point(0x80000);
 
         assert_eq!(component.name, "test");
         assert_eq!(component.data, vec![1, 2, 3]);
+        assert_eq!(component.description, Some("Test component".to_string()));
+        assert_eq!(component.component_type, Some("kernel".to_string()));
+        assert_eq!(component.arch, Some("arm64".to_string()));
+        assert_eq!(component.os, Some("linux".to_string()));
+        assert_eq!(component.compression, Some("none".to_string()));
         assert_eq!(component.load_address, Some(0x80000));
         assert_eq!(component.entry_point, Some(0x80000));
+    }
+
+    #[test]
+    fn test_fit_image_config_with_configurations() {
+        let config = FitImageConfig::new("Test FIT")
+            .with_kernel(ComponentConfig::new("kernel", vec![1, 2, 3]))
+            .with_fdt(ComponentConfig::new("fdt", vec![4, 5, 6]))
+            .with_default_config("default")
+            .with_configuration("default", "Default configuration",
+                               Some("kernel"), Some("fdt"), None::<String>);
+
+        assert_eq!(config.description, "Test FIT");
+        assert!(config.kernel.is_some());
+        assert!(config.fdt.is_some());
+        assert_eq!(config.default_config, Some("default".to_string()));
+        assert!(config.configurations.contains_key("default"));
     }
 }

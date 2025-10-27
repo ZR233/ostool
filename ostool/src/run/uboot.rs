@@ -258,17 +258,15 @@ impl Runner {
             }
         }
 
-        // let loadaddr = if let Ok(addr) = uboot.env_int("loadaddr") {
-        //     info!("Found $loadaddr: {addr:#x}");
-        //     addr as u64
-        // } else {
-        //     uboot.set_env("loadaddr", "0x82000000")?;
-        //     info!("$loadaddr not found, setting to default 0x82000000");
-        //     0x82000000u64
-        // };
-
-        let loadaddr = uboot.env_int("kernel_comp_addr_r")? as u64;
-        uboot.set_env("loadaddr", format!("{loadaddr:#x}"))?;
+        let loadaddr = if let Ok(addr) = uboot.env_int("loadaddr") {
+            info!("Found $loadaddr: {addr:#x}");
+            addr as u64
+        } else {
+            let loadaddr = uboot.env_int("kernel_comp_addr_r")? as u64;
+            uboot.set_env("loadaddr", format!("{loadaddr:#x}"))?;
+            info!("Set $loadaddr to kernel_comp_addr_r: {loadaddr:#x}");
+            loadaddr
+        };
 
         let kernel_entry = if let Some(entry) = self.config.kernel_load_addr_int() {
             info!("Using configured kernel load address: {entry:#x}");
@@ -279,10 +277,7 @@ impl Runner {
                 .expect("kernel_addr_r not found") as u64
         };
 
-        // let kernel_load_addr = uboot.env_int("kernel_comp_addr_r")? as u64;
-
         info!("fitimage loadaddr: {loadaddr:#x}");
-        // info!("kernel load address: {kernel_load_addr:#x}");
         info!("kernel entry: {kernel_entry:#x}");
         let dtb = self.config.dtb_file.clone();
         if let Some(ref dtb_file) = dtb {
@@ -297,6 +292,9 @@ impl Runner {
         Self::uboot_loady(&mut uboot, loadaddr as usize, fitimage);
         let tx = uboot.tx.take().unwrap();
         let rx = uboot.rx.take().unwrap();
+
+        // bootm ${loadaddr}#default
+
         drop(uboot);
 
         println!("Interacting with U-Boot shell...");

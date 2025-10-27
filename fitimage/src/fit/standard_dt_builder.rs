@@ -7,6 +7,7 @@ use crate::fit::config::{ComponentConfig, FitImageConfig};
 use crate::fit::{
     FdtHeader, FdtToken, FdtTokenUtils, MemReserveEntry, StringTable, FDT_MAGIC,
 };
+use crate::hash::{calculate_hashes, default_hash_algorithms};
 
 /// Standard FDT builder that creates U-Boot compatible FIT images
 pub struct StandardFdtBuilder {
@@ -115,30 +116,56 @@ impl StandardFdtBuilder {
 
     /// Add configurations to the structure block
     fn add_configurations(&mut self, config: &FitImageConfig) -> Result<()> {
-        // Create default configuration
-        self.begin_node("default")?;
-        self.add_property_string("description", "Default configuration")?;
+        // Add configurations from the config
+        if config.configurations.is_empty() {
+            // Create default configuration if none specified
+            self.begin_node("default")?;
+            self.add_property_string("description", "Default configuration")?;
 
-        // Add component references using standard naming
-        if let Some(ref kernel) = config.kernel {
-            // Use direct name reference to match mkimage
-            self.add_property_string("kernel", &kernel.name)?;
+            // Add component references using standard naming
+            if let Some(ref kernel) = config.kernel {
+                self.add_property_string("kernel", &kernel.name)?;
+            }
+
+            if let Some(ref fdt) = config.fdt {
+                self.add_property_string("fdt", &fdt.name)?;
+            }
+
+            if let Some(ref ramdisk) = config.ramdisk {
+                self.add_property_string("ramdisk", &ramdisk.name)?;
+            }
+
+            self.end_node()?;
+
+            // Set default configuration reference
+            self.add_property_string("default", "default")?;
+        } else {
+            // Set default configuration reference first (before config nodes)
+            if let Some(ref default_config) = config.default_config {
+                self.add_property_string("default", default_config)?;
+            }
+
+            // Add specified configurations
+            for (config_name, (description, kernel_name, fdt_name, ramdisk_name)) in &config.configurations {
+                self.begin_node(config_name)?;
+                self.add_property_string("description", description)?;
+
+                // Add component references
+                if let Some(kernel_ref) = kernel_name {
+                    self.add_property_string("kernel", kernel_ref)?;
+                }
+
+                if let Some(fdt_ref) = fdt_name {
+                    self.add_property_string("fdt", fdt_ref)?;
+                }
+
+                if let Some(ramdisk_ref) = ramdisk_name {
+                    self.add_property_string("ramdisk", ramdisk_ref)?;
+                }
+
+                self.end_node()?;
+            }
         }
-
-        if let Some(ref fdt) = config.fdt {
-            // Use direct name reference to match mkimage
-            self.add_property_string("fdt", &fdt.name)?;
-        }
-
-        if let Some(ref ramdisk) = config.ramdisk {
-            // Use direct name reference to match mkimage
-            self.add_property_string("ramdisk", &ramdisk.name)?;
-        }
-
-        self.end_node()?;
-
-        // Set default configuration reference
-        self.add_property_string("default", "default")?;
 
         Ok(())
     }
@@ -151,11 +178,41 @@ impl StandardFdtBuilder {
         compress: bool,
     ) -> Result<()> {
         self.begin_node(name)?;
-        self.add_property_string("description", "Linux Kernel")?;
-        self.add_property_string("type", "kernel")?;
-        self.add_property_string("arch", "arm64")?;
-        self.add_property_string("os", "linux")?;
-        self.add_property_string("compression", if compress { "gzip" } else { "none" })?;
+
+        // Use custom description if provided, otherwise default
+        if let Some(ref desc) = component.description {
+            self.add_property_string("description", desc)?;
+        } else {
+            self.add_property_string("description", "Linux Kernel")?;
+        }
+
+        // Use custom type if provided, otherwise default
+        if let Some(ref type_str) = component.component_type {
+            self.add_property_string("type", type_str)?;
+        } else {
+            self.add_property_string("type", "kernel")?;
+        }
+
+        // Use custom arch if provided, otherwise default
+        if let Some(ref arch_str) = component.arch {
+            self.add_property_string("arch", arch_str)?;
+        } else {
+            self.add_property_string("arch", "arm64")?;
+        }
+
+        // Use custom os if provided, otherwise default
+        if let Some(ref os_str) = component.os {
+            self.add_property_string("os", os_str)?;
+        } else {
+            self.add_property_string("os", "linux")?;
+        }
+
+        // Use custom compression if provided, otherwise default
+        if let Some(ref comp_str) = component.compression {
+            self.add_property_string("compression", comp_str)?;
+        } else {
+            self.add_property_string("compression", if compress { "gzip" } else { "none" })?;
+        }
 
         if let Some(load_addr) = component.load_address {
             // Use 32-bit address format for arm64 to match mkimage standard
@@ -169,7 +226,8 @@ impl StandardFdtBuilder {
 
         self.add_property_data("data", &component.data)?;
 
-        // Note: Removed CRC32 to match mkimage standard - mkimage doesn't add individual component CRCs
+        // Add hash nodes to match mkimage standard
+        self.add_hash_nodes(&component.data)?;
 
         self.end_node()?;
         Ok(())
@@ -178,10 +236,34 @@ impl StandardFdtBuilder {
     /// Add FDT image node
     fn add_fdt_image(&mut self, name: &str, component: &ComponentConfig) -> Result<()> {
         self.begin_node(name)?;
-        self.add_property_string("description", "Device Tree Blob")?;
-        self.add_property_string("type", "flat_dt")?;
-        self.add_property_string("arch", "arm64")?;
-        self.add_property_string("compression", "none")?;
+
+        // Use custom description if provided, otherwise default
+        if let Some(ref desc) = component.description {
+            self.add_property_string("description", desc)?;
+        } else {
+            self.add_property_string("description", "Device Tree Blob")?;
+        }
+
+        // Use custom type if provided, otherwise default
+        if let Some(ref type_str) = component.component_type {
+            self.add_property_string("type", type_str)?;
+        } else {
+            self.add_property_string("type", "flat_dt")?;
+        }
+
+        // Use custom arch if provided, otherwise default
+        if let Some(ref arch_str) = component.arch {
+            self.add_property_string("arch", arch_str)?;
+        } else {
+            self.add_property_string("arch", "arm64")?;
+        }
+
+        // Use custom compression if provided, otherwise default
+        if let Some(ref comp_str) = component.compression {
+            self.add_property_string("compression", comp_str)?;
+        } else {
+            self.add_property_string("compression", "none")?;
+        }
 
         if let Some(load_addr) = component.load_address {
             // Use 32-bit address format for arm64 to match mkimage standard
@@ -190,7 +272,8 @@ impl StandardFdtBuilder {
 
         self.add_property_data("data", &component.data)?;
 
-        // Note: Removed CRC32 to match mkimage standard - mkimage doesn't add individual component CRCs
+        // Add hash nodes to match mkimage standard
+        self.add_hash_nodes(&component.data)?;
 
         self.end_node()?;
         Ok(())
@@ -212,9 +295,34 @@ impl StandardFdtBuilder {
 
         self.add_property_data("data", &component.data)?;
 
-        // Note: Removed CRC32 to match mkimage standard - mkimage doesn't add individual component CRCs
+        // Add hash nodes to match mkimage standard
+        self.add_hash_nodes(&component.data)?;
 
         self.end_node()?;
+        Ok(())
+    }
+
+    /// Add hash nodes for component data
+    fn add_hash_nodes(&mut self, data: &[u8]) -> Result<()> {
+        let hash_algorithms = default_hash_algorithms();
+        let hash_results = calculate_hashes(data, &hash_algorithms);
+
+        for (i, hash_result) in hash_results.iter().enumerate() {
+            // Create hash node name (hash-1, hash-2, etc.)
+            let hash_node_name = format!("hash-{}", i + 1);
+            self.begin_node(&hash_node_name)?;
+
+            // Add algorithm property
+            self.add_property_string("algo", hash_result.algorithm_name())?;
+
+            // Add value property - convert hex string to bytes
+            let hash_value = hash_result.value();
+            let hash_bytes = hex::decode(hash_value).unwrap_or_default();
+            self.add_property_data("value", &hash_bytes)?;
+
+            self.end_node()?;
+        }
+
         Ok(())
     }
 
