@@ -135,6 +135,7 @@ impl Runner {
         kernel_path: &Path,
         dtb_path: Option<&Path>,
         kernel_load_addr: u64,
+        kernel_entry_addr: u64,
     ) -> anyhow::Result<PathBuf> {
         info!("begin gen FIT image...");
         // 生成压缩的 FIT image
@@ -162,7 +163,7 @@ impl Runner {
         // 创建 kernel 组件配置
         let kernel_component = ComponentConfig::new("kernel", kernel_data)
             .with_load_address(kernel_load_addr)
-            .with_entry_point(kernel_load_addr);
+            .with_entry_point(kernel_entry_addr);
 
         // 开始构建 FIT 配置
         let mut fit_config = FitImageConfig::new("ostool FIT Image")
@@ -257,30 +258,41 @@ impl Runner {
             }
         }
 
-        let loadaddr = self.config.kernel_load_addr_int().unwrap_or_else(|| {
+        // let loadaddr = if let Ok(addr) = uboot.env_int("loadaddr") {
+        //     info!("Found $loadaddr: {addr:#x}");
+        //     addr as u64
+        // } else {
+        //     uboot.set_env("loadaddr", "0x82000000")?;
+        //     info!("$loadaddr not found, setting to default 0x82000000");
+        //     0x82000000u64
+        // };
+
+        let loadaddr = uboot.env_int("kernel_comp_addr_r")? as u64;
+        uboot.set_env("loadaddr", format!("{loadaddr:#x}"))?;
+
+        let kernel_entry = if let Some(entry) = self.config.kernel_load_addr_int() {
+            info!("Using configured kernel load address: {entry:#x}");
+            entry
+        } else {
             uboot
-                .env_int("loadaddr")
-                .map(|o| o as u64)
-                .unwrap_or_else(|_e| {
-                    info!("$loadaddr not found");
+                .env_int("kernel_addr_r")
+                .expect("kernel_addr_r not found") as u64
+        };
 
-                    let loadaddr = uboot
-                        .env_int("kernel_addr_r")
-                        .expect("kernel_addr_r not found");
-                    uboot.set_env("loadaddr", format!("{loadaddr:#x}")).unwrap();
-                    info!("$loadaddr set to {:#x} (kernel_addr_r)", loadaddr);
-                    loadaddr as u64
-                })
-        });
+        // let kernel_load_addr = uboot.env_int("kernel_comp_addr_r")? as u64;
 
-        info!("kernel load addr: {loadaddr:#x}");
+        info!("fitimage loadaddr: {loadaddr:#x}");
+        // info!("kernel load address: {kernel_load_addr:#x}");
+        info!("kernel entry: {kernel_entry:#x}");
         let dtb = self.config.dtb_file.clone();
         if let Some(ref dtb_file) = dtb {
             info!("Using DTB from: {}", dtb_file);
         }
 
         let dtb_path = dtb.as_ref().map(Path::new);
-        let fitimage = self.generate_fit_image(kernel, dtb_path, loadaddr).await?;
+        let fitimage = self
+            .generate_fit_image(kernel, dtb_path, kernel_entry, kernel_entry)
+            .await?;
 
         Self::uboot_loady(&mut uboot, loadaddr as usize, fitimage);
         let tx = uboot.tx.take().unwrap();
