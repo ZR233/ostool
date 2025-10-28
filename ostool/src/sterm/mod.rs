@@ -67,7 +67,7 @@ impl SerialTerm {
         if cleanup_needed {
             let _ = disable_raw_mode();
             println!(); // 添加换行符
-            eprintln!("\n✓ 已退出串口终端模式");
+            eprintln!("✓ 已退出串口终端模式");
         }
 
         result
@@ -77,8 +77,6 @@ impl SerialTerm {
         let tx_port = self.tx.clone();
         let rx_port = self.rx.clone();
 
-        // 创建退出标志
-        let exit_flag = Arc::new(Mutex::new(false));
         let on_line = self.on_line.take().unwrap();
 
         let handle = Arc::new(TermHandle {
@@ -115,8 +113,8 @@ impl SerialTerm {
                     KeySequenceState::CtrlAPressed => {
                         if key.code == KeyCode::Char('x') {
                             // 用户请求退出
-                            eprintln!("\n检测到退出快捷键 Ctrl+A+x");
-                            *exit_flag.lock().unwrap() = true;
+                            eprintln!("\r\nExit by: Ctrl+A+x");
+                            handle.stop();
                             break;
                         } else {
                             // 不是x键，发送上一个按键并重置状态
@@ -161,8 +159,8 @@ impl SerialTerm {
                     for &b in data {
                         line.push(b);
                         if b == b'\n' {
-                            // byte[0] = b'\r';
-                            // io::stdout().write_all(&byte)?;
+                            byte[0] = b'\r';
+                            io::stdout().write_all(&byte)?;
                             let line_str = String::from_utf8_lossy(&line);
                             (on_line)(handle.as_ref(), &line_str);
                             line.clear();

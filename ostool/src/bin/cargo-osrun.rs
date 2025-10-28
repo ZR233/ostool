@@ -1,7 +1,7 @@
 use std::{env, path::PathBuf, process::exit};
 
 use clap::{Parser, Subcommand};
-use log::LevelFilter;
+use log::{LevelFilter, debug};
 use ostool::{
     ctx::AppContext,
     run::{
@@ -12,6 +12,18 @@ use ostool::{
 
 #[derive(Debug, Parser, Clone)]
 struct RunnerArgs {
+    program: PathBuf,
+
+    /// Path to the binary to run on the device
+    elf: PathBuf,
+
+    /// Test name
+    test_name: Option<String>,
+
+    /// Objcopy elf to binary before running
+    #[arg(long("to-bin"))]
+    to_bin: bool,
+
     #[arg(short)]
     /// Enable verbose output
     verbose: bool,
@@ -20,47 +32,38 @@ struct RunnerArgs {
     /// Enable quiet output (no output except errors)
     quiet: bool,
 
-    program: PathBuf,
+    /// Path to the runner configuration file
+    #[arg(short, long)]
+    config: Option<PathBuf>,
 
-    /// Path to the binary to run on the device
-    elf: PathBuf,
+    #[arg(long("show-output"))]
+    show_output: bool,
 
+    #[arg(long)]
+    no_run: bool,
+
+    /// Sub-commands
     #[command(subcommand)]
-    command: SubCommands,
+    command: Option<SubCommands>,
+
+    /// Dump DTB file
+    #[arg(long)]
+    dtb_dump: bool,
+
+    #[arg(allow_hyphen_values = true)]
+    /// Arguments to be run
+    runner_args: Vec<String>,
 }
 
-#[derive(Subcommand, Debug, Clone)]
+#[derive(Debug, Subcommand, Clone)]
 enum SubCommands {
-    Qemu {
-        /// Path to the configuration file, default to '.qemu.toml'
-        #[arg(short, long)]
-        config: Option<PathBuf>,
-        /// Dump DTB file
-        #[arg(long)]
-        dtb_dump: bool,
+    Uboot(CliUboot),
+}
 
-        #[arg(long("show-output"))]
-        show_output: bool,
-
-        #[arg(long)]
-        no_run: bool,
-
-        #[arg(allow_hyphen_values = true)]
-        /// Arguments to be run
-        runner_args: Vec<String>,
-    },
-    Uboot {
-        /// Path to the configuration file, default to '.uboot.toml'
-        #[arg(short, long)]
-        config: Option<PathBuf>,
-
-        #[arg(long("show-output"))]
-        show_output: bool,
-
-        #[arg(allow_hyphen_values = true)]
-        /// Arguments to be run
-        runner_args: Vec<String>,
-    },
+#[derive(Debug, Parser, Clone)]
+struct CliUboot {
+    #[arg(allow_hyphen_values = true)]
+    runner_args: Vec<String>,
 }
 
 #[tokio::main]
@@ -71,12 +74,14 @@ async fn main() -> anyhow::Result<()> {
         .parse_default_env()
         .init();
 
+    let args = RunnerArgs::parse();
+
+    debug!("Parsed arguments: {:?}", args);
+
     if env::var("CARGO").is_err() {
         eprintln!("This binary may only be called via `cargo ndk-runner`.");
         exit(1);
     }
-
-    let args = RunnerArgs::parse();
 
     let workdir = env::var("CARGO_MANIFEST_DIR")?.into();
 
@@ -87,35 +92,29 @@ async fn main() -> anyhow::Result<()> {
 
     app.set_elf_path(args.elf).await;
 
+    app.debug = args.no_run;
+    if args.to_bin {
+        app.objcopy_output_bin()?;
+    }
+
     match args.command {
-        SubCommands::Qemu {
-            config,
-            dtb_dump,
-            no_run,
-            show_output,
-            ..
-        } => {
-            app.debug = no_run;
-            qemu::run_qemu(
+        Some(SubCommands::Uboot(_)) => {
+            uboot::run_uboot(
                 app,
-                qemu::RunQemuArgs {
-                    qemu_config: config,
-                    dtb_dump,
-                    show_output,
+                RunUbootArgs {
+                    config: args.config,
+                    show_output: args.show_output,
                 },
             )
             .await?;
         }
-        SubCommands::Uboot {
-            config,
-            show_output,
-            ..
-        } => {
-            uboot::run_uboot(
+        None => {
+            qemu::run_qemu(
                 app,
-                RunUbootArgs {
-                    config,
-                    show_output,
+                qemu::RunQemuArgs {
+                    qemu_config: args.config,
+                    dtb_dump: args.dtb_dump,
+                    show_output: args.show_output,
                 },
             )
             .await?;

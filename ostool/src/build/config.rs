@@ -14,7 +14,12 @@ pub enum BuildSystem {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct Custom {
+    /// shell command to build the kernel
     pub build_cmd: String,
+    /// path to the built ELF file (for debug)
+    pub elf_path: Option<String>,
+    /// path to the kernel to run
+    pub kernel_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]

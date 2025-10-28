@@ -6,12 +6,7 @@ use clap::*;
 use ostool::{
     build,
     ctx::AppContext,
-    run::{
-        self,
-        cargo::{CargoRunner, run_cargo},
-        qemu::RunQemuArgs,
-        uboot::RunUbootArgs,
-    },
+    run::{cargo::CargoRunner, qemu::RunQemuArgs, uboot::RunUbootArgs},
 };
 
 #[derive(Parser)]
@@ -91,22 +86,25 @@ async fn main() -> Result<()> {
             let config = ctx.perpare_build_config(config).await?;
             match config.system {
                 build::config::BuildSystem::Cargo(config) => {
-                    let mut cargo = CargoRunner::new("build");
+                    let mut cargo = CargoRunner::new("build", false);
                     cargo.run(&mut ctx, config).await?;
                 }
                 build::config::BuildSystem::Custom(custom_cfg) => {
                     ctx.shell_run_cmd(&custom_cfg.build_cmd)?;
                 }
             }
-
-            // build::run_build(ctx, config).await?;
         }
         SubCommands::Run(args) => {
             let config = ctx.perpare_build_config(args.config).await?;
             match config.system {
                 build::config::BuildSystem::Cargo(config) => {
-                    let mut cargo = CargoRunner::new("run");
+                    let mut cargo = CargoRunner::new("run", true);
                     cargo.arg("--");
+
+                    if config.to_bin {
+                        cargo.arg("--to-bin");
+                    }
+
                     match args.command {
                         RunSubCommands::Qemu(qemu_args) => {
                             cargo.arg("qemu");
@@ -114,9 +112,8 @@ async fn main() -> Result<()> {
                                 cargo.arg("--config");
                                 cargo.arg(cfg.display().to_string());
                             }
-                            if qemu_args.debug {
-                                cargo.arg("--debug");
-                            }
+                            ctx.debug = qemu_args.debug;
+
                             if qemu_args.dtb_dump {
                                 cargo.arg("--dtb-dump");
                             }
@@ -133,18 +130,35 @@ async fn main() -> Result<()> {
                 }
                 build::config::BuildSystem::Custom(custom_cfg) => {
                     ctx.shell_run_cmd(&custom_cfg.build_cmd)?;
+                    if let Some(elf_path) = custom_cfg.elf_path {
+                        ctx.set_elf_path(elf_path.into()).await;
+                    }
+                    ctx.bin_path = Some(custom_cfg.kernel_path.into());
+                    match args.command {
+                        RunSubCommands::Qemu(qemu_args) => {
+                            ostool::run::qemu::run_qemu(
+                                ctx,
+                                RunQemuArgs {
+                                    qemu_config: qemu_args.qemu_config,
+                                    dtb_dump: qemu_args.dtb_dump,
+                                    show_output: true,
+                                },
+                            )
+                            .await?;
+                        }
+                        RunSubCommands::Uboot(uboot_args) => {
+                            ostool::run::uboot::run_uboot(
+                                ctx,
+                                RunUbootArgs {
+                                    config: uboot_args.uboot_config,
+                                    show_output: true,
+                                },
+                            )
+                            .await?;
+                        }
+                    }
                 }
             }
-
-            // let ctx = build::run_build(ctx, args.config.clone()).await?;
-            // match args.command {
-            //     RunSubCommands::Qemu(args) => {
-            //         run::qemu::run_qemu(ctx, args.into()).await?;
-            //     }
-            //     RunSubCommands::Uboot(args) => {
-            //         run::uboot::run_uboot(ctx, args.into()).await?;
-            //     }
-            // }
         }
     }
 

@@ -1,11 +1,10 @@
-use std::{fmt::Debug, path::PathBuf, process::Command};
+use std::{path::PathBuf, process::Command};
 
 use crate::ctx::AppContext;
 use anyhow::bail;
 use colored::Colorize;
 use jkconfig::data::app_data::default_schema_by_init;
 use schemars::JsonSchema;
-use serde::Deserialize;
 use tokio::fs;
 
 pub trait ShellRunner {
