@@ -1,4 +1,5 @@
 use std::io::{self, Read, Write};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -10,10 +11,27 @@ use crossterm::{
 
 type Tx = Box<dyn Write + Send>;
 type Rx = Box<dyn Read + Send>;
+type OnlineCallback = Box<dyn Fn(&TermHandle, &str) + Send + Sync>;
 
 pub struct SerialTerm {
     tx: Arc<Mutex<Tx>>,
     rx: Arc<Mutex<Rx>>,
+    on_line: Option<OnlineCallback>,
+}
+
+pub struct TermHandle {
+    is_running: AtomicBool,
+}
+
+impl TermHandle {
+    pub fn stop(&self) {
+        self.is_running
+            .store(false, std::sync::atomic::Ordering::Release);
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.is_running.load(std::sync::atomic::Ordering::Acquire)
+    }
 }
 
 // 特殊键序列状态
@@ -24,10 +42,14 @@ enum KeySequenceState {
 }
 
 impl SerialTerm {
-    pub fn new(tx: Tx, rx: Rx) -> Self {
+    pub fn new<F>(tx: Tx, rx: Rx, on_line: F) -> Self
+    where
+        F: Fn(&TermHandle, &str) + Send + Sync + 'static,
+    {
         SerialTerm {
             tx: Arc::new(Mutex::new(tx)),
             rx: Arc::new(Mutex::new(rx)),
+            on_line: Some(Box::new(on_line)),
         }
     }
 
@@ -57,20 +79,22 @@ impl SerialTerm {
 
         // 创建退出标志
         let exit_flag = Arc::new(Mutex::new(false));
-        let exit_flag_rx = exit_flag.clone();
+        let on_line = self.on_line.take().unwrap();
+
+        let handle = Arc::new(TermHandle {
+            is_running: AtomicBool::new(true),
+        });
 
         // 启动串口接收线程
-        let rx_handle = thread::spawn(move || Self::handle_serial_receive(rx_port, exit_flag_rx));
+        let rx_handle = thread::spawn({
+            let handle = handle.clone();
+            move || Self::handle_serial_receive(rx_port, handle, on_line)
+        });
 
         // 主线程处理键盘输入
         let mut key_state = KeySequenceState::Normal;
 
-        loop {
-            // 检查退出标志
-            if *exit_flag.lock().unwrap() {
-                break;
-            }
-
+        while handle.is_running() {
             // 非阻塞读取键盘事件
             if event::poll(Duration::from_millis(10))?
                 && let Event::Key(key) = event::read()?
@@ -116,24 +140,37 @@ impl SerialTerm {
         Ok(())
     }
 
-    fn handle_serial_receive(
+    fn handle_serial_receive<F>(
         rx_port: Arc<Mutex<Rx>>,
-        exit_flag: Arc<Mutex<bool>>,
-    ) -> io::Result<()> {
+        handle: Arc<TermHandle>,
+        on_line: F,
+    ) -> io::Result<()>
+    where
+        F: Fn(&TermHandle, &str) + Send + Sync + 'static,
+    {
         let mut buffer = [0u8; 1024];
+        let mut byte = [0u8; 1];
+        let mut line = Vec::with_capacity(0x1000);
 
-        loop {
-            // 检查退出标志
-            if *exit_flag.lock().unwrap() {
-                break;
-            }
-
+        while handle.is_running() {
             // 从串口读取数据
             match rx_port.lock().unwrap().read(&mut buffer) {
                 Ok(bytes_read) if bytes_read > 0 => {
                     // 将数据直接写入stdout
                     let data = &buffer[..bytes_read];
-                    io::stdout().write_all(data)?;
+                    for &b in data {
+                        line.push(b);
+                        if b == b'\n' {
+                            byte[0] = b'\r';
+                            io::stdout().write_all(&byte)?;
+                            let line_str = String::from_utf8_lossy(&line);
+                            (on_line)(handle.as_ref(), &line_str);
+                            line.clear();
+                        }
+                        byte[0] = b;
+                        io::stdout().write_all(&byte)?;
+                    }
+
                     io::stdout().flush()?;
                 }
                 Ok(_) => {
@@ -142,6 +179,11 @@ impl SerialTerm {
                 }
                 Err(e) if e.kind() == io::ErrorKind::TimedOut => {
                     // 超时是正常的，继续
+                    if handle.is_running() {
+                        continue;
+                    } else {
+                        break;
+                    }
                 }
                 Err(e) => {
                     eprintln!("\n串口读取错误: {}", e);

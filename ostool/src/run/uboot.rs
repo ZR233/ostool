@@ -1,5 +1,6 @@
 use std::{
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
     thread,
     time::Duration,
 };
@@ -380,9 +381,39 @@ impl Runner {
 
         println!("{}", "Interacting with U-Boot shell...".green());
 
-        let mut shell = SerialTerm::new(tx, rx);
-        shell.run().await?;
+        let success_regex = self.success_regex.clone();
+        let fail_regex = self.fail_regex.clone();
 
+        let res = Arc::new(Mutex::<Option<anyhow::Result<()>>>::new(None));
+        let res_clone = res.clone();
+        let mut shell = SerialTerm::new(tx, rx, move |h, line| {
+            for regex in success_regex.iter() {
+                if regex.is_match(line) {
+                    println!("{}", "\r\n=== SUCCESS PATTERN MATCHED ===".green());
+                    h.stop();
+                    let mut res_lock = res_clone.lock().unwrap();
+                    *res_lock = Some(Ok(()));
+                    return;
+                }
+            }
+
+            for regex in fail_regex.iter() {
+                if regex.is_match(line) {
+                    println!("{}", "\r\n=== FAIL PATTERN MATCHED ===".red());
+                    h.stop();
+                    let mut res_lock = res_clone.lock().unwrap();
+                    *res_lock = Some(Err(anyhow!("Fail pattern matched: {}", line)));
+                    return;
+                }
+            }
+        });
+        shell.run().await?;
+        {
+            let mut res_lock = res.lock().unwrap();
+            if let Some(result) = res_lock.take() {
+                result?;
+            }
+        }
         Ok(())
     }
 
