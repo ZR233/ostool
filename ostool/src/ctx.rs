@@ -6,7 +6,10 @@ use colored::Colorize;
 use object::{Architecture, Object, ObjectSegment};
 use tokio::fs;
 
-use crate::utils::ShellRunner;
+use crate::{
+    build::config::BuildConfig,
+    utils::{ShellRunner, prepare_config},
+};
 
 #[derive(Default, Clone)]
 pub struct AppContext {
@@ -15,6 +18,7 @@ pub struct AppContext {
     pub elf_path: Option<PathBuf>,
     pub bin_path: Option<PathBuf>,
     pub arch: Option<Architecture>,
+    pub build_config: Option<BuildConfig>,
 }
 
 impl AppContext {
@@ -129,5 +133,26 @@ impl AppContext {
 
         self.bin_path = Some(bin_path.clone());
         Ok(bin_path)
+    }
+
+    pub async fn perpare_build_config(
+        &mut self,
+        config_path: Option<PathBuf>,
+    ) -> anyhow::Result<BuildConfig> {
+        let content = prepare_config::<BuildConfig>(self, config_path, ".config.toml").await?;
+
+        let config: BuildConfig = toml::from_str(&content)?;
+        println!("Build configuration: {:?}", config);
+
+        self.build_config = Some(config.clone());
+
+        Ok(config)
+    }
+
+    pub fn is_cargo_build(&self) -> bool {
+        match &self.build_config {
+            Some(cfg) => matches!(cfg.system, crate::build::config::BuildSystem::Cargo(_)),
+            None => false,
+        }
     }
 }

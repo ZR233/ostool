@@ -6,7 +6,12 @@ use clap::*;
 use ostool::{
     build,
     ctx::AppContext,
-    run::{self, qemu::RunQemuArgs, uboot::RunUbootArgs},
+    run::{
+        self,
+        cargo::{CargoRunner, run_cargo},
+        qemu::RunQemuArgs,
+        uboot::RunUbootArgs,
+    },
 };
 
 #[derive(Parser)]
@@ -76,25 +81,70 @@ async fn main() -> Result<()> {
         None => current_dir()?,
     };
 
-    let ctx = AppContext {
+    let mut ctx = AppContext {
         workdir,
         ..Default::default()
     };
 
     match cli.command {
         SubCommands::Build { config } => {
-            build::run_build(ctx, config).await?;
-        }
-        SubCommands::Run(args) => {
-            let ctx = build::run_build(ctx, args.config.clone()).await?;
-            match args.command {
-                RunSubCommands::Qemu(args) => {
-                    run::qemu::run_qemu(ctx, args.into()).await?;
+            let config = ctx.perpare_build_config(config).await?;
+            match config.system {
+                build::config::BuildSystem::Cargo(config) => {
+                    let mut cargo = CargoRunner::new("build");
+                    cargo.run(&mut ctx, config).await?;
                 }
-                RunSubCommands::Uboot(args) => {
-                    run::uboot::run_uboot(ctx, args.into()).await?;
+                build::config::BuildSystem::Custom(custom_cfg) => {
+                    ctx.shell_run_cmd(&custom_cfg.build_cmd)?;
                 }
             }
+
+            // build::run_build(ctx, config).await?;
+        }
+        SubCommands::Run(args) => {
+            let config = ctx.perpare_build_config(args.config).await?;
+            match config.system {
+                build::config::BuildSystem::Cargo(config) => {
+                    let mut cargo = CargoRunner::new("run");
+                    cargo.arg("--");
+                    match args.command {
+                        RunSubCommands::Qemu(qemu_args) => {
+                            cargo.arg("qemu");
+                            if let Some(cfg) = qemu_args.qemu_config {
+                                cargo.arg("--config");
+                                cargo.arg(cfg.display().to_string());
+                            }
+                            if qemu_args.debug {
+                                cargo.arg("--debug");
+                            }
+                            if qemu_args.dtb_dump {
+                                cargo.arg("--dtb-dump");
+                            }
+                        }
+                        RunSubCommands::Uboot(uboot_args) => {
+                            cargo.arg("uboot");
+                            if let Some(cfg) = uboot_args.uboot_config {
+                                cargo.arg("--config");
+                                cargo.arg(cfg.display().to_string());
+                            }
+                        }
+                    }
+                    cargo.run(&mut ctx, config).await?;
+                }
+                build::config::BuildSystem::Custom(custom_cfg) => {
+                    ctx.shell_run_cmd(&custom_cfg.build_cmd)?;
+                }
+            }
+
+            // let ctx = build::run_build(ctx, args.config.clone()).await?;
+            // match args.command {
+            //     RunSubCommands::Qemu(args) => {
+            //         run::qemu::run_qemu(ctx, args.into()).await?;
+            //     }
+            //     RunSubCommands::Uboot(args) => {
+            //         run::uboot::run_uboot(ctx, args.into()).await?;
+            //     }
+            // }
         }
     }
 

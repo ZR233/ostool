@@ -161,8 +161,8 @@ impl SerialTerm {
                     for &b in data {
                         line.push(b);
                         if b == b'\n' {
-                            byte[0] = b'\r';
-                            io::stdout().write_all(&byte)?;
+                            // byte[0] = b'\r';
+                            // io::stdout().write_all(&byte)?;
                             let line_str = String::from_utf8_lossy(&line);
                             (on_line)(handle.as_ref(), &line_str);
                             line.clear();
