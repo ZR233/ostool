@@ -14,7 +14,7 @@ pub async fn run_build(
     // Build logic will be implemented here
     let config_path = match config_path {
         Some(path) => path,
-        None => ctx.workdir.join(".config.toml"),
+        None => ctx.workdir.join(".build.toml"),
     };
 
     let schema_path = default_schema_by_init(&config_path);
