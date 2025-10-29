@@ -1,11 +1,12 @@
 [workspace]
-exclude = ["assets/*"]
-members = ["ostool", "uboot-shell", "jkconfig"]
+exclude = ["assets/*", "fit_test"]
+members = ["ostool", "uboot-shell", "jkconfig", "fitimage"]
 resolver = "3"
 
 [workspace.dependencies]
 # Cursive TUI framework
 cursive = {version = "0.21", features = ["crossterm-backend"]}
+crossterm = "0.29"
 
 # Data processing
 anyhow = "1"
@@ -22,3 +23,7 @@ thiserror = "2"
 log = "0.4"
 
 schemars = {version = "1.0.4", features = ["derive"]}
+
+env_logger = "0.11"
+
+tokio = {version = "1", features = ["full"]}
