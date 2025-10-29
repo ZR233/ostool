@@ -621,7 +621,16 @@ fn enter_elem(s: &mut Cursive, elem: &ElementType) {
         ElementType::Menu(menu) => {
             info!("Handling Menu: {}", menu.title);
             // 进入子菜单
-            enter_menu(s, menu);
+            if menu.is_none() {
+                if let Some(ElementType::Menu(m)) =
+                    s.user_data::<AppData>().unwrap().root.get_mut_by_key(&key)
+                {
+                    m.is_set = true;
+                }
+                handle_edit(s);
+            } else {
+                enter_menu(s, menu);
+            }
         }
         ElementType::OneOf(one_of) => {
             info!("Handling OneOf: {}", one_of.title);
