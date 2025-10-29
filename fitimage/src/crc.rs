@@ -23,7 +23,7 @@ const CRC32_ALGO: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
 /// # Examples
 ///
 /// ```
-/// use mkimage::crc::calculate_crc32;
+/// use fitimage::crc::calculate_crc32;
 ///
 /// let data = b"Hello, World!";
 /// let crc = calculate_crc32(data);
