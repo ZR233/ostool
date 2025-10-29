@@ -3,6 +3,7 @@ use std::{env::current_dir, path::PathBuf};
 use anyhow::Result;
 use clap::*;
 
+use log::info;
 use ostool::{
     build,
     ctx::AppContext,
@@ -130,10 +131,17 @@ async fn main() -> Result<()> {
                 }
                 build::config::BuildSystem::Custom(custom_cfg) => {
                     ctx.shell_run_cmd(&custom_cfg.build_cmd)?;
-                    if let Some(elf_path) = custom_cfg.elf_path {
-                        ctx.set_elf_path(elf_path.into()).await;
+                    ctx.set_elf_path(custom_cfg.elf_path.into()).await;
+                    info!(
+                        "ELF {:?}: {}",
+                        ctx.arch,
+                        ctx.elf_path.as_ref().unwrap().display()
+                    );
+
+                    if custom_cfg.to_bin {
+                        ctx.objcopy_output_bin()?;
                     }
-                    ctx.bin_path = Some(custom_cfg.kernel_path.into());
+
                     match args.command {
                         RunSubCommands::Qemu(qemu_args) => {
                             ostool::run::qemu::run_qemu(

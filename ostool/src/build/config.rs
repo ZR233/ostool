@@ -16,10 +16,10 @@ pub enum BuildSystem {
 pub struct Custom {
     /// shell command to build the kernel
     pub build_cmd: String,
-    /// path to the built ELF file (for debug)
-    pub elf_path: Option<String>,
-    /// path to the kernel to run
-    pub kernel_path: String,
+    /// path to the built ELF file
+    pub elf_path: String,
+    /// whether to output as binary
+    pub to_bin: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]

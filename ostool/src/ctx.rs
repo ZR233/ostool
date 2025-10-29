@@ -73,6 +73,7 @@ impl AppContext {
 
     pub fn objcopy_output_bin(&mut self) -> anyhow::Result<PathBuf> {
         if self.bin_path.is_some() {
+            debug!("BIN file already exists: {:?}", self.bin_path);
             return Ok(self.bin_path.as_ref().unwrap().clone());
         }
 
