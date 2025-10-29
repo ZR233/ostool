@@ -31,7 +31,7 @@ enum SubCommands {
 
 #[derive(Args, Debug)]
 struct RunArgs {
-    /// Path to the build configuration file, default to `.config.toml`
+    /// Path to the build configuration file
     #[arg(short, long)]
     config: Option<PathBuf>,
     #[command(subcommand)]

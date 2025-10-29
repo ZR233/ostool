@@ -191,7 +191,7 @@ impl AppContext {
         &mut self,
         config_path: Option<PathBuf>,
     ) -> anyhow::Result<BuildConfig> {
-        let content = prepare_config::<BuildConfig>(self, config_path, ".config.toml").await?;
+        let content = prepare_config::<BuildConfig>(self, config_path, ".build.toml").await?;
 
         let config: BuildConfig = toml::from_str(&content)?;
         println!("Build configuration: {:?}", config);
