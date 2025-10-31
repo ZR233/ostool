@@ -130,7 +130,22 @@ impl QemuRunner {
             machine = format!("{},dumpdtb=target/qemu.dtb", machine);
         }
 
-        let mut cmd = self.ctx.command(&format!("qemu-system-{arch}"));
+        let mut qemu_executable = format!("qemu-system-{}", arch);
+
+        #[cfg(windows)]
+        {
+            println!("{}", "Checking for QEMU executable on Windows...".blue());
+            // Windows 特殊处理
+            let msys2 =
+                PathBuf::from("C:\\msys64\\ucrt64\\bin").join(format!("{qemu_executable}.exe"));
+
+            if msys2.exists() {
+                println!("Using QEMU executable from MSYS2: {}", msys2.display());
+                qemu_executable = msys2.to_string_lossy().to_string();
+            }
+        }
+
+        let mut cmd = self.ctx.command(&qemu_executable);
         for arg in &self.config.args {
             cmd.arg(arg);
         }
