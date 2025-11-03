@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use crate::{build::config::Cargo, ctx::AppContext, utils::ShellRunner};
 
@@ -9,15 +12,18 @@ pub struct CargoRunner {
     skip_objcopy: bool,
 
     envs: HashMap<String, String>,
+
+    config_path: PathBuf,
 }
 
 impl CargoRunner {
-    pub fn new(cmd: &str, skip_objcopy: bool) -> Self {
+    pub fn new(cmd: &str, skip_objcopy: bool, build_config_path: &Path) -> Self {
         Self {
             cmd: cmd.to_string(),
             args: vec![],
             skip_objcopy,
             envs: HashMap::new(),
+            config_path: build_config_path.to_path_buf(),
         }
     }
 
@@ -117,7 +123,7 @@ impl CargoRunner {
         }
     }
 
-    async fn cargo_extra_config(&self, config: &Cargo) -> anyhow::Result<Option<String>> {
+    async fn cargo_extra_config(&self, config: &Cargo) -> anyhow::Result<Option<PathBuf>> {
         let s = match config.extra_config.as_ref() {
             Some(s) => s,
             None => return Ok(None),
@@ -138,7 +144,13 @@ impl CargoRunner {
             }
         } else {
             // It's a local path, return as is
-            Ok(Some(s.clone()))
+            let extra = Path::new(s);
+            if extra.is_relative() {
+                let combined = self.config_path.parent().unwrap().join(extra);
+                Ok(Some(combined))
+            } else {
+                Ok(Some(s.into()))
+            }
         }
     }
 
@@ -166,7 +178,7 @@ impl CargoRunner {
         url.to_string()
     }
 
-    async fn download_config_to_temp(&self, url: &str) -> anyhow::Result<String> {
+    async fn download_config_to_temp(&self, url: &str) -> anyhow::Result<PathBuf> {
         use std::time::SystemTime;
 
         println!("Downloading cargo config from: {}", url);
@@ -221,6 +233,6 @@ impl CargoRunner {
 
         println!("Config downloaded to: {}", target_path.display());
 
-        Ok(target_path.to_string_lossy().to_string())
+        Ok(target_path)
     }
 }

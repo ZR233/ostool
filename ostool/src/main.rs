@@ -87,7 +87,9 @@ async fn main() -> Result<()> {
             let config = ctx.perpare_build_config(config).await?;
             match config.system {
                 build::config::BuildSystem::Cargo(config) => {
-                    let mut cargo = CargoRunner::new("build", false);
+                    let build_config_path = ctx.build_config_path.clone().unwrap();
+
+                    let mut cargo = CargoRunner::new("build", false, &build_config_path);
                     cargo.run(&mut ctx, config).await?;
                 }
                 build::config::BuildSystem::Custom(custom_cfg) => {
@@ -99,7 +101,8 @@ async fn main() -> Result<()> {
             let config = ctx.perpare_build_config(args.config).await?;
             match config.system {
                 build::config::BuildSystem::Cargo(config) => {
-                    let mut cargo = CargoRunner::new("run", true);
+                    let build_config_path = ctx.build_config_path.clone().unwrap();
+                    let mut cargo = CargoRunner::new("run", true, &build_config_path);
                     cargo.arg("--");
 
                     if config.to_bin {

@@ -19,6 +19,7 @@ pub struct AppContext {
     pub bin_path: Option<PathBuf>,
     pub arch: Option<Architecture>,
     pub build_config: Option<BuildConfig>,
+    pub build_config_path: Option<PathBuf>,
 }
 
 impl AppContext {

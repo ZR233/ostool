@@ -35,7 +35,7 @@ impl ShellRunner for Command {
 }
 
 pub async fn prepare_config<C: JsonSchema>(
-    ctx: &AppContext,
+    ctx: &mut AppContext,
     config_path: Option<PathBuf>,
     config_name: &str,
 ) -> anyhow::Result<String> {
@@ -45,6 +45,7 @@ pub async fn prepare_config<C: JsonSchema>(
         Some(path) => path,
         None => ctx.workdir.join(config_name),
     };
+    ctx.build_config_path = Some(config_path.clone());
 
     let schema_path = default_schema_by_init(&config_path);
 
