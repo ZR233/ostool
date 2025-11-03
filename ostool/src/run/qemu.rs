@@ -127,6 +127,7 @@ impl QemuRunner {
             self.args.push(arg.clone());
         }
 
+        #[allow(unused_mut)]
         let mut qemu_executable = format!("qemu-system-{}", arch);
 
         #[cfg(windows)]
