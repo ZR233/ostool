@@ -117,17 +117,14 @@ impl QemuRunner {
 
         let mut machine = "virt".to_string();
 
+        let mut need_machine = true;
+
         for arg in &self.config.args {
             if arg == "-machine" || arg == "-M" {
-                machine = arg.clone();
-                continue;
+                need_machine = false;
             }
-            self.args.push(arg.clone());
-        }
 
-        if self.dtbdump {
-            let _ = fs::remove_file("target/qemu.dtb").await;
-            machine = format!("{},dumpdtb=target/qemu.dtb", machine);
+            self.args.push(arg.clone());
         }
 
         let mut cmd = self.ctx.command(&format!("qemu-system-{arch}"));
@@ -135,7 +132,15 @@ impl QemuRunner {
             cmd.arg(arg);
         }
 
-        cmd.arg("-machine").arg(machine);
+        if self.dtbdump {
+            let _ = fs::remove_file("target/qemu.dtb").await;
+            cmd.arg("-machine").arg("dumpdtb=target/qemu.dtb");
+            // machine = format!("{},dumpdtb=target/qemu.dtb", machine);
+        }
+
+        if need_machine {
+            cmd.arg("-machine").arg(machine);
+        }
 
         if self.ctx.debug {
             cmd.arg("-s").arg("-S");
