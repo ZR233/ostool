@@ -1,8 +1,13 @@
-use std::{path::PathBuf, process::Command};
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use anyhow::anyhow;
 use cargo_metadata::Metadata;
 use colored::Colorize;
+use jkconfig::data::app_data::default_schema_by_init;
+
 use object::{Architecture, Object};
 use tokio::fs;
 
@@ -37,6 +42,49 @@ impl AppContext {
         command.run()?;
 
         Ok(())
+    }
+
+    // Helper function to launch jkconfig UI
+    pub fn launch_jkconfig_ui(config_path: &Path, schema_path: &Path) -> anyhow::Result<bool> {
+        // First try standalone binary
+        println!("Trying to run jkconfig as standalone binary");
+        if let Ok(mut cmd) = std::process::Command::new("jkconfig")
+            .arg("-c")
+            .arg(config_path.to_string_lossy().as_ref())
+            .arg("-s")
+            .arg(schema_path.to_string_lossy().as_ref())
+            .arg("tui")
+            .spawn()
+        {
+            if let Ok(status) = cmd.wait() {
+                if status.success() {
+                    return Ok(true);
+                }
+            }
+        }
+
+        // If binary failed, try cargo run
+        println!("Trying to run jkconfig via cargo");
+        if let Ok(mut cmd) = std::process::Command::new("cargo")
+            .args(["run", "--bin=jkconfig"])
+            .args([
+                "--",
+                "-c",
+                config_path.to_string_lossy().as_ref(),
+                "-s",
+                schema_path.to_string_lossy().as_ref(),
+                "tui",
+            ])
+            .spawn()
+        {
+            if let Ok(status) = cmd.wait() {
+                if status.success() {
+                    return Ok(true);
+                }
+            }
+        }
+
+        Ok(false)
     }
 
     pub fn command(&self, program: &str) -> Command {
@@ -192,13 +240,84 @@ impl AppContext {
         &mut self,
         config_path: Option<PathBuf>,
     ) -> anyhow::Result<BuildConfig> {
-        let content = prepare_config::<BuildConfig>(self, config_path, ".build.toml").await?;
+        // Try to get configuration content, launch UI interface if failed
+        match prepare_config::<BuildConfig>(self, config_path, ".build.toml").await {
+            Ok(content) => {
+                // Try to parse configuration, launch UI interface if parsing failed
+                match toml::from_str::<BuildConfig>(&content) {
+                    Ok(config) => {
+                        println!("Build configuration: {:?}", config);
+                        self.build_config = Some(config.clone());
+                        Ok(config)
+                    }
+                    Err(e) => {
+                        println!("Configuration file parsing failed: {}", e);
+                        println!("Launching UI interface for configuration editing...");
+                        self.launch_config_ui_and_get_config().await
+                    }
+                }
+            }
+            Err(e) => {
+                println!("Failed to read configuration file: {}", e);
+                println!("Launching UI interface to create/edit configuration...");
+                self.launch_config_ui_and_get_config().await
+            }
+        }
+    }
 
-        let config: BuildConfig = toml::from_str(&content)?;
-        println!("Build configuration: {:?}", config);
+    /// Launch configuration UI interface and get configuration
+    async fn launch_config_ui_and_get_config(&mut self) -> anyhow::Result<BuildConfig> {
+        // Get configuration file path
+        let config_path = match &self.build_config_path {
+            Some(path) => path.clone(),
+            None => self.workdir.join(".build.toml"),
+        };
 
+        // Ensure the configuration file exists
+        if !config_path.exists() {
+            println!(
+                "Configuration file does not exist, creating new file: {}",
+                config_path.display()
+            );
+            tokio::fs::write(&config_path, "").await?;
+        }
+
+        // Generate schema path
+        let schema_path = default_schema_by_init(&config_path);
+
+        // Create empty config file if it doesn't exist
+        if !config_path.exists() {
+            println!(
+                "Creating empty configuration file: {}",
+                config_path.display()
+            );
+            std::fs::write(&config_path, "")?;
+        }
+
+        // Directly run jkconfig as a standalone binary if available
+        println!("Starting configuration UI interface...");
+
+        // Try to run jkconfig in different ways
+        let ui_success = Self::launch_jkconfig_ui(&config_path, &schema_path)?;
+
+        // Print success message based on UI launch status
+        if ui_success {
+            println!("UI interface launched successfully");
+        } else {
+            println!("Warning: Failed to launch jkconfig UI");
+            println!("Will attempt to continue with existing configuration");
+        }
+
+        // Re-read and parse the configuration
+        let config_content = tokio::fs::read_to_string(&config_path)
+            .await
+            .map_err(|e| anyhow!("Failed to read configuration file after UI editing: {}", e))?;
+
+        let config: BuildConfig = toml::from_str(&config_content)
+            .map_err(|e| anyhow!("Failed to parse configuration file after UI editing: {}", e))?;
+
+        println!("Configuration has been updated from UI editor");
         self.build_config = Some(config.clone());
-
         Ok(config)
     }
 
