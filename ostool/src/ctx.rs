@@ -6,7 +6,11 @@ use std::{
 use anyhow::anyhow;
 use cargo_metadata::Metadata;
 use colored::Colorize;
-use jkconfig::data::app_data::default_schema_by_init;
+use cursive::{Cursive, CursiveExt, event::Key};
+use jkconfig::{
+    data::app_data::{AppData, default_schema_by_init},
+    ui::{components::menu::menu_view, handle_back, handle_quit, handle_save},
+};
 
 use object::{Architecture, Object};
 use tokio::fs;
@@ -46,45 +50,65 @@ impl AppContext {
 
     // Helper function to launch jkconfig UI
     pub fn launch_jkconfig_ui(config_path: &Path, schema_path: &Path) -> anyhow::Result<bool> {
-        // First try standalone binary
-        println!("Trying to run jkconfig as standalone binary");
-        if let Ok(mut cmd) = std::process::Command::new("jkconfig")
-            .arg("-c")
-            .arg(config_path.to_string_lossy().as_ref())
-            .arg("-s")
-            .arg(schema_path.to_string_lossy().as_ref())
-            .arg("tui")
-            .spawn()
-        {
-            if let Ok(status) = cmd.wait() {
-                if status.success() {
-                    return Ok(true);
+        // 创建AppData实例
+        let mut app_data = AppData::new(Some(config_path), Some(schema_path))?;
+        
+        // 设置features_callback以获取本地仓库的features
+        app_data.features_callback = Some(std::sync::Arc::new(|| {
+            let mut features = Vec::new();
+            
+            // 尝试从当前目录获取cargo项目的features，类似metadata方法的实现
+            if let Ok(metadata) = cargo_metadata::MetadataCommand::new()
+                .no_deps()
+                .exec() {
+                // 直接从metadata.packages获取所有包的features，这是更常用的方式
+                for package in &metadata.packages {
+                    // 添加包的所有features
+                    info!("package: {}", package.name);
+                    for (feature_name, _) in &package.features {
+                        features.push(feature_name.clone());
+                    }
                 }
+                
+            } else {
+                // 如果无法获取metadata，添加一些默认features
+                features.push("default".to_string());
+                features.push("full".to_string());
+                features.push("minimal".to_string());
             }
-        }
+            
+            features
+        }));
+        
+        let title = app_data.root.title.clone();
+        let fields = app_data.root.menu().fields();
 
-        // If binary failed, try cargo run
-        println!("Trying to run jkconfig via cargo");
-        if let Ok(mut cmd) = std::process::Command::new("cargo")
-            .args(["run", "--bin=jkconfig"])
-            .args([
-                "--",
-                "-c",
-                config_path.to_string_lossy().as_ref(),
-                "-s",
-                schema_path.to_string_lossy().as_ref(),
-                "tui",
-            ])
-            .spawn()
-        {
-            if let Ok(status) = cmd.wait() {
-                if status.success() {
-                    return Ok(true);
-                }
-            }
-        }
+        cursive::logger::init();
+        cursive::logger::set_internal_filter_level(log::LevelFilter::Info);
 
-        Ok(false)
+        // 创建Cursive应用
+        let mut siv = Cursive::default();
+        // 设置AppData为user_data
+        siv.set_user_data(app_data);
+
+        // 添加全局键盘事件处理
+        siv.add_global_callback('q', handle_quit);
+        siv.add_global_callback('Q', handle_quit);
+        siv.add_global_callback('s', handle_save);
+        siv.add_global_callback('S', handle_save);
+        siv.add_global_callback(Key::Esc, handle_back);
+        siv.add_global_callback('~', cursive::Cursive::toggle_debug_console);
+        // 初始菜单路径为空
+        siv.add_fullscreen_layer(menu_view(&title, "", fields));
+        // 运行应用
+        siv.run();
+
+        println!("Exiting jkconfig...");
+        let mut app = siv.take_user_data::<AppData>().unwrap();
+        println!("Data: \n{:#?}", app.root);
+        app.on_exit()?;
+
+        Ok(true)
     }
 
     pub fn command(&self, program: &str) -> Command {
@@ -252,14 +276,12 @@ impl AppContext {
                     }
                     Err(e) => {
                         println!("Configuration file parsing failed: {}", e);
-                        println!("Launching UI interface for configuration editing...");
                         self.launch_config_ui_and_get_config().await
                     }
                 }
             }
             Err(e) => {
                 println!("Failed to read configuration file: {}", e);
-                println!("Launching UI interface to create/edit configuration...");
                 self.launch_config_ui_and_get_config().await
             }
         }
@@ -267,6 +289,7 @@ impl AppContext {
 
     /// Launch configuration UI interface and get configuration
     async fn launch_config_ui_and_get_config(&mut self) -> anyhow::Result<BuildConfig> {
+        println!("Launching UI interface for configuration editing...");
         // Get configuration file path
         let config_path = match &self.build_config_path {
             Some(path) => path.clone(),
@@ -304,7 +327,7 @@ impl AppContext {
         if ui_success {
             println!("UI interface launched successfully");
         } else {
-            println!("Warning: Failed to launch jkconfig UI");
+            println!("Warning: Failed to config jkconfig UI");
             println!("Will attempt to continue with existing configuration");
         }
 

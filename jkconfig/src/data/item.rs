@@ -30,7 +30,7 @@ pub enum ItemType {
     Array(ArrayItem),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ArrayItem {
     /// Array element type (e.g., "string", "integer")
     pub element_type: String,

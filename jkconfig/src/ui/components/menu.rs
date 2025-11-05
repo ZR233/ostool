@@ -1,3 +1,12 @@
+use crate::{
+    data::{
+        AppData,
+        item::{EnumItem, ItemType},
+        menu::Menu,
+        types::ElementType,
+    },
+    ui::{components::icon::ItemDisplay, handle_edit},
+};
 use cursive::{
     Cursive,
     align::HAlign,
@@ -8,13 +17,10 @@ use cursive::{
     views::{Dialog, DummyView, LinearLayout, OnEventView, Panel, SelectView, TextView},
 };
 use log::info;
-
-use crate::{
-    data::{AppData, item::ItemType, menu::Menu, types::ElementType},
-    ui::{components::icon::ItemDisplay, handle_edit},
-};
+// 移除对ostool的依赖导入
 
 use super::editors::*;
+use crate::ui::components::editors::multi_select_editor::{MultiSelectItem, show_multi_select};
 
 /// 创建菜单视图
 pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl IntoBoxedView {
@@ -617,6 +623,12 @@ pub fn enter_menu(s: &mut Cursive, menu: &Menu) {
 fn enter_elem(s: &mut Cursive, elem: &ElementType) {
     let key = elem.key();
     info!("Entering key: {}, type {}", key, elem.struct_name);
+    let mut path = String::new();
+
+    if let Some(app) = s.user_data::<AppData>() {
+        path = app.key_string();
+    }
+
     match elem {
         ElementType::Menu(menu) => {
             info!("Handling Menu: {}", menu.title);
@@ -672,7 +684,54 @@ fn enter_elem(s: &mut Cursive, elem: &ElementType) {
                     show_enum_select(s, &item.base.title, enum_item);
                 }
                 ItemType::Array(array_item) => {
-                    show_array_edit(s, &item.base.key(), &item.base.title, &array_item.values);
+                    info!("path = {}", path);
+                    if path == "system.features.self_features" {
+                        let app_data = s.user_data::<AppData>().unwrap();
+                        // 获取variants列表
+                        let mut variants = array_item.values.clone();
+
+                        // 如果设置了features_callback，则使用它获取features
+                        if let Some(callback) = &app_data.features_callback {
+                            info!("Using features_callback to get features");
+                            // 创建一个可以安全展开的闭包
+                            let get_features = || callback();
+                            if let Ok(features) =
+                                std::panic::catch_unwind(std::panic::AssertUnwindSafe(get_features))
+                            {
+                                // 合并features，确保没有重复项
+                                for feature in features {
+                                    if !variants.contains(&feature) {
+                                        variants.push(feature);
+                                    }
+                                }
+                            }
+                        }
+
+                        // 创建一个临时的EnumItem用于显示选择界面
+                        let enum_item = EnumItem {
+                            variants,
+                            value: None,
+                            default: None,
+                        };
+
+                        // 保存原始的ArrayItem和键，以便在选择后更新
+                        s.user_data::<AppData>().unwrap().temp_data = Some((
+                            item.base.key().to_string(),
+                            serde_json::to_value(array_item.clone()).unwrap(),
+                        ));
+                        info!("show_enum_select with variants: {:?}", enum_item.variants);
+                        // 使用已导入的show_multi_select函数
+
+                        // 创建MultiSelectItem数据结构
+                        let multi_select_item = MultiSelectItem {
+                            variants: enum_item.variants.clone(),
+                            selected_indices: Vec::new(), // 默认无选中项
+                        };
+
+                        show_multi_select(s, &item.base.title, &multi_select_item);
+                    } else {
+                        show_array_edit(s, &item.base.key(), &item.base.title, &array_item.values);
+                    }
                 }
             }
         }

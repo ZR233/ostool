@@ -1866,6 +1866,7 @@ dependencies = [
  "clap",
  "colored",
  "crossterm 0.29.0",
+ "cursive",
  "env_logger",
  "fitimage",
  "indicatif",

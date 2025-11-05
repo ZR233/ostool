@@ -29,7 +29,7 @@ pub struct Cargo {
     /// package name
     pub package: String,
     /// features to enable
-    pub features: Vec<String>,
+    pub features: Features,
     /// log level feature
     pub log: Option<LogLevel>,
     /// extra cargo .config.toml file
@@ -44,6 +44,22 @@ pub struct Cargo {
     pub post_build_cmds: Vec<String>,
     /// whether to output as binary
     pub to_bin: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub struct Features {
+    pub self_features: Vec<String>,
+    pub package_features: PackageFeatures,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub struct PackageFeatures {
+    pub name: Vec<PackageName>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub struct PackageName {
+    pub package_features: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
