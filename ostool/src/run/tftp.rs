@@ -7,7 +7,7 @@ use crate::ctx::AppContext;
 
 pub fn run_tftp_server(app: &AppContext) -> anyhow::Result<()> {
     // TFTP server implementation goes here
-    let mut file_dir = app.workdir.clone();
+    let mut file_dir = app.manifest_dir.clone();
     if let Some(elf_path) = &app.elf_path {
         file_dir = elf_path
             .parent()

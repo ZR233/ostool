@@ -5,6 +5,66 @@ use std::{
 
 use crate::{build::config::Cargo, ctx::AppContext};
 
+pub enum CargoRunnerKind {
+    Qemu {
+        qemu_config: Option<PathBuf>,
+        debug: bool,
+        dtb_dump: bool,
+    },
+    Uboot {
+        uboot_config: Option<PathBuf>,
+    },
+}
+
+impl AppContext {
+    pub async fn cargo_run(
+        &mut self,
+        config: &Cargo,
+        runner: &CargoRunnerKind,
+    ) -> anyhow::Result<()> {
+        let build_config_path = self.build_config_path.clone().unwrap();
+
+        let mut cargo = CargoRunner::new("run", true, &build_config_path);
+        for (k, v) in &config.env {
+            println!("add: {}", format!("{k}={v}"));
+            cargo.env(k, v);
+        }
+
+        cargo.arg("--");
+
+        if config.to_bin {
+            cargo.arg("--to-bin");
+        }
+
+        match runner {
+            CargoRunnerKind::Qemu {
+                qemu_config,
+                debug,
+                dtb_dump,
+            } => {
+                cargo.arg("qemu");
+                if let Some(cfg) = qemu_config {
+                    cargo.arg("--config");
+                    cargo.arg(cfg.display().to_string());
+                }
+                self.debug = *debug;
+
+                if *dtb_dump {
+                    cargo.arg("--dtb-dump");
+                }
+            }
+            CargoRunnerKind::Uboot { uboot_config } => {
+                cargo.arg("uboot");
+                if let Some(cfg) = uboot_config {
+                    cargo.arg("--config");
+                    cargo.arg(cfg.display().to_string());
+                }
+            }
+        }
+        cargo.run(self, config).await
+    }
+}
+
 pub struct CargoRunner {
     pub cmd: String,
     pub args: Vec<String>,
@@ -35,24 +95,25 @@ impl CargoRunner {
         self.envs.insert(key.into(), value.into());
     }
 
-    pub async fn run(&mut self, ctx: &mut AppContext, config: Cargo) -> anyhow::Result<()> {
+    pub async fn run(&mut self, ctx: &mut AppContext, config: &Cargo) -> anyhow::Result<()> {
         for cmd in &config.pre_build_cmds {
             ctx.shell_run_cmd(cmd)?;
         }
 
         let mut features = config.features.clone();
-        if let Some(log_level) = &self.log_level_feature(ctx, &config) {
+        if let Some(log_level) = &self.log_level_feature(ctx, config) {
             features.push(log_level.to_string());
         }
 
         let mut cmd = ctx.command("cargo");
         for (k, v) in &self.envs {
+            println!("set env: {}", format!("{k}={v}"));
             cmd.env(k, v);
         }
 
         cmd.arg(&self.cmd);
 
-        if let Some(extra_config_path) = self.cargo_extra_config(&config).await? {
+        if let Some(extra_config_path) = self.cargo_extra_config(config).await? {
             cmd.arg("--config");
             cmd.arg(extra_config_path);
         }
@@ -81,7 +142,7 @@ impl CargoRunner {
         cmd.run()?;
 
         let elf_path = ctx
-            .workdir
+            .manifest_dir
             .join("target")
             .join(&config.target)
             .join(if ctx.debug { "debug" } else { "release" })

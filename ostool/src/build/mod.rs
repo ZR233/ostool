@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use colored::Colorize;
+
 use crate::{
     build::config::{Cargo, Custom},
     ctx::AppContext,
@@ -67,11 +69,13 @@ impl AppContext {
         if !self.debug {
             cmd.arg("--release");
         }
-
+        for (k, v) in cmd.get_envs() {
+            println!("{}", format!("{k:?}={v:?}").cyan());
+        }
         cmd.run()?;
 
         let elf_path = self
-            .workdir
+            .manifest_dir
             .join("target")
             .join(&config.target)
             .join(if self.debug { "debug" } else { "release" })

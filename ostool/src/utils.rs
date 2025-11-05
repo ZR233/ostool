@@ -13,7 +13,7 @@ use tokio::fs;
 
 pub struct Command {
     inner: std::process::Command,
-    workdir: PathBuf,
+    value_replace: Box<dyn Fn(&OsStr) -> String>,
 }
 
 impl Deref for Command {
@@ -31,16 +31,21 @@ impl DerefMut for Command {
 }
 
 impl Command {
-    pub fn new<S>(program: S, workdir: &Path) -> Command
+    pub fn new<S>(
+        program: S,
+        workdir: &Path,
+        value_replace: impl Fn(&OsStr) -> String + 'static,
+    ) -> Command
     where
         S: AsRef<OsStr>,
     {
         let mut cmd = std::process::Command::new(program);
         cmd.current_dir(workdir);
+        cmd.env("WORKSPACE_FOLDER", workdir.display().to_string());
 
         Self {
-            workdir: workdir.to_path_buf(),
             inner: cmd,
+            value_replace: Box::new(value_replace),
         }
     }
 
@@ -64,21 +69,12 @@ impl Command {
         Ok(())
     }
 
-    fn value_replace_with_var<S>(&self, value: S) -> String
-    where
-        S: AsRef<OsStr>,
-    {
-        value.as_ref().to_string_lossy().replace(
-            "${workspaceFolder}",
-            format!("{}", self.workdir.display()).as_ref(),
-        )
-    }
-
     pub fn arg<S>(&mut self, arg: S) -> &mut Command
     where
         S: AsRef<OsStr>,
     {
-        self.inner.arg(self.value_replace_with_var(arg));
+        let value = (self.value_replace)(arg.as_ref());
+        self.inner.arg(value);
         self
     }
 
@@ -98,7 +94,8 @@ impl Command {
         K: AsRef<OsStr>,
         V: AsRef<OsStr>,
     {
-        self.inner.env(key, self.value_replace_with_var(val));
+        let value = (self.value_replace)(val.as_ref());
+        self.inner.env(key, value);
         self
     }
 }
@@ -112,7 +109,7 @@ pub async fn prepare_config<C: JsonSchema>(
     // Build logic will be implemented here
     let config_path = match config_path {
         Some(path) => path,
-        None => ctx.workdir.join(config_name),
+        None => ctx.manifest_dir.join(config_name),
     };
     ctx.build_config_path = Some(config_path.clone());
 

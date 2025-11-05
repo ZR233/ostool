@@ -83,10 +83,16 @@ async fn main() -> anyhow::Result<()> {
         exit(1);
     }
 
-    let workdir = env::var("CARGO_MANIFEST_DIR")?.into();
+    let manifest_dir: PathBuf = env::var("CARGO_MANIFEST_DIR")?.into();
+
+    let workspace_folder = match env::var("WORKSPACE_FOLDER") {
+        Ok(dir) => PathBuf::from(dir),
+        Err(_) => manifest_dir.clone(),
+    };
 
     let mut app = AppContext {
-        workdir,
+        workspace_folder,
+        manifest_dir,
         ..Default::default()
     };
 

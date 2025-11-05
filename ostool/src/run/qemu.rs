@@ -41,7 +41,7 @@ pub async fn run_qemu(ctx: AppContext, args: RunQemuArgs) -> anyhow::Result<()> 
     // Build logic will be implemented here
     let config_path = match args.qemu_config.clone() {
         Some(path) => path,
-        None => ctx.workdir.join(".qemu.toml"),
+        None => ctx.manifest_dir.join(".qemu.toml"),
     };
 
     let schema_path = default_schema_by_init(&config_path);
@@ -143,6 +143,7 @@ impl QemuRunner {
         }
 
         let mut cmd = self.ctx.command(&qemu_executable);
+
         for arg in &self.config.args {
             cmd.arg(arg);
         }
