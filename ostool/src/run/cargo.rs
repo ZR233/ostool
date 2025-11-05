@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{build::config::Cargo, ctx::AppContext, utils::ShellRunner};
+use crate::{build::config::Cargo, ctx::AppContext};
 
 pub struct CargoRunner {
     pub cmd: String,

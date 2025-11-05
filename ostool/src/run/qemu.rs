@@ -18,7 +18,6 @@ use tokio::fs;
 use crate::{
     ctx::AppContext,
     run::ovmf_prebuilt::{Arch, FileType, Prebuilt, Source},
-    utils::ShellRunner,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Default)]
@@ -115,7 +114,7 @@ impl QemuRunner {
 
         let arch = self.detect_arch()?;
 
-        let mut machine = "virt".to_string();
+        let machine = "virt".to_string();
 
         let mut need_machine = true;
 

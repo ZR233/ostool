@@ -84,18 +84,7 @@ async fn main() -> Result<()> {
 
     match cli.command {
         SubCommands::Build { config } => {
-            let config = ctx.perpare_build_config(config).await?;
-            match config.system {
-                build::config::BuildSystem::Cargo(config) => {
-                    let build_config_path = ctx.build_config_path.clone().unwrap();
-
-                    let mut cargo = CargoRunner::new("build", false, &build_config_path);
-                    cargo.run(&mut ctx, config).await?;
-                }
-                build::config::BuildSystem::Custom(custom_cfg) => {
-                    ctx.shell_run_cmd(&custom_cfg.build_cmd)?;
-                }
-            }
+            ctx.build(config).await?;
         }
         SubCommands::Run(args) => {
             let config = ctx.perpare_build_config(args.config).await?;

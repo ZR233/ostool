@@ -1,4 +1,4 @@
-use std::{path::PathBuf, process::Command};
+use std::path::PathBuf;
 
 use anyhow::anyhow;
 use cargo_metadata::Metadata;
@@ -6,10 +6,7 @@ use colored::Colorize;
 use object::{Architecture, Object};
 use tokio::fs;
 
-use crate::{
-    build::config::BuildConfig,
-    utils::{ShellRunner, prepare_config},
-};
+use crate::{build::config::BuildConfig, utils::prepare_config};
 
 #[derive(Default, Clone)]
 pub struct AppContext {
@@ -39,10 +36,8 @@ impl AppContext {
         Ok(())
     }
 
-    pub fn command(&self, program: &str) -> Command {
-        let mut command = Command::new(program);
-        command.current_dir(&self.workdir);
-        command
+    pub fn command(&self, program: &str) -> crate::utils::Command {
+        crate::utils::Command::new(program, &self.workdir)
     }
 
     pub fn metadata(&self) -> anyhow::Result<Metadata> {
