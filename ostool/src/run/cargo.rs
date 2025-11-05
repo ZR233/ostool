@@ -3,6 +3,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crossterm::style::Stylize;
+
 use crate::{build::config::Cargo, ctx::AppContext};
 
 pub enum CargoRunnerKind {
@@ -26,7 +28,6 @@ impl AppContext {
 
         let mut cargo = CargoRunner::new("run", true, &build_config_path);
         for (k, v) in &config.env {
-            println!("add: {}", format!("{k}={v}"));
             cargo.env(k, v);
         }
 
@@ -107,7 +108,7 @@ impl CargoRunner {
 
         let mut cmd = ctx.command("cargo");
         for (k, v) in &self.envs {
-            println!("set env: {}", format!("{k}={v}"));
+            println!("{}", format!("{k}={v}").cyan());
             cmd.env(k, v);
         }
 
