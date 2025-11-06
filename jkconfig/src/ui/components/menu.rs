@@ -20,6 +20,7 @@ use log::info;
 // 移除对ostool的依赖导入
 
 use super::editors::*;
+use crate::ui::components::editors::depend_features_editor::show_depend_features_editor;
 use crate::ui::components::editors::multi_select_editor::{create_multi_select_from_array_item, show_multi_select};
 
 /// 创建菜单视图
@@ -730,6 +731,41 @@ fn enter_elem(s: &mut Cursive, elem: &ElementType) {
                         );
 
                         show_multi_select(s, &item.base.title, &multi_select_item);
+                    } else if path == "system.features.depend_features" {
+                        // 处理依赖项features
+                        let app_data = s.user_data::<AppData>().unwrap();
+                        info!("Checking for depend_features_callback");
+                        
+                        // 获取依赖项列表
+                        let mut depend_map = std::collections::HashMap::new();
+                        
+                        // 如果设置了depend_features_callback，则使用它获取依赖项及其features
+                        if let Some(callback) = &app_data.depend_features_callback {
+                            info!("depend_features_callback is set, calling it");
+                            // 创建一个可以安全展开的闭包
+                            let get_depend_features = || callback();
+                            if let Ok(features_map) =
+                                std::panic::catch_unwind(std::panic::AssertUnwindSafe(get_depend_features))
+                            {
+                                info!("depend_features_callback returned: {:?}", features_map);
+                                depend_map = features_map;
+                            } else {
+                                info!("depend_features_callback panicked");
+                            }
+                        } else {
+                            info!("depend_features_callback is not set");
+                        }
+                        
+                        // 如果没有获取到依赖项，添加一些默认值
+                        if depend_map.is_empty() {
+                            depend_map.insert("default-dependency".to_string(), vec!["default".to_string()]);
+                        }
+                        
+                        // 创建依赖项列表
+                        let depend_names: Vec<String> = depend_map.keys().cloned().collect();
+                        
+                        // 显示依赖项features编辑器
+                        show_depend_features_editor(s, &item.base.title, &depend_names, &depend_map);
                     } else {
                         show_array_edit(s, &item.base.key(), &item.base.title, &array_item.values);
                     }

@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -52,42 +53,167 @@ impl AppContext {
     pub fn launch_jkconfig_ui(config_path: &Path, schema_path: &Path) -> anyhow::Result<bool> {
         // 创建AppData实例
         let mut app_data = AppData::new(Some(config_path), Some(schema_path))?;
-        
+        info!("launch_jkconfig_ui");
+        info!("launch_jkconfig_ui");
+        info!("launch_jkconfig_ui");
+        info!("launch_jkconfig_ui");
+        info!("launch_jkconfig_ui");
+        info!("launch_jkconfig_ui");
+
         // 设置features_callback以获取本地仓库的features
         app_data.features_callback = Some(std::sync::Arc::new(|| {
             let mut features = Vec::new();
-            
+
             // 尝试从当前目录获取cargo项目的features，类似metadata方法的实现
-            if let Ok(metadata) = cargo_metadata::MetadataCommand::new()
-                .no_deps()
-                .exec() {
+            if let Ok(metadata) = cargo_metadata::MetadataCommand::new().no_deps().exec() {
                 // 获取workspace根目录
                 let workspace_root = metadata.workspace_root.clone();
-                
+
                 // 查找当前仓库的包（manifest_path与workspace根目录匹配的包）
-                if let Some(current_package) = metadata.packages.iter().find(|p| {
-                    p.manifest_path.starts_with(&workspace_root)
-                }) {
+                if let Some(current_package) = metadata
+                    .packages
+                    .iter()
+                    .find(|p| p.manifest_path.starts_with(&workspace_root))
+                {
                     // 添加当前仓库包的所有features
                     info!("Current package: {}", current_package.name);
-                    info!("features: {:?}", current_package.features.keys().collect::<Vec<_>>());
-                    info!("dependencies: {:?}", current_package.dependencies.iter().map(|d| d.name.clone()).collect::<Vec<_>>());
+                    info!(
+                        "features: {:?}",
+                        current_package.features.keys().collect::<Vec<_>>()
+                    );
+                    info!(
+                        "dependencies: {:?}",
+                        current_package
+                            .dependencies
+                            .iter()
+                            .map(|d| d.name.clone())
+                            .collect::<Vec<_>>()
+                    );
                     for (feature_name, _) in &current_package.features {
                         features.push(feature_name.clone());
                     }
                 }
-                
             } else {
                 // 如果无法获取metadata，添加一些默认features
                 features.push("default".to_string());
-                info!("Failed to get cargo metadata. Adding default features.");
+                info!("Failed to get cargo metadata. Adding default features1.");
             }
-            
+
             features
         }));
-        
+
+        // 设置depend_features_callback以获取依赖项及其features
+        app_data.depend_features_callback = Some(std::sync::Arc::new(|| {
+            let mut depend_features = HashMap::new();
+
+            // 尝试从当前目录获取cargo项目的依赖项及其features
+            if let Ok(metadata) = cargo_metadata::MetadataCommand::new().no_deps().exec() {
+                // 获取workspace根目录
+                let workspace_root = metadata.workspace_root.clone();
+                info!("-------------------------");
+                // 查找当前仓库的包（manifest_path与workspace根目录匹配的包）
+                if let Some(current_package) = metadata
+                    .packages
+                    .iter()
+                    .find(|p| p.manifest_path.starts_with(&workspace_root))
+                {
+                    // 获取所有依赖项及其features
+                    info!("Current package: {}", current_package.name);
+                    info!(
+                        "dependencies: {:?}",
+                        current_package
+                            .dependencies
+                            .iter()
+                            .map(|d| d.name.clone())
+                            .collect::<Vec<_>>()
+                    );
+
+                    // 遍历所有依赖项
+                    for dependency in &current_package.dependencies {
+                        let dep_name = dependency.name.clone();
+                        let mut dep_features = Vec::new();
+
+                        // 查找依赖包的features（需要在所有包中查找）
+                        if let Some(dep_package) =
+                            metadata.packages.iter().find(|p| p.name == dep_name)
+                        {
+                            info!("Dependency package: {}", dep_package.name);
+                            info!(
+                                "Dependency features: {:?}",
+                                dep_package.features.keys().collect::<Vec<_>>()
+                            );
+
+                            // 添加依赖包的所有features
+                            for (feature_name, _) in &dep_package.features {
+                                dep_features.push(feature_name.clone());
+                            }
+                        }
+
+                        // 如果没有找到依赖包的详细信息，添加一些默认features
+                        if dep_features.is_empty() {
+                            dep_features.push("default".to_string());
+                        }
+
+                        depend_features.insert(dep_name, dep_features);
+                    }
+                }
+            } else {
+                // 如果无法获取metadata，添加一些默认依赖项
+                depend_features.insert(
+                    "default-dependency".to_string(),
+                    vec!["default".to_string()],
+                );
+                info!("Failed to get cargo metadata. Adding default dependency2.");
+            }
+
+            depend_features
+        }));
+
+        // // 设置features_callback以获取本地仓库的features
+        // app_data.features_callback = Some(std::sync::Arc::new(|| {
+        //     let mut features = Vec::new();
+
+        //     // 尝试从当前目录获取cargo项目的features，类似metadata方法的实现
+        //     if let Ok(metadata) = cargo_metadata::MetadataCommand::new()
+        //         .no_deps()
+        //         .exec() {
+        //         // 获取workspace根目录
+        //         let workspace_root = metadata.workspace_root.clone();
+
+        //         // 查找当前仓库的包（manifest_path与workspace根目录匹配的包）
+        //         if let Some(current_package) = metadata.packages.iter().find(|p| {
+        //             p.manifest_path.starts_with(&workspace_root)
+        //         }) {
+        //             // 添加当前仓库包的所有features
+        //             info!("Current package: {}", current_package.name);
+        //             info!("features: {:?}", current_package.features.keys().collect::<Vec<_>>());
+        //             info!("dependencies: {:?}", current_package.dependencies.iter().map(|d| d.name.clone()).collect::<Vec<_>>());
+        //             for (feature_name, _) in &current_package.features {
+        //                 features.push(feature_name.clone());
+        //             }
+        //         }
+
+        //     } else {
+        //         // 如果无法获取metadata，添加一些默认features
+        //         features.push("default".to_string());
+        //         info!("Failed to get cargo metadata. Adding default features.3");
+        //     }
+
+        //     features
+        // }));
+
         let title = app_data.root.title.clone();
         let fields = app_data.root.menu().fields();
+
+        // 添加调试日志
+        info!(
+            "depend_features_callback is set: {}",
+            app_data.depend_features_callback.is_some()
+        );
+        info!(
+            "features_callback is set: {}",
+            app_data.features_callback.is_some()
+        );
 
         cursive::logger::init();
         cursive::logger::set_internal_filter_level(log::LevelFilter::Info);

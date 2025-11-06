@@ -67,7 +67,7 @@ pub fn show_multi_select(s: &mut Cursive, title: &str, multi_select: &MultiSelec
                     .child(DummyView)
                     .child(ScrollView::new(select.with_name("multi_select")).fixed_height(20)),
             )
-            .title("Multi Selection")
+            .title("Features")
             .button("OK", on_ok)
             .button("Cancel", handle_back),
         )
@@ -142,7 +142,7 @@ fn toggle_selection(s: &mut Cursive) {
 
 /// 确认选择
 fn on_ok(s: &mut Cursive) {
-    let mut app = s.user_data::<AppData>().unwrap();
+    let app = s.user_data::<AppData>().unwrap();
 
     // 获取保存的多选择数据
     if let Some((_, temp_value)) = app.temp_data.take() {

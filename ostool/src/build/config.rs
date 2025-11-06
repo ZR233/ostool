@@ -49,17 +49,13 @@ pub struct Cargo {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct Features {
     pub self_features: Vec<String>,
-    pub package_features: PackageFeatures,
+    pub depend_features: Vec<Depend>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
-pub struct PackageFeatures {
-    pub name: Vec<PackageName>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
-pub struct PackageName {
-    pub package_features: Vec<String>,
+pub struct Depend {
+    pub name: String,
+    pub d_features: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
