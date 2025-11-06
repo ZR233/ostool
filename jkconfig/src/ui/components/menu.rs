@@ -20,7 +20,7 @@ use log::info;
 // 移除对ostool的依赖导入
 
 use super::editors::*;
-use crate::ui::components::editors::multi_select_editor::{MultiSelectItem, show_multi_select};
+use crate::ui::components::editors::multi_select_editor::{create_multi_select_from_array_item, show_multi_select};
 
 /// 创建菜单视图
 pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl IntoBoxedView {
@@ -692,12 +692,12 @@ fn enter_elem(s: &mut Cursive, elem: &ElementType) {
 
                         // 如果设置了features_callback，则使用它获取features
                         if let Some(callback) = &app_data.features_callback {
-                            info!("Using features_callback to get features");
                             // 创建一个可以安全展开的闭包
                             let get_features = || callback();
                             if let Ok(features) =
                                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(get_features))
                             {
+                                info!("features_callback returned: {:?}", features);
                                 // 合并features，确保没有重复项
                                 for feature in features {
                                     if !variants.contains(&feature) {
@@ -722,11 +722,12 @@ fn enter_elem(s: &mut Cursive, elem: &ElementType) {
                         info!("show_enum_select with variants: {:?}", enum_item.variants);
                         // 使用已导入的show_multi_select函数
 
-                        // 创建MultiSelectItem数据结构
-                        let multi_select_item = MultiSelectItem {
-                            variants: enum_item.variants.clone(),
-                            selected_indices: Vec::new(), // 默认无选中项
-                        };
+                        // 使用create_multi_select_from_array_item函数创建MultiSelectItem
+                        // 这样可以正确初始化已选中的索引，保持之前的选择状态
+                        let multi_select_item = create_multi_select_from_array_item(
+                            array_item, 
+                            &enum_item.variants
+                        );
 
                         show_multi_select(s, &item.base.title, &multi_select_item);
                     } else {

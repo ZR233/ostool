@@ -61,11 +61,18 @@ impl AppContext {
             if let Ok(metadata) = cargo_metadata::MetadataCommand::new()
                 .no_deps()
                 .exec() {
-                // 直接从metadata.packages获取所有包的features，这是更常用的方式
-                for package in &metadata.packages {
-                    // 添加包的所有features
-                    info!("package: {}", package.name);
-                    for (feature_name, _) in &package.features {
+                // 获取workspace根目录
+                let workspace_root = metadata.workspace_root.clone();
+                
+                // 查找当前仓库的包（manifest_path与workspace根目录匹配的包）
+                if let Some(current_package) = metadata.packages.iter().find(|p| {
+                    p.manifest_path.starts_with(&workspace_root)
+                }) {
+                    // 添加当前仓库包的所有features
+                    info!("Current package: {}", current_package.name);
+                    info!("features: {:?}", current_package.features.keys().collect::<Vec<_>>());
+                    info!("dependencies: {:?}", current_package.dependencies.iter().map(|d| d.name.clone()).collect::<Vec<_>>());
+                    for (feature_name, _) in &current_package.features {
                         features.push(feature_name.clone());
                     }
                 }
@@ -73,8 +80,7 @@ impl AppContext {
             } else {
                 // 如果无法获取metadata，添加一些默认features
                 features.push("default".to_string());
-                features.push("full".to_string());
-                features.push("minimal".to_string());
+                info!("Failed to get cargo metadata. Adding default features.");
             }
             
             features

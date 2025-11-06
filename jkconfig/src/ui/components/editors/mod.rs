@@ -9,7 +9,7 @@ pub mod string_editor;
 pub use array_editor::show_array_edit;
 pub use enum_editor::show_enum_select;
 pub use integer_editor::show_integer_edit;
-pub use multi_select_editor::show_multi_select;
+pub use multi_select_editor::{create_multi_select_from_array_item, show_multi_select};
 pub use number_editor::show_number_edit;
 pub use oneof_editor::show_oneof_dialog;
 pub use string_editor::show_string_edit;
