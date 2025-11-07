@@ -93,6 +93,7 @@ pub async fn run_uboot(ctx: AppContext, args: RunUbootArgs) -> anyhow::Result<()
     // let app_data = AppData::new(Some(&config_path), Some(schema_path))?;
 
     let config = if config_path.exists() {
+        println!("Using U-Boot config: {}", config_path.display());
         let mut config_content = fs::read_to_string(&config_path)
             .await
             .map_err(|_| anyhow!("can not open config file: {}", config_path.display()))?;

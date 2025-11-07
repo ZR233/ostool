@@ -170,7 +170,10 @@ pub fn replace_env_placeholders(input: &str) -> anyhow::Result<String> {
 
                 // 获取环境变量值，如果不存在则替换为空字符串
                 match env::var(env_var_name) {
-                    Ok(value) => result.push_str(&value),
+                    Ok(value) => {
+                        println!("Using {env_var_name}={value}");
+                        result.push_str(&value)
+                    }
                     Err(_) => {
                         // 环境变量不存在时替换为空字符串，不返回错误
                         result.push_str("");
