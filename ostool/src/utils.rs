@@ -168,15 +168,12 @@ pub fn replace_env_placeholders(input: &str) -> anyhow::Result<String> {
             if found_closing_brace && placeholder.starts_with("env:") {
                 let env_var_name = &placeholder[4..]; // 跳过 "env:"
 
-                // 获取环境变量值，如果不存在则返回错误
+                // 获取环境变量值，如果不存在则替换为空字符串
                 match env::var(env_var_name) {
                     Ok(value) => result.push_str(&value),
                     Err(_) => {
-                        return Err(anyhow::anyhow!(
-                            "环境变量 '{}' 未设置，无法替换占位符 ${{env:{}}}",
-                            env_var_name,
-                            env_var_name
-                        ));
+                        // 环境变量不存在时替换为空字符串，不返回错误
+                        result.push_str("");
                     }
                 }
             } else {
@@ -220,10 +217,10 @@ mod tests {
             "/home/test:/usr/local/bin"
         );
 
-        // 测试不存在的环境变量
+        // 测试不存在的环境变量 - 应该返回空字符串而不是错误
         let result = replace_env_placeholders("${env:NON_EXISTENT}");
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("未设置"));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "");
 
         // 测试混合内容
         assert_eq!(
@@ -276,10 +273,10 @@ mod tests {
         assert_eq!(replace_env_placeholders("${env:").unwrap(), "${env:");
         assert_eq!(replace_env_placeholders("${env:VAR").unwrap(), "${env:VAR");
 
-        // 测试空的env变量名
+        // 测试空的env变量名 - 应该返回空字符串而不是错误
         let result = replace_env_placeholders("${env:}");
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("未设置"));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "");
 
         // 测试只包含$的字符串
         assert_eq!(replace_env_placeholders("$").unwrap(), "$");

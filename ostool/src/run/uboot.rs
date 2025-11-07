@@ -268,9 +268,11 @@ impl Runner {
 
     async fn run(&mut self) -> anyhow::Result<()> {
         let res = self._run().await;
-        if let Some(cmd) = self.config.board_power_off_cmd.clone() {
+        if let Some(ref cmd) = self.config.board_power_off_cmd
+            && !cmd.trim().is_empty()
+        {
             info!("Executing board power off command: {}", cmd);
-            let _ = self.ctx.shell_run_cmd(&cmd);
+            let _ = self.ctx.shell_run_cmd(cmd);
             info!("Board powered off");
         }
         res
@@ -285,20 +287,18 @@ impl Runner {
         info!("Starting U-Boot runner...");
 
         info!("kernel from: {}", kernel.display());
-        if self.config.net.is_some() {
-            tftp::run_tftp_server(&self.ctx)?;
-        }
 
         let ip_string = self.detect_tftp_ip();
+
+        if let Some(ip) = ip_string.as_ref() {
+            info!("TFTP server IP: {}", ip);
+            tftp::run_tftp_server(&self.ctx)?;
+        }
 
         info!(
             "Opening serial port: {} @ {}",
             self.config.serial, self.baud_rate
         );
-
-        if let Some(ref ip) = ip_string {
-            info!("TFTP server IP: {}", ip);
-        }
 
         let rx = serialport::new(&self.config.serial, self.baud_rate as _)
             .timeout(Duration::from_millis(200))
@@ -314,7 +314,9 @@ impl Runner {
             Ok(uboot)
         });
 
-        if let Some(cmd) = self.config.board_reset_cmd.clone() {
+        if let Some(cmd) = self.config.board_reset_cmd.clone()
+            && !cmd.trim().is_empty()
+        {
             info!("Executing board reset command: {}", cmd);
             self.ctx.shell_run_cmd(&cmd)?;
         }
@@ -487,8 +489,8 @@ impl Runner {
             }
         }
 
-        if ip_string.is_empty() {
-            panic!("Cannot detect IP address for interface: {}", net.interface);
+        if ip_string.trim().is_empty() {
+            return None;
         }
 
         info!("TFTP : {}", ip_string);
