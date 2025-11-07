@@ -43,7 +43,6 @@ impl AppContext {
                 debug,
                 dtb_dump,
             } => {
-                cargo.arg("qemu");
                 if let Some(cfg) = qemu_config {
                     cargo.arg("--config");
                     cargo.arg(cfg.display().to_string());
@@ -53,13 +52,14 @@ impl AppContext {
                 if *dtb_dump {
                     cargo.arg("--dtb-dump");
                 }
+                cargo.arg("qemu");
             }
             CargoRunnerKind::Uboot { uboot_config } => {
-                cargo.arg("uboot");
                 if let Some(cfg) = uboot_config {
                     cargo.arg("--config");
                     cargo.arg(cfg.display().to_string());
                 }
+                cargo.arg("uboot");
             }
         }
         cargo.run(self, config).await
