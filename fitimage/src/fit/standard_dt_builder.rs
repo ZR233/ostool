@@ -223,7 +223,7 @@ impl StandardFdtBuilder {
         self.add_property_data("data", &component.data)?;
 
         // Add hash nodes to match mkimage standard
-        self.add_hash_nodes(&component.data)?;
+        // self.add_hash_nodes(&component.data)?;
 
         self.end_node()?;
         Ok(())
@@ -269,7 +269,7 @@ impl StandardFdtBuilder {
         self.add_property_data("data", &component.data)?;
 
         // Add hash nodes to match mkimage standard
-        self.add_hash_nodes(&component.data)?;
+        // self.add_hash_nodes(&component.data)?;
 
         self.end_node()?;
         Ok(())
@@ -297,7 +297,7 @@ impl StandardFdtBuilder {
         self.add_property_data("data", &component.data)?;
 
         // Add hash nodes to match mkimage standard
-        self.add_hash_nodes(&component.data)?;
+        // self.add_hash_nodes(&component.data)?;
 
         self.end_node()?;
         Ok(())
