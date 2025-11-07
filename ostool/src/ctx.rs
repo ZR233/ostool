@@ -22,11 +22,10 @@ pub struct AppContext {
 
 impl AppContext {
     pub fn shell_run_cmd(&self, cmd: &str) -> anyhow::Result<()> {
-        let mut parts = cmd.split_whitespace();
-        let mut command = self.command(parts.next().unwrap());
-        for arg in parts {
-            command.arg(arg);
-        }
+        let mut command = self.command("sh");
+        command.arg("-c");
+        command.arg(cmd);
+
         if let Some(elf) = &self.elf_path {
             command.env("KERNEL_ELF", elf.display().to_string());
         }

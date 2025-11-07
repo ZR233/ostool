@@ -272,7 +272,6 @@ impl Runner {
         if let Some(ref cmd) = self.config.board_power_off_cmd
             && !cmd.trim().is_empty()
         {
-            info!("Executing board power off command: {}", cmd);
             let _ = self.ctx.shell_run_cmd(cmd);
             info!("Board powered off");
         }
@@ -318,7 +317,6 @@ impl Runner {
         if let Some(cmd) = self.config.board_reset_cmd.clone()
             && !cmd.trim().is_empty()
         {
-            info!("Executing board reset command: {}", cmd);
             self.ctx.shell_run_cmd(&cmd)?;
         }
 
