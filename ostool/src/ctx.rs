@@ -53,12 +53,6 @@ impl AppContext {
     pub fn launch_jkconfig_ui(config_path: &Path, schema_path: &Path) -> anyhow::Result<bool> {
         // 创建AppData实例
         let mut app_data = AppData::new(Some(config_path), Some(schema_path))?;
-        info!("launch_jkconfig_ui");
-        info!("launch_jkconfig_ui");
-        info!("launch_jkconfig_ui");
-        info!("launch_jkconfig_ui");
-        info!("launch_jkconfig_ui");
-        info!("launch_jkconfig_ui");
 
         // 设置features_callback以获取本地仓库的features
         app_data.features_callback = Some(std::sync::Arc::new(|| {
@@ -96,7 +90,7 @@ impl AppContext {
             } else {
                 // 如果无法获取metadata，添加一些默认features
                 features.push("default".to_string());
-                info!("Failed to get cargo metadata. Adding default features1.");
+                info!("Failed to get cargo metadata. Adding default features.");
             }
 
             features
@@ -107,10 +101,9 @@ impl AppContext {
             let mut depend_features = HashMap::new();
 
             // 尝试从当前目录获取cargo项目的依赖项及其features
-            if let Ok(metadata) = cargo_metadata::MetadataCommand::new().no_deps().exec() {
+            if let Ok(metadata) = cargo_metadata::MetadataCommand::new().exec() {
                 // 获取workspace根目录
                 let workspace_root = metadata.workspace_root.clone();
-                info!("-------------------------");
                 // 查找当前仓库的包（manifest_path与workspace根目录匹配的包）
                 if let Some(current_package) = metadata
                     .packages
@@ -163,44 +156,11 @@ impl AppContext {
                     "default-dependency".to_string(),
                     vec!["default".to_string()],
                 );
-                info!("Failed to get cargo metadata. Adding default dependency2.");
+                info!("Failed to get cargo metadata. Adding default dependency.");
             }
 
             depend_features
         }));
-
-        // // 设置features_callback以获取本地仓库的features
-        // app_data.features_callback = Some(std::sync::Arc::new(|| {
-        //     let mut features = Vec::new();
-
-        //     // 尝试从当前目录获取cargo项目的features，类似metadata方法的实现
-        //     if let Ok(metadata) = cargo_metadata::MetadataCommand::new()
-        //         .no_deps()
-        //         .exec() {
-        //         // 获取workspace根目录
-        //         let workspace_root = metadata.workspace_root.clone();
-
-        //         // 查找当前仓库的包（manifest_path与workspace根目录匹配的包）
-        //         if let Some(current_package) = metadata.packages.iter().find(|p| {
-        //             p.manifest_path.starts_with(&workspace_root)
-        //         }) {
-        //             // 添加当前仓库包的所有features
-        //             info!("Current package: {}", current_package.name);
-        //             info!("features: {:?}", current_package.features.keys().collect::<Vec<_>>());
-        //             info!("dependencies: {:?}", current_package.dependencies.iter().map(|d| d.name.clone()).collect::<Vec<_>>());
-        //             for (feature_name, _) in &current_package.features {
-        //                 features.push(feature_name.clone());
-        //             }
-        //         }
-
-        //     } else {
-        //         // 如果无法获取metadata，添加一些默认features
-        //         features.push("default".to_string());
-        //         info!("Failed to get cargo metadata. Adding default features.3");
-        //     }
-
-        //     features
-        // }));
 
         let title = app_data.root.title.clone();
         let fields = app_data.root.menu().fields();
