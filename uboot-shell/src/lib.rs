@@ -176,9 +176,10 @@ impl UbootShell {
         Ok(())
     }
 
-    pub fn cmd(&mut self, cmd: &str) -> Result<String> {
-        info!("cmd: {cmd}");
-        self.cmd_without_reply(cmd)?;
+    fn _cmd(&mut self, cmd: &str) -> Result<String> {
+        let ok_str = "cmd-ok";
+        let cmd_with_id = format!("{cmd}&& echo {ok_str}");
+        self.cmd_without_reply(&cmd_with_id)?;
         let perfix = self.perfix.clone();
         let res = self
             .wait_for_reply(&perfix)?
@@ -186,7 +187,38 @@ impl UbootShell {
             .trim_end_matches(self.perfix.as_str().trim())
             .trim_end()
             .to_string();
-        Ok(res)
+        if res.ends_with(ok_str) {
+            let res = res
+                .trim()
+                .trim_end_matches(ok_str)
+                .trim_end()
+                .trim_start_matches(&cmd_with_id)
+                .trim()
+                .to_string();
+            Ok(res)
+        } else {
+            Err(Error::other(format!(
+                "command `{cmd}` failed, response: {res}",
+            )))
+        }
+    }
+
+    pub fn cmd(&mut self, cmd: &str) -> Result<String> {
+        info!("cmd: {cmd}");
+        let mut retry = 3;
+        while retry > 0 {
+            match self._cmd(cmd) {
+                Ok(res) => return Ok(res),
+                Err(e) => {
+                    warn!("cmd `{}` failed: {}, retrying...", cmd, e);
+                    retry -= 1;
+                    thread::sleep(Duration::from_millis(100));
+                }
+            }
+        }
+        Err(Error::other(format!(
+            "command `{cmd}` failed after retries",
+        )))
     }
 
     pub fn set_env(&mut self, name: impl Into<String>, value: impl Into<String>) -> Result<()> {

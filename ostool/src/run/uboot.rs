@@ -321,7 +321,10 @@ impl Runner {
             self.ctx.shell_run_cmd(&cmd)?;
         }
 
+        let mut net_ok = false;
+
         let mut uboot = handle.join().unwrap()?;
+        uboot.set_env("autoload", "yes")?;
 
         if let Some(ref ip) = ip_string
             && let Ok(output) = uboot.cmd("net list")
@@ -334,13 +337,8 @@ impl Runner {
 
             info!("Board network ok");
 
-            if let Some(ref board_ip) = self.config.net.as_ref().unwrap().board_ip {
-                uboot.set_env("ipaddr", board_ip)?;
-            } else {
-                uboot.cmd("dhcp")?;
-            }
-
             uboot.set_env("serverip", ip.clone())?;
+            net_ok = true;
         }
 
         let mut fdt_load_addr = None;
@@ -354,30 +352,34 @@ impl Runner {
             ramfs_load_addr = Some(addr as u64);
         }
 
-        let loadaddr = if let Ok(addr) = uboot.env_int("loadaddr") {
-            info!("Found $loadaddr: {addr:#x}");
-            addr as u64
-        } else if let Ok(addr) = uboot.env_int("kernel_comp_addr_r") {
-            uboot.set_env("loadaddr", format!("{addr:#x}"))?;
-            info!("Set $loadaddr to kernel_comp_addr_r: {addr:#x}");
-            addr as u64
-        } else {
-            let addr = uboot.env_int("kernel_addr_c")? as u64;
-            uboot.set_env("loadaddr", format!("{addr:#x}"))?;
-            info!("Set $loadaddr to kernel_addr_c: {addr:#x}");
-            addr
-        };
-
         let kernel_entry = if let Some(entry) = self.config.kernel_load_addr_int() {
             info!("Using configured kernel load address: {entry:#x}");
             entry
+        } else if let Ok(entry) = uboot.env_int("kernel_addr_r") {
+            info!("Using $kernel_addr_r as kernel entry: {entry:#x}");
+            entry as u64
+        } else if let Ok(entry) = uboot.env_int("loadaddr") {
+            info!("Using $loadaddr as kernel entry: {entry:#x}");
+            entry as u64
         } else {
-            uboot
-                .env_int("kernel_addr_r")
-                .expect("kernel_addr_r not found") as u64
+            return Err(anyhow!("Cannot determine kernel entry address"));
         };
 
-        info!("fitimage loadaddr: {loadaddr:#x}");
+        let fit_loadaddr = if let Ok(addr) = uboot.env_int("kernel_comp_addr_r") {
+            info!("image load to kernel_comp_addr_r: {addr:#x}");
+            addr as u64
+        } else if let Ok(addr) = uboot.env_int("kernel_addr_c") {
+            info!("image load to kernel_addr_c: {addr:#x}");
+            addr as u64
+        } else {
+            let addr = (kernel_entry + 0x02000000) & 0xffff_ffff_ff00_0000;
+            info!("No kernel_comp_addr_r or kernel_addr_c, use calculated address: {addr:#x}");
+            addr
+        };
+
+        uboot.set_env("loadaddr", format!("{:#x}", fit_loadaddr))?;
+
+        info!("fitimage loadaddr: {fit_loadaddr:#x}");
         info!("kernel entry: {kernel_entry:#x}");
         let dtb = self.config.dtb_file.clone();
         if let Some(ref dtb_file) = dtb {
@@ -396,18 +398,34 @@ impl Runner {
             )
             .await?;
 
-        if self.config.net.is_some() {
-            info!("TFTP upload FIT image to board...");
-            let filename = fitimage.file_name().unwrap().to_str().unwrap();
+        let fitname = fitimage.file_name().unwrap().to_str().unwrap();
 
-            let tftp_cmd = format!("tftp {filename}");
-            uboot.cmd(&tftp_cmd)?;
-            uboot.cmd_without_reply("bootm")?;
-        } else {
-            info!("No TFTP config, using loady to upload FIT image...");
-            Self::uboot_loady(&mut uboot, loadaddr as usize, fitimage);
-            uboot.cmd_without_reply("bootm")?;
-        }
+        let bootcmd =
+            if let Some(ref board_ip) = self.config.net.as_ref().and_then(|e| e.board_ip.clone()) {
+                uboot.set_env("ipaddr", board_ip)?;
+                format!("tftp {fitname} && bootm",)
+            } else if net_ok {
+                format!("dhcp {fitname} && bootm",)
+            } else {
+                info!("No TFTP config, using loady to upload FIT image...");
+                Self::uboot_loady(&mut uboot, fit_loadaddr as usize, fitimage);
+                "bootm".to_string()
+            };
+
+        info!("Booting kernel with command: {}", bootcmd);
+        uboot.cmd_without_reply(&bootcmd)?;
+        // if self.config.net.is_some() {
+        //     info!("TFTP upload FIT image to board...");
+        //     let filename = fitimage.file_name().unwrap().to_str().unwrap();
+
+        //     let tftp_cmd = format!("tftp {filename}");
+        //     uboot.cmd(&tftp_cmd)?;
+        //     uboot.cmd_without_reply("bootm")?;
+        // } else {
+        //     info!("No TFTP config, using loady to upload FIT image...");
+        //     Self::uboot_loady(&mut uboot, fit_loadaddr as usize, fitimage);
+        //     uboot.cmd_without_reply("bootm")?;
+        // }
 
         let tx = uboot.tx.take().unwrap();
         let rx = uboot.rx.take().unwrap();
