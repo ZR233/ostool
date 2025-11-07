@@ -21,8 +21,12 @@ pub fn show_depend_select(
 ) {
     let mut select = SelectView::new();
 
-    // 添加所有依赖项到SelectView
-    for depend_name in depend_names {
+    // 创建排序后的依赖项列表
+    let mut sorted_depend_names: Vec<String> = depend_names.to_vec();
+    sorted_depend_names.sort();
+
+    // 添加所有依赖项到SelectView（按名称排序）
+    for depend_name in &sorted_depend_names {
         select.add_item(depend_name.clone(), Arc::new(depend_name.clone()));
     }
 
