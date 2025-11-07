@@ -5,6 +5,7 @@ use std::{
     time::Duration,
 };
 
+use anyhow::Context;
 use byte_unit::Byte;
 use colored::Colorize;
 use fitimage::{ComponentConfig, FitImageBuilder, FitImageConfig};
@@ -17,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use tokio::fs;
 use uboot_shell::UbootShell;
 
-use crate::{ctx::AppContext, run::tftp, sterm::SerialTerm};
+use crate::{ctx::AppContext, run::tftp, sterm::SerialTerm, utils::replace_env_placeholders};
 
 /// FIT image 生成相关的错误消息常量
 mod errors {
@@ -33,16 +34,19 @@ pub struct UbootConfig {
     /// Serial console device
     /// e.g., /dev/ttyUSB0 on linux, COM3 on Windows
     pub serial: String,
-    pub baud_rate: i64,
+    pub baud_rate: String,
     pub dtb_file: Option<String>,
     /// Kernel load address
     /// if not specified, use U-Boot env variable 'loadaddr'
     pub kernel_load_addr: Option<String>,
     /// TFTP boot configuration
     pub net: Option<Net>,
-    /// U-Boot reset command
+    /// Board reset command
     /// shell command to reset the board
-    pub reset_cmd: Option<String>,
+    pub board_reset_cmd: Option<String>,
+    /// Board power off command
+    /// shell command to power off the board
+    pub board_power_off_cmd: Option<String>,
     pub success_regex: Vec<String>,
     pub fail_regex: Vec<String>,
 }
@@ -89,15 +93,18 @@ pub async fn run_uboot(ctx: AppContext, args: RunUbootArgs) -> anyhow::Result<()
     // let app_data = AppData::new(Some(&config_path), Some(schema_path))?;
 
     let config = if config_path.exists() {
-        let config_content = fs::read_to_string(&config_path)
+        let mut config_content = fs::read_to_string(&config_path)
             .await
             .map_err(|_| anyhow!("can not open config file: {}", config_path.display()))?;
+
+        config_content = replace_env_placeholders(&config_content)?;
+
         let config: UbootConfig = toml::from_str(&config_content)?;
         config
     } else {
         let config = UbootConfig {
             serial: "/dev/ttyUSB0".to_string(),
-            baud_rate: 115200,
+            baud_rate: "115200".into(),
             ..Default::default()
         };
 
@@ -105,9 +112,15 @@ pub async fn run_uboot(ctx: AppContext, args: RunUbootArgs) -> anyhow::Result<()
         config
     };
 
+    let baud_rate = config
+        .baud_rate
+        .parse::<u32>()
+        .with_context(|| anyhow!("baud_rate is not valid int"))?;
+
     let mut runner = Runner {
         ctx,
         config,
+        baud_rate,
         success_regex: vec![],
         fail_regex: vec![],
     };
@@ -120,6 +133,7 @@ struct Runner {
     config: UbootConfig,
     success_regex: Vec<regex::Regex>,
     fail_regex: Vec<regex::Regex>,
+    baud_rate: u32,
 }
 
 impl Runner {
@@ -253,6 +267,16 @@ impl Runner {
     }
 
     async fn run(&mut self) -> anyhow::Result<()> {
+        let res = self._run().await;
+        if let Some(cmd) = self.config.board_power_off_cmd.clone() {
+            info!("Executing board power off command: {}", cmd);
+            let _ = self.ctx.shell_run_cmd(&cmd);
+            info!("Board powered off");
+        }
+        res
+    }
+
+    async fn _run(&mut self) -> anyhow::Result<()> {
         self.preper_regex()?;
         self.ctx.objcopy_output_bin()?;
 
@@ -267,7 +291,16 @@ impl Runner {
 
         let ip_string = self.detect_tftp_ip();
 
-        let rx = serialport::new(&self.config.serial, self.config.baud_rate as _)
+        info!(
+            "Opening serial port: {} @ {}",
+            self.config.serial, self.baud_rate
+        );
+
+        if let Some(ref ip) = ip_string {
+            info!("TFTP server IP: {}", ip);
+        }
+
+        let rx = serialport::new(&self.config.serial, self.baud_rate as _)
             .timeout(Duration::from_millis(200))
             .open()
             .map_err(|e| anyhow!("Failed to open serial port: {e}"))?;
@@ -281,7 +314,7 @@ impl Runner {
             Ok(uboot)
         });
 
-        if let Some(cmd) = self.config.reset_cmd.clone() {
+        if let Some(cmd) = self.config.board_reset_cmd.clone() {
             info!("Executing board reset command: {}", cmd);
             self.ctx.shell_run_cmd(&cmd)?;
         }
