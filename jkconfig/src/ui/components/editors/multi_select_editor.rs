@@ -71,7 +71,11 @@ pub fn show_multi_select(s: &mut Cursive, title: &str, multi_select: &MultiSelec
             .button("OK", on_ok)
             .button("Cancel", handle_back),
         )
-        .on_event(Key::Enter, toggle_selection),
+        .on_event(Key::Enter, toggle_selection)
+        .on_event(Key::Right, |s| {
+            // 使用Tab事件来移动焦点到下一个元素（按钮）
+            s.on_event(cursive::event::Event::Key(cursive::event::Key::Tab));
+        }),
     );
 }
 

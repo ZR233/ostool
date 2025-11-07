@@ -55,7 +55,11 @@ pub fn show_depend_features_editor(
             .button("OK", on_depend_features_ok)
             .button("Cancel", handle_back),
         )
-        .on_event(Key::Enter, on_depend_feature_select),
+        .on_event(Key::Enter, on_depend_feature_select)
+        .on_event(Key::Right, |s| {
+            // 使用Tab事件来移动焦点到下一个元素（按钮）
+            s.on_event(cursive::event::Event::Key(cursive::event::Key::Tab));
+        }),
     );
 }
 
