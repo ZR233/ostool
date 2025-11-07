@@ -71,10 +71,27 @@ fn on_depend_select(s: &mut Cursive) {
         let mut depend_features_map = HashMap::new();
         
         if let Some(app) = s.user_data::<AppData>() {
-            if let Some((_, temp_value)) = &app.temp_data {
-                // 尝试从temp_data中获取保存的依赖项features映射
-                if let Ok(map) = serde_json::from_value::<HashMap<String, Vec<String>>>(temp_value.clone()) {
-                    depend_features_map = map;
+            if let Some((key, temp_value)) = &app.temp_data {
+                // 检查是否是依赖项features映射数据
+                if key == "depend_features_map" {
+                    // 尝试从temp_data中获取保存的依赖项features映射
+                    if let Ok(map) = serde_json::from_value::<HashMap<String, Vec<String>>>(temp_value.clone()) {
+                        depend_features_map = map;
+                    }
+                }
+            }
+        }
+
+        // 如果没有从temp_data获取到映射，尝试从depend_features_callback获取
+        if depend_features_map.is_empty() {
+            if let Some(app) = s.user_data::<AppData>() {
+                if let Some(callback) = &app.depend_features_callback {
+                    let get_depend_features = || callback();
+                    if let Ok(features_map) =
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(get_depend_features))
+                    {
+                        depend_features_map = features_map;
+                    }
                 }
             }
         }
@@ -89,6 +106,9 @@ fn on_depend_select(s: &mut Cursive) {
             
             // 保存当前选中的依赖项名称，以便在features选择后更新
             if let Some(app) = s.user_data::<AppData>() {
+                // 保存当前依赖项名称，但保留原始的depend_features_map
+                // 在multi_select关闭后需要恢复原始数据
+                // 这将在multi_select的on_ok中处理
                 app.temp_data = Some((
                     "current_depend".to_string(),
                     serde_json::to_value((**selection_name).clone()).unwrap(),
@@ -103,5 +123,9 @@ fn on_depend_select(s: &mut Cursive) {
 
 /// 确认依赖项选择
 fn on_depend_ok(s: &mut Cursive) {
+    // 清理临时数据
+    if let Some(app) = s.user_data::<AppData>() {
+        app.temp_data = None;
+    }
     handle_back(s);
 }

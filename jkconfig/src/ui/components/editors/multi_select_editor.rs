@@ -145,31 +145,38 @@ fn on_ok(s: &mut Cursive) {
     let app = s.user_data::<AppData>().unwrap();
 
     // 获取保存的多选择数据
-    if let Some((_, temp_value)) = app.temp_data.take() {
-        // 尝试解析保存的数据：(selected_indices, variants, current_key)
-        if let Ok((selected_indices, variants, current_key)) = 
-            serde_json::from_value::<(Vec<usize>, Vec<String>, String)>(temp_value)
-        {
-            // 根据索引获取选中的选项文本
-            let selected_variants: Vec<String> = selected_indices
-                .iter()
-                .filter_map(|&idx| variants.get(idx).cloned())
-                .collect();
+    if let Some((key, temp_value)) = app.temp_data.take() {
+        // 检查是否是当前依赖项的key
+        if key == "current_depend" {
+            // 这是依赖项选择的情况，需要恢复原始的depend_features_map
+            // 但由于我们没有保存原始数据，我们需要重新获取
+            // 这将在下次打开depend_select或depend_features时处理
+        } else {
+            // 尝试解析保存的数据：(selected_indices, variants, current_key)
+            if let Ok((selected_indices, variants, current_key)) = 
+                serde_json::from_value::<(Vec<usize>, Vec<String>, String)>(temp_value)
+            {
+                // 根据索引获取选中的选项文本
+                let selected_variants: Vec<String> = selected_indices
+                    .iter()
+                    .filter_map(|&idx| variants.get(idx).cloned())
+                    .collect();
 
-            // 查找并更新对应的ArrayItem
-            if let Some(ElementType::Item(item_mut)) = app.root.get_mut_by_key(&current_key) {
-                if let ItemType::Array(array_mut) = &mut item_mut.item_type {
-                    // 更新ArrayItem的values列表，只包含选中的选项
-                    array_mut.values = selected_variants.clone();
-                    app.needs_save = true;
-                    info!(
-                        "Multi select confirmed with {} items selected for key: {}",
-                        selected_variants.len(),
-                        current_key
-                    );
+                // 查找并更新对应的ArrayItem
+                if let Some(ElementType::Item(item_mut)) = app.root.get_mut_by_key(&current_key) {
+                    if let ItemType::Array(array_mut) = &mut item_mut.item_type {
+                        // 更新ArrayItem的values列表，只包含选中的选项
+                        array_mut.values = selected_variants.clone();
+                        app.needs_save = true;
+                        info!(
+                            "Multi select confirmed with {} items selected for key: {}",
+                            selected_variants.len(),
+                            current_key
+                        );
+                    }
+                } else {
+                    info!("Failed to find item with key: {}", current_key);
                 }
-            } else {
-                info!("Failed to find item with key: {}", current_key);
             }
         }
     }
