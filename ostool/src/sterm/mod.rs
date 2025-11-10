@@ -55,11 +55,11 @@ impl SerialTerm {
 
     pub async fn run(&mut self) -> anyhow::Result<()> {
         // 启用raw模式
-        enable_raw_mode()?;
+
         // execute!(io::stdout(), Clear(ClearType::All))?;
 
         // 设置清理函数
-        let cleanup_needed = true;
+        let cleanup_needed = enable_raw_mode().is_ok();
 
         let result = self.run_terminal().await;
 

@@ -16,14 +16,12 @@ use jkconfig::{
 use object::{Architecture, Object};
 use tokio::fs;
 
-use crate::{
-    build::config::BuildConfig,
-    utils::{ShellRunner, prepare_config},
-};
+use crate::{build::config::BuildConfig, utils::prepare_config};
 
 #[derive(Default, Clone)]
 pub struct AppContext {
-    pub workdir: PathBuf,
+    pub workspace_folder: PathBuf,
+    pub manifest_dir: PathBuf,
     pub debug: bool,
     pub elf_path: Option<PathBuf>,
     pub bin_path: Option<PathBuf>,
@@ -34,12 +32,10 @@ pub struct AppContext {
 
 impl AppContext {
     pub fn shell_run_cmd(&self, cmd: &str) -> anyhow::Result<()> {
-        let mut parts = cmd.split_whitespace();
-        let mut command = self.command(parts.next().unwrap());
-        command.current_dir(&self.workdir);
-        for arg in parts {
-            command.arg(arg);
-        }
+        let mut command = self.command("sh");
+        command.arg("-c");
+        command.arg(cmd);
+
         if let Some(elf) = &self.elf_path {
             command.env("KERNEL_ELF", elf.display().to_string());
         }
@@ -203,15 +199,16 @@ impl AppContext {
         Ok(true)
     }
 
-    pub fn command(&self, program: &str) -> Command {
-        let mut command = Command::new(program);
-        command.current_dir(&self.workdir);
-        command
+    pub fn command(&self, program: &str) -> crate::utils::Command {
+        let this = self.clone();
+        crate::utils::Command::new(program, &self.manifest_dir, move |s| {
+            this.value_replace_with_var(s)
+        })
     }
 
     pub fn metadata(&self) -> anyhow::Result<Metadata> {
         let res = cargo_metadata::MetadataCommand::new()
-            .current_dir(&self.workdir)
+            .current_dir(&self.manifest_dir)
             .no_deps()
             .exec()?;
         Ok(res)
@@ -441,5 +438,16 @@ impl AppContext {
             Some(cfg) => matches!(cfg.system, crate::build::config::BuildSystem::Cargo(_)),
             None => false,
         }
+    }
+
+    pub fn value_replace_with_var<S>(&self, value: S) -> String
+    where
+        S: AsRef<std::ffi::OsStr>,
+    {
+        let raw = value.as_ref().to_string_lossy();
+        raw.replace(
+            "${workspaceFolder}",
+            format!("{}", self.workspace_folder.display()).as_ref(),
+        )
     }
 }

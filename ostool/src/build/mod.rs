@@ -1,76 +1,39 @@
 use std::path::PathBuf;
 
-use jkconfig::data::app_data::default_schema_by_init;
-use tokio::fs;
+use colored::Colorize;
 
-use crate::{ctx::AppContext, utils::ShellRunner};
+use crate::{
+    build::config::{Cargo, Custom},
+    ctx::AppContext,
+};
 
 pub mod config;
 
-pub async fn run_build(
-    ctx: AppContext,
-    config_path: Option<PathBuf>,
-) -> anyhow::Result<AppContext> {
-    // Build logic will be implemented here
-    let config_path = match config_path {
-        Some(path) => path,
-        None => ctx.workdir.join(".build.toml"),
-    };
-
-    let schema_path = default_schema_by_init(&config_path);
-
-    let schema = schemars::schema_for!(config::BuildConfig);
-    let schema_json = serde_json::to_value(&schema)?;
-    let schema_content = serde_json::to_string_pretty(&schema_json)?;
-    fs::write(&schema_path, schema_content).await?;
-
-    // 初始化AppData
-    // let app_data = AppData::new(Some(&config_path), Some(schema_path))?;
-
-    let config_content = fs::read_to_string(&config_path)
-        .await
-        .map_err(|_| anyhow!("can not open config file: {}", config_path.display()))?;
-
-    let build_config: config::BuildConfig = toml::from_str(&config_content)?;
-
-    println!("Build configuration: {:?}", build_config);
-
-    match build_config.system {
-        config::BuildSystem::Custom(custom) => {
-            let ctx = CtxCustom {
-                ctx,
-                config: custom,
-            };
-            ctx.run().await
+impl AppContext {
+    pub async fn build_with_config(&mut self, config: &config::BuildConfig) -> anyhow::Result<()> {
+        match &config.system {
+            config::BuildSystem::Custom(custom) => self.build_custrom(custom)?,
+            config::BuildSystem::Cargo(cargo) => {
+                self.build_cargo(cargo).await?;
+            }
         }
-        config::BuildSystem::Cargo(cargo) => {
-            let ctx = CtxCargo { ctx, config: cargo };
-            ctx.run().await
-        }
+        Ok(())
     }
-}
 
-struct CtxCustom {
-    ctx: AppContext,
-    config: config::Custom,
-}
-
-impl CtxCustom {
-    async fn run(self) -> anyhow::Result<AppContext> {
-        self.ctx.shell_run_cmd(&self.config.build_cmd)?;
-        Ok(self.ctx)
+    pub async fn build(&mut self, config_path: Option<PathBuf>) -> anyhow::Result<()> {
+        let build_config = self.perpare_build_config(config_path).await?;
+        println!("Build configuration: {:?}", build_config);
+        self.build_with_config(&build_config).await
     }
-}
 
-struct CtxCargo {
-    ctx: AppContext,
-    config: config::Cargo,
-}
+    pub fn build_custrom(&mut self, config: &Custom) -> anyhow::Result<()> {
+        self.shell_run_cmd(&config.build_cmd)?;
+        Ok(())
+    }
 
-impl CtxCargo {
-    async fn run(mut self) -> anyhow::Result<AppContext> {
-        for cmd in &self.config.pre_build_cmds {
-            self.ctx.shell_run_cmd(cmd)?;
+    pub async fn build_cargo(&mut self, config: &Cargo) -> anyhow::Result<()> {
+        for cmd in &config.pre_build_cmds {
+            self.shell_run_cmd(cmd)?;
         }
 
         let mut features = self.config.features.self_features.clone();
@@ -78,62 +41,64 @@ impl CtxCargo {
             features.push(log_level.to_string());
         }
 
-        let mut cmd = self.ctx.command("cargo");
+        let mut cmd = self.command("cargo");
         cmd.arg("build");
 
-        if let Some(extra_config_path) = self.cargo_extra_config().await? {
+        for (k, v) in &config.env {
+            cmd.env(k, v);
+        }
+
+        if let Some(extra_config_path) = self.cargo_extra_config(config).await? {
             cmd.arg("--config");
             cmd.arg(extra_config_path);
         }
 
         cmd.arg("-p");
-        cmd.arg(&self.config.package);
+        cmd.arg(&config.package);
         cmd.arg("--target");
-        cmd.arg(&self.config.target);
+        cmd.arg(&config.target);
         cmd.arg("-Z");
         cmd.arg("unstable-options");
         if !features.is_empty() {
             cmd.arg("--features");
             cmd.arg(features.join(","));
         }
-        for arg in &self.config.args {
+        for arg in &config.args {
             cmd.arg(arg);
         }
-        if !self.ctx.debug {
+        if !self.debug {
             cmd.arg("--release");
         }
-
+        for (k, v) in cmd.get_envs() {
+            println!("{}", format!("{k:?}={v:?}").cyan());
+        }
         cmd.run()?;
 
         let elf_path = self
-            .ctx
-            .workdir
+            .manifest_dir
             .join("target")
-            .join(&self.config.target)
-            .join(if self.ctx.debug { "debug" } else { "release" })
-            .join(&self.config.package);
+            .join(&config.target)
+            .join(if self.debug { "debug" } else { "release" })
+            .join(&config.package);
 
-        self.ctx.set_elf_path(elf_path.clone()).await;
+        self.set_elf_path(elf_path.clone()).await;
 
-        if self.config.to_bin {
-            self.ctx.objcopy_output_bin()?;
+        if config.to_bin {
+            self.objcopy_output_bin()?;
         }
 
-        for cmd in &self.config.post_build_cmds {
-            self.ctx.shell_run_cmd(cmd)?;
+        for cmd in &config.post_build_cmds {
+            self.shell_run_cmd(cmd)?;
         }
 
-        Ok(self.ctx)
+        Ok(())
     }
 
-    fn log_level_feature(&self) -> Option<String> {
-        let level = self.config.log.clone()?;
+    fn log_level_feature(&self, config: &Cargo) -> Option<String> {
+        let level = config.log.clone()?;
 
-        let meta = self.ctx.metadata().ok()?;
-        let pkg = meta
-            .packages
-            .iter()
-            .find(|p| p.name == self.config.package)?;
+        let meta = self.metadata().ok()?;
+        let pkg = meta.packages.iter().find(|p| p.name == config.package)?;
         let mut has_log = false;
         for dep in &pkg.dependencies {
             if dep.name == "log" {
@@ -144,7 +109,7 @@ impl CtxCargo {
         if has_log {
             Some(format!(
                 "log/{}max_level_{}",
-                if self.ctx.debug { "" } else { "release_" },
+                if self.debug { "" } else { "release_" },
                 format!("{:?}", level).to_lowercase()
             ))
         } else {
@@ -152,8 +117,8 @@ impl CtxCargo {
         }
     }
 
-    async fn cargo_extra_config(&self) -> anyhow::Result<Option<String>> {
-        let s = match self.config.extra_config.as_ref() {
+    async fn cargo_extra_config(&self, config: &Cargo) -> anyhow::Result<Option<String>> {
+        let s = match config.extra_config.as_ref() {
             Some(s) => s,
             None => return Ok(None),
         };

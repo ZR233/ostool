@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -22,8 +24,10 @@ pub struct Custom {
     pub to_bin: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct Cargo {
+    /// environment variables
+    pub env: HashMap<String, String>,
     /// target triple
     pub target: String,
     /// package name

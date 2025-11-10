@@ -1,6 +1,6 @@
 use std::{
     ffi::OsString,
-    io::{BufRead, BufReader},
+    io::{BufReader, Read},
     path::PathBuf,
     process::{Child, Stdio},
 };
@@ -18,7 +18,6 @@ use tokio::fs;
 use crate::{
     ctx::AppContext,
     run::ovmf_prebuilt::{Arch, FileType, Prebuilt, Source},
-    utils::ShellRunner,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Default)]
@@ -42,7 +41,7 @@ pub async fn run_qemu(ctx: AppContext, args: RunQemuArgs) -> anyhow::Result<()> 
     // Build logic will be implemented here
     let config_path = match args.qemu_config.clone() {
         Some(path) => path,
-        None => ctx.workdir.join(".qemu.toml"),
+        None => ctx.manifest_dir.join(".qemu.toml"),
     };
 
     let schema_path = default_schema_by_init(&config_path);
@@ -115,7 +114,7 @@ impl QemuRunner {
 
         let arch = self.detect_arch()?;
 
-        let mut machine = "virt".to_string();
+        let machine = "virt".to_string();
 
         let mut need_machine = true;
 
@@ -144,6 +143,7 @@ impl QemuRunner {
         }
 
         let mut cmd = self.ctx.command(&qemu_executable);
+
         for arg in &self.config.args {
             cmd.arg(arg);
         }
@@ -178,15 +178,27 @@ impl QemuRunner {
         let mut qemu_result: Option<anyhow::Result<()>> = None;
 
         let stdout = BufReader::new(child.stdout.take().unwrap());
-        for line in stdout.lines() {
-            let line = match line {
-                Ok(l) => l,
+        let mut line_buf = Vec::new();
+
+        for byte in stdout.bytes() {
+            let byte = match byte {
+                Ok(b) => b,
                 Err(e) => {
                     println!("stdout: {:?}", e);
                     continue;
                 }
             };
-            self.on_qemu_output(&line, &mut child, &mut qemu_result)?;
+            let _ = std::io::stdout().write_all(&[byte]);
+            let _ = std::io::stdout().flush();
+
+            line_buf.push(byte);
+            if byte != b'\n' {
+                continue;
+            }
+
+            let line = String::from_utf8_lossy(&line_buf).to_string();
+
+            self.check_output(&line, &mut child, &mut qemu_result)?;
         }
 
         let out = child.wait_with_output()?;
@@ -246,17 +258,17 @@ impl QemuRunner {
         Ok(bios_path)
     }
 
-    fn on_qemu_output(
+    fn check_output(
         &self,
-        line: &str,
+        out: &str,
         child: &mut Child,
         res: &mut Option<anyhow::Result<()>>,
     ) -> anyhow::Result<()> {
-        // Process QEMU output line here
-        println!("{}", line);
+        // // Process QEMU output line here
+        // println!("{}", line);
 
         for regex in &self.fail_regex {
-            if regex.is_match(line) {
+            if regex.is_match(out) {
                 *res = Some(Err(anyhow!(
                     "Detected failure pattern '{}' in QEMU output.",
                     regex.as_str()
@@ -268,7 +280,7 @@ impl QemuRunner {
         }
 
         for regex in &self.success_regex {
-            if regex.is_match(line) {
+            if regex.is_match(out) {
                 *res = Some(Ok(()));
                 println!(
                     "{}",

@@ -5,6 +5,7 @@ use std::{
     time::Duration,
 };
 
+use anyhow::Context;
 use byte_unit::Byte;
 use colored::Colorize;
 use fitimage::{ComponentConfig, FitImageBuilder, FitImageConfig};
@@ -17,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use tokio::fs;
 use uboot_shell::UbootShell;
 
-use crate::{ctx::AppContext, run::tftp, sterm::SerialTerm};
+use crate::{ctx::AppContext, run::tftp, sterm::SerialTerm, utils::replace_env_placeholders};
 
 /// FIT image 生成相关的错误消息常量
 mod errors {
@@ -33,16 +34,19 @@ pub struct UbootConfig {
     /// Serial console device
     /// e.g., /dev/ttyUSB0 on linux, COM3 on Windows
     pub serial: String,
-    pub baud_rate: i64,
+    pub baud_rate: String,
     pub dtb_file: Option<String>,
     /// Kernel load address
     /// if not specified, use U-Boot env variable 'loadaddr'
     pub kernel_load_addr: Option<String>,
     /// TFTP boot configuration
     pub net: Option<Net>,
-    /// U-Boot reset command
+    /// Board reset command
     /// shell command to reset the board
-    pub reset_cmd: Option<String>,
+    pub board_reset_cmd: Option<String>,
+    /// Board power off command
+    /// shell command to power off the board
+    pub board_power_off_cmd: Option<String>,
     pub success_regex: Vec<String>,
     pub fail_regex: Vec<String>,
 }
@@ -75,7 +79,7 @@ pub async fn run_uboot(ctx: AppContext, args: RunUbootArgs) -> anyhow::Result<()
     // Build logic will be implemented here
     let config_path = match args.config.clone() {
         Some(path) => path,
-        None => ctx.workdir.join(".uboot.toml"),
+        None => ctx.workspace_folder.join(".uboot.toml"),
     };
 
     let schema_path = default_schema_by_init(&config_path);
@@ -89,15 +93,19 @@ pub async fn run_uboot(ctx: AppContext, args: RunUbootArgs) -> anyhow::Result<()
     // let app_data = AppData::new(Some(&config_path), Some(schema_path))?;
 
     let config = if config_path.exists() {
-        let config_content = fs::read_to_string(&config_path)
+        println!("Using U-Boot config: {}", config_path.display());
+        let mut config_content = fs::read_to_string(&config_path)
             .await
             .map_err(|_| anyhow!("can not open config file: {}", config_path.display()))?;
+
+        config_content = replace_env_placeholders(&config_content)?;
+
         let config: UbootConfig = toml::from_str(&config_content)?;
         config
     } else {
         let config = UbootConfig {
             serial: "/dev/ttyUSB0".to_string(),
-            baud_rate: 115200,
+            baud_rate: "115200".into(),
             ..Default::default()
         };
 
@@ -105,9 +113,15 @@ pub async fn run_uboot(ctx: AppContext, args: RunUbootArgs) -> anyhow::Result<()
         config
     };
 
+    let baud_rate = config
+        .baud_rate
+        .parse::<u32>()
+        .with_context(|| anyhow!("baud_rate is not valid int"))?;
+
     let mut runner = Runner {
         ctx,
         config,
+        baud_rate,
         success_regex: vec![],
         fail_regex: vec![],
     };
@@ -120,6 +134,7 @@ struct Runner {
     config: UbootConfig,
     success_regex: Vec<regex::Regex>,
     fail_regex: Vec<regex::Regex>,
+    baud_rate: u32,
 }
 
 impl Runner {
@@ -253,6 +268,17 @@ impl Runner {
     }
 
     async fn run(&mut self) -> anyhow::Result<()> {
+        let res = self._run().await;
+        if let Some(ref cmd) = self.config.board_power_off_cmd
+            && !cmd.trim().is_empty()
+        {
+            let _ = self.ctx.shell_run_cmd(cmd);
+            info!("Board powered off");
+        }
+        res
+    }
+
+    async fn _run(&mut self) -> anyhow::Result<()> {
         self.preper_regex()?;
         self.ctx.objcopy_output_bin()?;
 
@@ -261,13 +287,20 @@ impl Runner {
         info!("Starting U-Boot runner...");
 
         info!("kernel from: {}", kernel.display());
-        if self.config.net.is_some() {
-            tftp::run_tftp_server(&self.ctx)?;
-        }
 
         let ip_string = self.detect_tftp_ip();
 
-        let rx = serialport::new(&self.config.serial, self.config.baud_rate as _)
+        if let Some(ip) = ip_string.as_ref() {
+            info!("TFTP server IP: {}", ip);
+            tftp::run_tftp_server(&self.ctx)?;
+        }
+
+        info!(
+            "Opening serial port: {} @ {}",
+            self.config.serial, self.baud_rate
+        );
+
+        let rx = serialport::new(&self.config.serial, self.baud_rate as _)
             .timeout(Duration::from_millis(200))
             .open()
             .map_err(|e| anyhow!("Failed to open serial port: {e}"))?;
@@ -281,12 +314,16 @@ impl Runner {
             Ok(uboot)
         });
 
-        if let Some(cmd) = self.config.reset_cmd.clone() {
-            info!("Executing board reset command: {}", cmd);
+        if let Some(cmd) = self.config.board_reset_cmd.clone()
+            && !cmd.trim().is_empty()
+        {
             self.ctx.shell_run_cmd(&cmd)?;
         }
 
+        let mut net_ok = false;
+
         let mut uboot = handle.join().unwrap()?;
+        uboot.set_env("autoload", "yes")?;
 
         if let Some(ref ip) = ip_string
             && let Ok(output) = uboot.cmd("net list")
@@ -299,13 +336,8 @@ impl Runner {
 
             info!("Board network ok");
 
-            if let Some(ref board_ip) = self.config.net.as_ref().unwrap().board_ip {
-                uboot.set_env("ipaddr", board_ip)?;
-            } else {
-                uboot.cmd("dhcp")?;
-            }
-
             uboot.set_env("serverip", ip.clone())?;
+            net_ok = true;
         }
 
         let mut fdt_load_addr = None;
@@ -319,30 +351,34 @@ impl Runner {
             ramfs_load_addr = Some(addr as u64);
         }
 
-        let loadaddr = if let Ok(addr) = uboot.env_int("loadaddr") {
-            info!("Found $loadaddr: {addr:#x}");
-            addr as u64
-        } else if let Ok(addr) = uboot.env_int("kernel_comp_addr_r") {
-            uboot.set_env("loadaddr", format!("{addr:#x}"))?;
-            info!("Set $loadaddr to kernel_comp_addr_r: {addr:#x}");
-            addr as u64
-        } else {
-            let addr = uboot.env_int("kernel_addr_c")? as u64;
-            uboot.set_env("loadaddr", format!("{addr:#x}"))?;
-            info!("Set $loadaddr to kernel_addr_c: {addr:#x}");
-            addr
-        };
-
         let kernel_entry = if let Some(entry) = self.config.kernel_load_addr_int() {
             info!("Using configured kernel load address: {entry:#x}");
             entry
+        } else if let Ok(entry) = uboot.env_int("kernel_addr_r") {
+            info!("Using $kernel_addr_r as kernel entry: {entry:#x}");
+            entry as u64
+        } else if let Ok(entry) = uboot.env_int("loadaddr") {
+            info!("Using $loadaddr as kernel entry: {entry:#x}");
+            entry as u64
         } else {
-            uboot
-                .env_int("kernel_addr_r")
-                .expect("kernel_addr_r not found") as u64
+            return Err(anyhow!("Cannot determine kernel entry address"));
         };
 
-        info!("fitimage loadaddr: {loadaddr:#x}");
+        let fit_loadaddr = if let Ok(addr) = uboot.env_int("kernel_comp_addr_r") {
+            info!("image load to kernel_comp_addr_r: {addr:#x}");
+            addr as u64
+        } else if let Ok(addr) = uboot.env_int("kernel_addr_c") {
+            info!("image load to kernel_addr_c: {addr:#x}");
+            addr as u64
+        } else {
+            let addr = (kernel_entry + 0x02000000) & 0xffff_ffff_ff00_0000;
+            info!("No kernel_comp_addr_r or kernel_addr_c, use calculated address: {addr:#x}");
+            addr
+        };
+
+        uboot.set_env("loadaddr", format!("{:#x}", fit_loadaddr))?;
+
+        info!("fitimage loadaddr: {fit_loadaddr:#x}");
         info!("kernel entry: {kernel_entry:#x}");
         let dtb = self.config.dtb_file.clone();
         if let Some(ref dtb_file) = dtb {
@@ -361,18 +397,34 @@ impl Runner {
             )
             .await?;
 
-        if self.config.net.is_some() {
-            info!("TFTP upload FIT image to board...");
-            let filename = fitimage.file_name().unwrap().to_str().unwrap();
+        let fitname = fitimage.file_name().unwrap().to_str().unwrap();
 
-            let tftp_cmd = format!("tftp {filename}");
-            uboot.cmd(&tftp_cmd)?;
-            uboot.cmd_without_reply("bootm")?;
-        } else {
-            info!("No TFTP config, using loady to upload FIT image...");
-            Self::uboot_loady(&mut uboot, loadaddr as usize, fitimage);
-            uboot.cmd_without_reply("bootm")?;
-        }
+        let bootcmd =
+            if let Some(ref board_ip) = self.config.net.as_ref().and_then(|e| e.board_ip.clone()) {
+                uboot.set_env("ipaddr", board_ip)?;
+                format!("tftp {fitname} && bootm",)
+            } else if net_ok {
+                format!("dhcp {fitname} && bootm",)
+            } else {
+                info!("No TFTP config, using loady to upload FIT image...");
+                Self::uboot_loady(&mut uboot, fit_loadaddr as usize, fitimage);
+                "bootm".to_string()
+            };
+
+        info!("Booting kernel with command: {}", bootcmd);
+        uboot.cmd_without_reply(&bootcmd)?;
+        // if self.config.net.is_some() {
+        //     info!("TFTP upload FIT image to board...");
+        //     let filename = fitimage.file_name().unwrap().to_str().unwrap();
+
+        //     let tftp_cmd = format!("tftp {filename}");
+        //     uboot.cmd(&tftp_cmd)?;
+        //     uboot.cmd_without_reply("bootm")?;
+        // } else {
+        //     info!("No TFTP config, using loady to upload FIT image...");
+        //     Self::uboot_loady(&mut uboot, fit_loadaddr as usize, fitimage);
+        //     uboot.cmd_without_reply("bootm")?;
+        // }
 
         let tx = uboot.tx.take().unwrap();
         let rx = uboot.rx.take().unwrap();
@@ -454,8 +506,8 @@ impl Runner {
             }
         }
 
-        if ip_string.is_empty() {
-            panic!("Cannot detect IP address for interface: {}", net.interface);
+        if ip_string.trim().is_empty() {
+            return None;
         }
 
         info!("TFTP : {}", ip_string);
