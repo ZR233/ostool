@@ -1,3 +1,12 @@
+use crate::{
+    data::{
+        AppData,
+        item::{EnumItem, ItemType},
+        menu::Menu,
+        types::ElementType,
+    },
+    ui::{components::icon::ItemDisplay, handle_edit},
+};
 use cursive::{
     Cursive,
     align::HAlign,
@@ -8,13 +17,11 @@ use cursive::{
     views::{Dialog, DummyView, LinearLayout, OnEventView, Panel, SelectView, TextView},
 };
 use log::info;
-
-use crate::{
-    data::{AppData, item::ItemType, menu::Menu, types::ElementType},
-    ui::{components::icon::ItemDisplay, handle_edit},
-};
+// 移除对ostool的依赖导入
 
 use super::editors::*;
+use crate::ui::components::editors::depend_features_editor::show_depend_features_editor;
+use crate::ui::components::editors::multi_select_editor::{create_multi_select_from_array_item, show_multi_select};
 
 /// 创建菜单视图
 pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl IntoBoxedView {
@@ -617,6 +624,12 @@ pub fn enter_menu(s: &mut Cursive, menu: &Menu) {
 fn enter_elem(s: &mut Cursive, elem: &ElementType) {
     let key = elem.key();
     info!("Entering key: {}, type {}", key, elem.struct_name);
+    let mut path = String::new();
+
+    if let Some(app) = s.user_data::<AppData>() {
+        path = app.key_string();
+    }
+
     match elem {
         ElementType::Menu(menu) => {
             info!("Handling Menu: {}", menu.title);
@@ -672,7 +685,90 @@ fn enter_elem(s: &mut Cursive, elem: &ElementType) {
                     show_enum_select(s, &item.base.title, enum_item);
                 }
                 ItemType::Array(array_item) => {
-                    show_array_edit(s, &item.base.key(), &item.base.title, &array_item.values);
+                    info!("path = {}", path);
+                    if path == "system.features.self_features" {
+                        let app_data = s.user_data::<AppData>().unwrap();
+                        // 获取variants列表
+                        let mut variants = array_item.values.clone();
+
+                        // 如果设置了features_callback，则使用它获取features
+                        if let Some(callback) = &app_data.features_callback {
+                            // 创建一个可以安全展开的闭包
+                            let get_features = || callback();
+                            if let Ok(features) =
+                                std::panic::catch_unwind(std::panic::AssertUnwindSafe(get_features))
+                            {
+                                info!("features_callback returned: {:?}", features);
+                                // 合并features，确保没有重复项
+                                for feature in features {
+                                    if !variants.contains(&feature) {
+                                        variants.push(feature);
+                                    }
+                                }
+                            }
+                        }
+
+                        // 创建一个临时的EnumItem用于显示选择界面
+                        let enum_item = EnumItem {
+                            variants,
+                            value: None,
+                            default: None,
+                        };
+
+                        // 保存原始的ArrayItem和键，以便在选择后更新
+                        s.user_data::<AppData>().unwrap().temp_data = Some((
+                            item.base.key().to_string(),
+                            serde_json::to_value(array_item.clone()).unwrap(),
+                        ));
+                        info!("show_enum_select with variants: {:?}", enum_item.variants);
+                        // 使用已导入的show_multi_select函数
+
+                        // 使用create_multi_select_from_array_item函数创建MultiSelectItem
+                        // 这样可以正确初始化已选中的索引，保持之前的选择状态
+                        let multi_select_item = create_multi_select_from_array_item(
+                            array_item, 
+                            &enum_item.variants
+                        );
+
+                        show_multi_select(s, &item.base.title, &multi_select_item);
+                    } else if path == "system.features.depend_features" {
+                        // 处理依赖项features
+                        let app_data = s.user_data::<AppData>().unwrap();
+                        info!("Checking for depend_features_callback");
+                        
+                        // 获取依赖项列表
+                        let mut depend_map = std::collections::HashMap::new();
+                        
+                        // 如果设置了depend_features_callback，则使用它获取依赖项及其features
+                        if let Some(callback) = &app_data.depend_features_callback {
+                            info!("depend_features_callback is set, calling it");
+                            // 创建一个可以安全展开的闭包
+                            let get_depend_features = || callback();
+                            if let Ok(features_map) =
+                                std::panic::catch_unwind(std::panic::AssertUnwindSafe(get_depend_features))
+                            {
+                                info!("depend_features_callback returned: {:?}", features_map);
+                                depend_map = features_map;
+                            } else {
+                                info!("depend_features_callback panicked");
+                            }
+                        } else {
+                            info!("depend_features_callback is not set");
+                        }
+                        
+                        // 如果没有获取到依赖项，添加一些默认值
+                        if depend_map.is_empty() {
+                            depend_map.insert("default-dependency".to_string(), vec!["default".to_string()]);
+                        }
+                        
+                        // 创建依赖项列表
+                        let depend_names: Vec<String> = depend_map.keys().cloned().collect();
+                        
+                        // 显示依赖项features编辑器
+                        show_depend_features_editor(s, &item.base.title, &depend_names, &depend_map);
+                    } else {
+                        show_array_edit(s, &item.base.key(), &item.base.title, &array_item.values);
+                    }
                 }
             }
         }

@@ -65,11 +65,11 @@ pub struct UbootArgs {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    env_logger::builder()
-        .format_module_path(false)
-        .filter_level(log::LevelFilter::Info)
-        .init();
-
+    // env_logger::builder()
+    //     .format_module_path(false)
+    //     .filter_level(log::LevelFilter::Info)
+    //     .init();
+    
     let cli = Cli::parse();
 
     let pwd = current_dir()?;
@@ -138,7 +138,7 @@ async fn main() -> Result<()> {
                 }
                 build::config::BuildSystem::Custom(custom_cfg) => {
                     ctx.shell_run_cmd(&custom_cfg.build_cmd)?;
-                    ctx.set_elf_path(custom_cfg.elf_path.into()).await;
+                    ctx.set_elf_path(custom_cfg.elf_path.clone().into()).await;
                     info!(
                         "ELF {:?}: {}",
                         ctx.arch,

@@ -1,6 +1,8 @@
 use std::{
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
+    sync::Arc,
     time::SystemTime,
 };
 
@@ -14,6 +16,11 @@ pub struct AppData {
     pub current_key: Vec<String>,
     pub needs_save: bool,
     pub config: PathBuf,
+    pub temp_data: Option<(String, serde_json::Value)>,
+    /// 用于获取features的回调函数
+    pub features_callback: Option<Arc<dyn Fn() -> Vec<String> + Send + Sync>>,
+    /// 用于获取依赖项及其features的回调函数
+    pub depend_features_callback: Option<Arc<dyn Fn() -> HashMap<String, Vec<String>> + Send + Sync>>,
 }
 
 const DEFAULT_CONFIG_PATH: &str = ".config.toml";
@@ -85,6 +92,9 @@ impl AppData {
             current_key: Vec::new(),
             needs_save: false,
             config: init_value_path,
+            temp_data: None,
+            features_callback: None,
+            depend_features_callback: None,
         })
     }
 

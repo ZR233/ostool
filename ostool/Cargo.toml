@@ -24,6 +24,7 @@ cargo_metadata = "0.23"
 clap = {workspace = true, features = ["derive"]}
 colored = "3"
 crossterm = {workspace = true}
+cursive = {workspace = true, features = ["crossterm-backend"]}
 env_logger = {workspace = true}
 indicatif = "0.18"
 jkconfig = {version = "0.1", path = "../jkconfig"}

@@ -1,8 +1,18 @@
-use std::path::PathBuf;
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use anyhow::anyhow;
 use cargo_metadata::Metadata;
 use colored::Colorize;
+use cursive::{Cursive, CursiveExt, event::Key};
+use jkconfig::{
+    data::app_data::{AppData, default_schema_by_init},
+    ui::{components::menu::menu_view, handle_back, handle_quit, handle_save},
+};
+
 use object::{Architecture, Object};
 use tokio::fs;
 
@@ -33,6 +43,160 @@ impl AppContext {
         command.run()?;
 
         Ok(())
+    }
+
+    // Helper function to launch jkconfig UI
+    pub fn launch_jkconfig_ui(config_path: &Path, schema_path: &Path) -> anyhow::Result<bool> {
+        // 创建AppData实例
+        let mut app_data = AppData::new(Some(config_path), Some(schema_path))?;
+
+        // 设置features_callback以获取本地仓库的features
+        app_data.features_callback = Some(std::sync::Arc::new(|| {
+            let mut features = Vec::new();
+
+            // 尝试从当前目录获取cargo项目的features，类似metadata方法的实现
+            if let Ok(metadata) = cargo_metadata::MetadataCommand::new().no_deps().exec() {
+                // 获取workspace根目录
+                let workspace_root = metadata.workspace_root.clone();
+
+                // 查找当前仓库的包（manifest_path与workspace根目录匹配的包）
+                if let Some(current_package) = metadata
+                    .packages
+                    .iter()
+                    .find(|p| p.manifest_path.starts_with(&workspace_root))
+                {
+                    // 添加当前仓库包的所有features
+                    info!("Current package: {}", current_package.name);
+                    info!(
+                        "features: {:?}",
+                        current_package.features.keys().collect::<Vec<_>>()
+                    );
+                    info!(
+                        "dependencies: {:?}",
+                        current_package
+                            .dependencies
+                            .iter()
+                            .map(|d| d.name.clone())
+                            .collect::<Vec<_>>()
+                    );
+                    for (feature_name, _) in &current_package.features {
+                        features.push(feature_name.clone());
+                    }
+                }
+            } else {
+                // 如果无法获取metadata，添加一些默认features
+                features.push("default".to_string());
+                info!("Failed to get cargo metadata. Adding default features.");
+            }
+
+            features
+        }));
+
+        // 设置depend_features_callback以获取依赖项及其features
+        app_data.depend_features_callback = Some(std::sync::Arc::new(|| {
+            let mut depend_features = HashMap::new();
+
+            // 尝试从当前目录获取cargo项目的依赖项及其features
+            if let Ok(metadata) = cargo_metadata::MetadataCommand::new().exec() {
+                // 获取workspace根目录
+                let workspace_root = metadata.workspace_root.clone();
+                // 查找当前仓库的包（manifest_path与workspace根目录匹配的包）
+                if let Some(current_package) = metadata
+                    .packages
+                    .iter()
+                    .find(|p| p.manifest_path.starts_with(&workspace_root))
+                {
+                    // 获取所有依赖项及其features
+                    info!("Current package: {}", current_package.name);
+                    info!(
+                        "dependencies: {:?}",
+                        current_package
+                            .dependencies
+                            .iter()
+                            .map(|d| d.name.clone())
+                            .collect::<Vec<_>>()
+                    );
+
+                    // 遍历所有依赖项
+                    for dependency in &current_package.dependencies {
+                        let dep_name = dependency.name.clone();
+                        let mut dep_features = Vec::new();
+
+                        // 查找依赖包的features（需要在所有包中查找）
+                        if let Some(dep_package) =
+                            metadata.packages.iter().find(|p| p.name == dep_name)
+                        {
+                            info!("Dependency package: {}", dep_package.name);
+                            info!(
+                                "Dependency features: {:?}",
+                                dep_package.features.keys().collect::<Vec<_>>()
+                            );
+
+                            // 添加依赖包的所有features
+                            for (feature_name, _) in &dep_package.features {
+                                dep_features.push(feature_name.clone());
+                            }
+                        }
+
+                        // 如果没有找到依赖包的详细信息，添加一些默认features
+                        if dep_features.is_empty() {
+                            dep_features.push("default".to_string());
+                        }
+
+                        depend_features.insert(dep_name, dep_features);
+                    }
+                }
+            } else {
+                // 如果无法获取metadata，添加一些默认依赖项
+                depend_features.insert(
+                    "default-dependency".to_string(),
+                    vec!["default".to_string()],
+                );
+                info!("Failed to get cargo metadata. Adding default dependency.");
+            }
+
+            depend_features
+        }));
+
+        let title = app_data.root.title.clone();
+        let fields = app_data.root.menu().fields();
+
+        // 添加调试日志
+        info!(
+            "depend_features_callback is set: {}",
+            app_data.depend_features_callback.is_some()
+        );
+        info!(
+            "features_callback is set: {}",
+            app_data.features_callback.is_some()
+        );
+
+        cursive::logger::init();
+        cursive::logger::set_internal_filter_level(log::LevelFilter::Info);
+
+        // 创建Cursive应用
+        let mut siv = Cursive::default();
+        // 设置AppData为user_data
+        siv.set_user_data(app_data);
+
+        // 添加全局键盘事件处理
+        siv.add_global_callback('q', handle_quit);
+        siv.add_global_callback('Q', handle_quit);
+        siv.add_global_callback('s', handle_save);
+        siv.add_global_callback('S', handle_save);
+        siv.add_global_callback(Key::Esc, handle_back);
+        siv.add_global_callback('~', cursive::Cursive::toggle_debug_console);
+        // 初始菜单路径为空
+        siv.add_fullscreen_layer(menu_view(&title, "", fields));
+        // 运行应用
+        siv.run();
+
+        println!("Exiting jkconfig...");
+        let mut app = siv.take_user_data::<AppData>().unwrap();
+        println!("Data: \n{:#?}", app.root);
+        app.on_exit()?;
+
+        Ok(true)
     }
 
     pub fn command(&self, program: &str) -> crate::utils::Command {
@@ -189,13 +353,83 @@ impl AppContext {
         &mut self,
         config_path: Option<PathBuf>,
     ) -> anyhow::Result<BuildConfig> {
-        let content = prepare_config::<BuildConfig>(self, config_path, ".build.toml").await?;
+        // Try to get configuration content, launch UI interface if failed
+        match prepare_config::<BuildConfig>(self, config_path, ".build.toml").await {
+            Ok(content) => {
+                // Try to parse configuration, launch UI interface if parsing failed
+                match toml::from_str::<BuildConfig>(&content) {
+                    Ok(config) => {
+                        println!("Build configuration: {:?}", config);
+                        self.build_config = Some(config.clone());
+                        Ok(config)
+                    }
+                    Err(e) => {
+                        println!("Configuration file parsing failed: {}", e);
+                        self.launch_config_ui_and_get_config().await
+                    }
+                }
+            }
+            Err(e) => {
+                println!("Failed to read configuration file: {}", e);
+                self.launch_config_ui_and_get_config().await
+            }
+        }
+    }
 
-        let config: BuildConfig = toml::from_str(&content)?;
-        println!("Build configuration: {:?}", config);
+    /// Launch configuration UI interface and get configuration
+    async fn launch_config_ui_and_get_config(&mut self) -> anyhow::Result<BuildConfig> {
+        println!("Launching UI interface for configuration editing...");
+        // Get configuration file path
+        let config_path = match &self.build_config_path {
+            Some(path) => path.clone(),
+            None => self.workdir.join(".build.toml"),
+        };
 
+        // Ensure the configuration file exists
+        if !config_path.exists() {
+            println!(
+                "Configuration file does not exist, creating new file: {}",
+                config_path.display()
+            );
+            tokio::fs::write(&config_path, "").await?;
+        }
+
+        // Generate schema path
+        let schema_path = default_schema_by_init(&config_path);
+
+        // Create empty config file if it doesn't exist
+        if !config_path.exists() {
+            println!(
+                "Creating empty configuration file: {}",
+                config_path.display()
+            );
+            std::fs::write(&config_path, "")?;
+        }
+
+        // Directly run jkconfig as a standalone binary if available
+        println!("Starting configuration UI interface...");
+
+        // Try to run jkconfig in different ways
+        let ui_success = Self::launch_jkconfig_ui(&config_path, &schema_path)?;
+
+        // Print success message based on UI launch status
+        if ui_success {
+            println!("UI interface launched successfully");
+        } else {
+            println!("Warning: Failed to config jkconfig UI");
+            println!("Will attempt to continue with existing configuration");
+        }
+
+        // Re-read and parse the configuration
+        let config_content = tokio::fs::read_to_string(&config_path)
+            .await
+            .map_err(|e| anyhow!("Failed to read configuration file after UI editing: {}", e))?;
+
+        let config: BuildConfig = toml::from_str(&config_content)
+            .map_err(|e| anyhow!("Failed to parse configuration file after UI editing: {}", e))?;
+
+        println!("Configuration has been updated from UI editor");
         self.build_config = Some(config.clone());
-
         Ok(config)
     }
 

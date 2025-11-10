@@ -44,3 +44,19 @@ pub fn handle_quit(siv: &mut Cursive) {
             }),
     );
 }
+
+/// 处理保存 - S键
+pub fn handle_save(siv: &mut Cursive) {
+    siv.add_layer(
+        Dialog::text("Save and exit?")
+            .title("Save")
+            .button("Ok", |s| {
+                let app = s.user_data::<AppData>().unwrap();
+                app.needs_save = true;
+                s.quit();
+            })
+            .button("Cancel", |s| {
+                s.pop_layer();
+            }),
+    );
+}

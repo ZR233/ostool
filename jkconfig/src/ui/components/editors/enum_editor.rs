@@ -19,9 +19,9 @@ pub fn show_enum_select(s: &mut Cursive, title: &str, enum_item: &EnumItem) {
 
     for (idx, variant) in enum_item.variants.iter().enumerate() {
         let label = if Some(idx) == enum_item.value {
-            format!("(*) {}", variant)
+            format!("[*] {}", variant)
         } else {
-            format!("( ) {}", variant)
+            format!("[ ] {}", variant)
         };
         select.add_item(label, idx);
     }
