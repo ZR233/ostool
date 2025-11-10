@@ -105,15 +105,6 @@ impl CargoRunner {
         if let Some(log_level) = &self.log_level_feature(ctx, &config) {
             features.push(log_level.to_string());
         }
-        
-        println!("features: {:?}", features);
-        let meta = ctx.metadata()?;
-        println!("=== 包信息列表 ===");
-        for package in meta.packages {
-            println!("名称: {}", package.name);
-            println!("功能特性(features): {:?}", package.features.keys());
-            println!("--------------------");
-        }
 
         let mut cmd = ctx.command("cargo");
         for (k, v) in &self.envs {

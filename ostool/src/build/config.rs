@@ -50,7 +50,7 @@ pub struct Cargo {
     pub to_bin: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct Features {
     pub self_features: Vec<String>,
     pub depend_features: Vec<Depend>,

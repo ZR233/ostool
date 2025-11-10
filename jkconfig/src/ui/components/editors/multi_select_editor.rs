@@ -33,7 +33,6 @@ pub fn show_multi_select(s: &mut Cursive, title: &str, multi_select: &MultiSelec
     }
 
     // 保存完整的选项列表到应用数据中，供后续toggle_selection使用
-    // 初始化多选择数据并保存到临时存储
     if let Some(app) = s.user_data::<AppData>() {
         // 获取当前正在编辑的项的key
         let current_key = if let Some(ElementType::Item(item)) = app.current() {
@@ -41,19 +40,14 @@ pub fn show_multi_select(s: &mut Cursive, title: &str, multi_select: &MultiSelec
         } else {
             "unknown_key".to_string()
         };
-        
+
         let data = (
             multi_select.selected_indices.clone(),
             multi_select.variants.clone(),
-            current_key.clone(), // 保存当前项的key
+            current_key.clone(),
         );
-        app.temp_data = Some((
-            current_key, // 使用当前项的key作为临时数据的key
-            serde_json::to_value(data).unwrap(),
-        ));
+        app.temp_data = Some((current_key, serde_json::to_value(data).unwrap()));
     }
-
-    // 移除冗余的保存逻辑，因为已经在上面保存了完整数据
 
     s.add_layer(
         OnEventView::new(
@@ -73,7 +67,6 @@ pub fn show_multi_select(s: &mut Cursive, title: &str, multi_select: &MultiSelec
         )
         .on_event(Key::Enter, toggle_selection)
         .on_event(Key::Right, |s| {
-            // 使用Tab事件来移动焦点到下一个元素（按钮）
             s.on_event(cursive::event::Event::Key(cursive::event::Key::Tab));
         }),
     );
@@ -89,7 +82,7 @@ fn toggle_selection(s: &mut Cursive) {
     if let Some(selection_idx) = selection {
         // 保存当前选中的索引值
         let current_selected_idx = *selection_idx;
-        
+
         // 获取保存的多选择数据
         let mut selected_indices = Vec::new();
         let mut variants = Vec::new();
@@ -98,7 +91,7 @@ fn toggle_selection(s: &mut Cursive) {
         if let Some(app) = s.user_data::<AppData>() {
             if let Some((_, temp_value)) = &app.temp_data {
                 // 尝试从temp_data中获取保存的(indices, variants, current_key)元组
-                if let Ok(data) = 
+                if let Ok(data) =
                     serde_json::from_value::<(Vec<usize>, Vec<String>, String)>(temp_value.clone())
                 {
                     selected_indices = data.0;
@@ -109,7 +102,10 @@ fn toggle_selection(s: &mut Cursive) {
         }
 
         // 切换选中状态
-        if let Some(pos) = selected_indices.iter().position(|&x| x == current_selected_idx) {
+        if let Some(pos) = selected_indices
+            .iter()
+            .position(|&x| x == current_selected_idx)
+        {
             selected_indices.remove(pos); // 移除选中
         } else {
             selected_indices.push(current_selected_idx); // 添加选中
@@ -120,7 +116,8 @@ fn toggle_selection(s: &mut Cursive) {
         if let Some(app) = s.user_data::<AppData>() {
             app.temp_data = Some((
                 current_key.clone(),
-                serde_json::to_value((selected_indices.clone(), variants.clone(), current_key)).unwrap(),
+                serde_json::to_value((selected_indices.clone(), variants.clone(), current_key))
+                    .unwrap(),
             ));
         }
 
@@ -137,7 +134,7 @@ fn toggle_selection(s: &mut Cursive) {
                 };
                 view.add_item(label, idx);
             }
-            
+
             // 恢复原来的选择位置
             view.set_selection(current_selected_idx);
         });
@@ -152,12 +149,9 @@ fn on_ok(s: &mut Cursive) {
     if let Some((key, temp_value)) = app.temp_data.take() {
         // 检查是否是当前依赖项的key
         if key == "current_depend" {
-            // 这是依赖项选择的情况，需要恢复原始的depend_features_map
-            // 但由于我们没有保存原始数据，我们需要重新获取
-            // 这将在下次打开depend_select或depend_features时处理
         } else {
             // 尝试解析保存的数据：(selected_indices, variants, current_key)
-            if let Ok((selected_indices, variants, current_key)) = 
+            if let Ok((selected_indices, variants, current_key)) =
                 serde_json::from_value::<(Vec<usize>, Vec<String>, String)>(temp_value)
             {
                 // 根据索引获取选中的选项文本

@@ -65,10 +65,6 @@ pub struct UbootArgs {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // env_logger::builder()
-    //     .format_module_path(false)
-    //     .filter_level(log::LevelFilter::Info)
-    //     .init();
     
     let cli = Cli::parse();
 

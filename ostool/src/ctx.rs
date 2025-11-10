@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    process::Command,
 };
 
 use anyhow::anyhow;
@@ -47,26 +46,19 @@ impl AppContext {
 
     // Helper function to launch jkconfig UI
     pub fn launch_jkconfig_ui(config_path: &Path, schema_path: &Path) -> anyhow::Result<bool> {
-        // 创建AppData实例
         let mut app_data = AppData::new(Some(config_path), Some(schema_path))?;
 
-        // 设置features_callback以获取本地仓库的features
         app_data.features_callback = Some(std::sync::Arc::new(|| {
             let mut features = Vec::new();
 
-            // 尝试从当前目录获取cargo项目的features，类似metadata方法的实现
             if let Ok(metadata) = cargo_metadata::MetadataCommand::new().no_deps().exec() {
-                // 获取workspace根目录
                 let workspace_root = metadata.workspace_root.clone();
 
-                // 查找当前仓库的包（manifest_path与workspace根目录匹配的包）
                 if let Some(current_package) = metadata
                     .packages
                     .iter()
                     .find(|p| p.manifest_path.starts_with(&workspace_root))
                 {
-                    // 添加当前仓库包的所有features
-                    info!("Current package: {}", current_package.name);
                     info!(
                         "features: {:?}",
                         current_package.features.keys().collect::<Vec<_>>()
@@ -84,7 +76,6 @@ impl AppContext {
                     }
                 }
             } else {
-                // 如果无法获取metadata，添加一些默认features
                 features.push("default".to_string());
                 info!("Failed to get cargo metadata. Adding default features.");
             }
@@ -96,11 +87,8 @@ impl AppContext {
         app_data.depend_features_callback = Some(std::sync::Arc::new(|| {
             let mut depend_features = HashMap::new();
 
-            // 尝试从当前目录获取cargo项目的依赖项及其features
             if let Ok(metadata) = cargo_metadata::MetadataCommand::new().exec() {
-                // 获取workspace根目录
                 let workspace_root = metadata.workspace_root.clone();
-                // 查找当前仓库的包（manifest_path与workspace根目录匹配的包）
                 if let Some(current_package) = metadata
                     .packages
                     .iter()
@@ -122,23 +110,20 @@ impl AppContext {
                         let dep_name = dependency.name.clone();
                         let mut dep_features = Vec::new();
 
-                        // 查找依赖包的features（需要在所有包中查找）
                         if let Some(dep_package) =
                             metadata.packages.iter().find(|p| p.name == dep_name)
                         {
-                            info!("Dependency package: {}", dep_package.name);
-                            info!(
+                            debug!("Dependency package: {}", dep_package.name);
+                            debug!(
                                 "Dependency features: {:?}",
                                 dep_package.features.keys().collect::<Vec<_>>()
                             );
 
-                            // 添加依赖包的所有features
                             for (feature_name, _) in &dep_package.features {
                                 dep_features.push(feature_name.clone());
                             }
                         }
 
-                        // 如果没有找到依赖包的详细信息，添加一些默认features
                         if dep_features.is_empty() {
                             dep_features.push("default".to_string());
                         }
@@ -147,7 +132,6 @@ impl AppContext {
                     }
                 }
             } else {
-                // 如果无法获取metadata，添加一些默认依赖项
                 depend_features.insert(
                     "default-dependency".to_string(),
                     vec!["default".to_string()],
@@ -162,11 +146,11 @@ impl AppContext {
         let fields = app_data.root.menu().fields();
 
         // 添加调试日志
-        info!(
+        debug!(
             "depend_features_callback is set: {}",
             app_data.depend_features_callback.is_some()
         );
-        info!(
+        debug!(
             "features_callback is set: {}",
             app_data.features_callback.is_some()
         );
@@ -382,7 +366,7 @@ impl AppContext {
         // Get configuration file path
         let config_path = match &self.build_config_path {
             Some(path) => path.clone(),
-            None => self.workdir.join(".build.toml"),
+            None => self.workspace_folder.join(".build.toml"),
         };
 
         // Ensure the configuration file exists
@@ -421,7 +405,7 @@ impl AppContext {
         }
 
         // Re-read and parse the configuration
-        let config_content = tokio::fs::read_to_string(&config_path)
+        let config_content: String = tokio::fs::read_to_string(&config_path)
             .await
             .map_err(|e| anyhow!("Failed to read configuration file after UI editing: {}", e))?;
 

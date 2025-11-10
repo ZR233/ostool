@@ -9,15 +9,18 @@ use std::sync::Arc;
 
 use crate::{
     data::app_data::AppData,
-    ui::{components::editors::multi_select_editor::{show_multi_select, MultiSelectItem}, handle_back},
+    ui::{
+        components::editors::multi_select_editor::{MultiSelectItem, show_multi_select},
+        handle_back,
+    },
 };
 
 /// 显示依赖项features编辑器
 pub fn show_depend_features_editor(
     s: &mut Cursive,
     title: &str,
-    depend_names: &[String], // 依赖项名称列表
-    depend_features_map: &HashMap<String, Vec<String>>
+    depend_names: &[String],
+    depend_features_map: &HashMap<String, Vec<String>>,
 ) {
     let mut select = SelectView::new();
 
@@ -32,7 +35,6 @@ pub fn show_depend_features_editor(
 
     // 保存依赖项features映射到应用数据中
     if let Some(app) = s.user_data::<AppData>() {
-        // 保存依赖项features映射
         app.temp_data = Some((
             "depend_features_map".to_string(),
             serde_json::to_value(depend_features_map.clone()).unwrap(),
@@ -43,13 +45,19 @@ pub fn show_depend_features_editor(
         OnEventView::new(
             Dialog::around(
                 LinearLayout::vertical()
-                    .child(TextView::new(format!("Edit Dependency Features: {}", title)))
+                    .child(TextView::new(format!(
+                        "Edit Dependency Features: {}",
+                        title
+                    )))
                     .child(
                         TextView::new("(Press Enter to edit dependency features)")
                             .style(cursive::theme::ColorStyle::secondary()),
                     )
                     .child(DummyView)
-                    .child(ScrollView::new(select.with_name("depend_features_select")).fixed_height(20)),
+                    .child(
+                        ScrollView::new(select.with_name("depend_features_select"))
+                            .fixed_height(20),
+                    ),
             )
             .title("Dependencies")
             .button("OK", on_depend_features_ok)
@@ -57,7 +65,6 @@ pub fn show_depend_features_editor(
         )
         .on_event(Key::Enter, on_depend_feature_select)
         .on_event(Key::Right, |s| {
-            // 使用Tab事件来移动焦点到下一个元素（按钮）
             s.on_event(cursive::event::Event::Key(cursive::event::Key::Tab));
         }),
     );
@@ -67,19 +74,24 @@ pub fn show_depend_features_editor(
 fn on_depend_feature_select(s: &mut Cursive) {
     // 获取当前选中的依赖项
     let selection = s
-        .call_on_name("depend_features_select", |v: &mut SelectView<Arc<String>>| v.selection())
+        .call_on_name(
+            "depend_features_select",
+            |v: &mut SelectView<Arc<String>>| v.selection(),
+        )
         .unwrap();
 
     if let Some(selection_name) = selection {
         // 获取保存的依赖项features映射
         let mut depend_features_map = HashMap::new();
-        
+
         if let Some(app) = s.user_data::<AppData>() {
             if let Some((key, temp_value)) = &app.temp_data {
                 // 检查是否是依赖项features映射数据
                 if key == "depend_features_map" {
                     // 尝试从temp_data中获取保存的依赖项features映射
-                    if let Ok(map) = serde_json::from_value::<HashMap<String, Vec<String>>>(temp_value.clone()) {
+                    if let Ok(map) =
+                        serde_json::from_value::<HashMap<String, Vec<String>>>(temp_value.clone())
+                    {
                         depend_features_map = map;
                     }
                 }
@@ -105,22 +117,23 @@ fn on_depend_feature_select(s: &mut Cursive) {
             // 创建MultiSelectItem用于显示features选择
             let multi_select_item = MultiSelectItem {
                 variants: features.clone(),
-                selected_indices: Vec::new(), // 默认不选择任何项
+                selected_indices: Vec::new(),
             };
-            
+
             // 保存当前选中的依赖项名称，以便在features选择后更新
             if let Some(app) = s.user_data::<AppData>() {
-                // 保存当前依赖项名称，但保留原始的depend_features_map
-                // 在multi_select关闭后需要恢复原始数据
-                // 这将在multi_select的on_ok中处理
                 app.temp_data = Some((
                     "current_depend".to_string(),
                     serde_json::to_value((**selection_name).clone()).unwrap(),
                 ));
             }
-            
+
             // 显示features多选界面
-            show_multi_select(s, &format!("Features for {}", selection_name), &multi_select_item);
+            show_multi_select(
+                s,
+                &format!("Features for {}", selection_name),
+                &multi_select_item,
+            );
         }
     }
 }
