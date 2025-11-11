@@ -4,7 +4,6 @@ use cursive::{
     view::{Nameable, Resizable},
     views::{Dialog, DummyView, LinearLayout, OnEventView, ScrollView, SelectView, TextView},
 };
-use log::info;
 
 use crate::{
     data::{app_data::AppData, item::ItemType, types::ElementType},

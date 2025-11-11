@@ -42,6 +42,7 @@ tower-http = {version = "0.6", features = ["fs", "cors"], optional = true}
 [features]
 default = ["web"]
 web = ["axum", "tokio", "tower", "tower-http", "chrono"]
+logging = []
 
 [dev-dependencies]
 env_logger = "0.11"

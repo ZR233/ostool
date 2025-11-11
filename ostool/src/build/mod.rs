@@ -36,7 +36,7 @@ impl AppContext {
             self.shell_run_cmd(cmd)?;
         }
 
-        let mut features = config.features.self_features.clone();
+        let mut features = config.features.clone();
         if let Some(log_level) = &self.log_level_feature(config) {
             features.push(log_level.to_string());
         }

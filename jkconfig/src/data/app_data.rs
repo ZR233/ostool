@@ -7,8 +7,17 @@ use std::{
 };
 
 use anyhow::bail;
+use cursive::Cursive;
 
 use crate::data::{menu::MenuRoot, types::ElementType};
+
+pub type FeaturesCallback = Arc<dyn Fn() -> Vec<String> + Send + Sync>;
+
+#[derive(Clone)]
+pub struct ElemHock {
+    pub path: String,
+    pub callback: Arc<dyn Fn(&mut Cursive, &str) + Send + Sync>,
+}
 
 #[derive(Clone)]
 pub struct AppData {
@@ -17,6 +26,7 @@ pub struct AppData {
     pub needs_save: bool,
     pub config: PathBuf,
     pub temp_data: Option<(String, serde_json::Value)>,
+    pub elem_hocks: Vec<ElemHock>,
     pub features_callback: Option<Arc<dyn Fn() -> Vec<String> + Send + Sync>>,
     pub depend_features_callback:
         Option<Arc<dyn Fn() -> HashMap<String, Vec<String>> + Send + Sync>>,
@@ -45,10 +55,7 @@ impl AppData {
         config: Option<impl AsRef<Path>>,
         schema: Option<impl AsRef<Path>>,
     ) -> anyhow::Result<Self> {
-        let mut init_value_path = PathBuf::from(DEFAULT_CONFIG_PATH);
-        if let Some(cfg) = config {
-            init_value_path = cfg.as_ref().to_path_buf();
-        }
+        let init_value_path = Self::init_value_path(config);
 
         let schema_path = if let Some(sch) = schema {
             sch.as_ref().to_path_buf()
@@ -62,8 +69,24 @@ impl AppData {
 
         let schema_content = fs::read_to_string(&schema_path)?;
         let schema_json: serde_json::Value = serde_json::from_str(&schema_content)?;
+        Self::new_with_schema(Some(init_value_path), &schema_json)
+    }
 
-        let mut root = MenuRoot::try_from(&schema_json)?;
+    fn init_value_path(config: Option<impl AsRef<Path>>) -> PathBuf {
+        let mut init_value_path = PathBuf::from(DEFAULT_CONFIG_PATH);
+        if let Some(cfg) = config {
+            init_value_path = cfg.as_ref().to_path_buf();
+        }
+        init_value_path
+    }
+
+    pub fn new_with_schema(
+        config: Option<impl AsRef<Path>>,
+        schema: &serde_json::Value,
+    ) -> anyhow::Result<Self> {
+        let init_value_path = Self::init_value_path(config);
+
+        let mut root = MenuRoot::try_from(schema)?;
 
         if init_value_path.exists() {
             let init_content = fs::read_to_string(&init_value_path)?;
@@ -94,6 +117,7 @@ impl AppData {
             temp_data: None,
             features_callback: None,
             depend_features_callback: None,
+            elem_hocks: Vec::new(),
         })
     }
 

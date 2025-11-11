@@ -80,54 +80,54 @@ impl AppContext {
     pub fn launch_jkconfig_ui(config_path: &Path, schema_path: &Path) -> anyhow::Result<bool> {
         let mut app_data = AppData::new(Some(config_path), Some(schema_path))?;
 
-        app_data.features_callback = Some(std::sync::Arc::new(|| {
-            let mut features = Vec::new();
+        // app_data.features_callback = Some(std::sync::Arc::new(|| {
+        //     let mut features = Vec::new();
 
-            if let Ok(metadata) = cargo_metadata::MetadataCommand::new().no_deps().exec() {
-                let workspace_root = metadata.workspace_root.clone();
-                if let Some(current_package) = metadata
-                    .packages
-                    .iter()
-                    .find(|p| p.manifest_path.starts_with(&workspace_root))
-                {
-                    for (feature_name, _) in &current_package.features {
-                        features.push(feature_name.clone());
-                    }
-                }
-            }
-            features
-        }));
+        //     if let Ok(metadata) = cargo_metadata::MetadataCommand::new().no_deps().exec() {
+        //         let workspace_root = metadata.workspace_root.clone();
+        //         if let Some(current_package) = metadata
+        //             .packages
+        //             .iter()
+        //             .find(|p| p.manifest_path.starts_with(&workspace_root))
+        //         {
+        //             for (feature_name, _) in &current_package.features {
+        //                 features.push(feature_name.clone());
+        //             }
+        //         }
+        //     }
+        //     features
+        // }));
 
-        // 设置depend_features_callback以获取依赖项及其features
-        app_data.depend_features_callback = Some(std::sync::Arc::new(|| {
-            let mut depend_features = HashMap::new();
+        // // 设置depend_features_callback以获取依赖项及其features
+        // app_data.depend_features_callback = Some(std::sync::Arc::new(|| {
+        //     let mut depend_features = HashMap::new();
 
-            if let Ok(metadata) = cargo_metadata::MetadataCommand::new().exec() {
-                let workspace_root = metadata.workspace_root.clone();
-                if let Some(current_package) = metadata
-                    .packages
-                    .iter()
-                    .find(|p| p.manifest_path.starts_with(&workspace_root))
-                {
-                    // 遍历所有依赖项
-                    for dependency in &current_package.dependencies {
-                        let dep_name = dependency.name.clone();
-                        let mut dep_features = Vec::new();
+        //     if let Ok(metadata) = cargo_metadata::MetadataCommand::new().exec() {
+        //         let workspace_root = metadata.workspace_root.clone();
+        //         if let Some(current_package) = metadata
+        //             .packages
+        //             .iter()
+        //             .find(|p| p.manifest_path.starts_with(&workspace_root))
+        //         {
+        //             // 遍历所有依赖项
+        //             for dependency in &current_package.dependencies {
+        //                 let dep_name = dependency.name.clone();
+        //                 let mut dep_features = Vec::new();
 
-                        if let Some(dep_package) =
-                            metadata.packages.iter().find(|p| p.name == dep_name)
-                        {
-                            for (feature_name, _) in &dep_package.features {
-                                dep_features.push(feature_name.clone());
-                            }
-                        }
+        //                 if let Some(dep_package) =
+        //                     metadata.packages.iter().find(|p| p.name == dep_name)
+        //                 {
+        //                     for (feature_name, _) in &dep_package.features {
+        //                         dep_features.push(feature_name.clone());
+        //                     }
+        //                 }
 
-                        depend_features.insert(dep_name, dep_features);
-                    }
-                }
-            }
-            depend_features
-        }));
+        //                 depend_features.insert(dep_name, dep_features);
+        //             }
+        //         }
+        //     }
+        //     depend_features
+        // }));
 
         run_tui(app_data)?;
 
