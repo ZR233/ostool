@@ -29,6 +29,38 @@ pub struct AppContext {
     pub build_config_path: Option<PathBuf>,
 }
 
+fn run_tui(app_data: AppData) -> anyhow::Result<()> {
+    let title = app_data.root.title.clone();
+    let fields = app_data.root.menu().fields();
+
+    cursive::logger::init();
+    cursive::logger::set_filter_levels_from_env();
+    // 创建Cursive应用
+    let mut siv = Cursive::default();
+
+    // 设置AppData为user_data
+    siv.set_user_data(app_data);
+
+    // 添加全局键盘事件处理
+    siv.add_global_callback('q', handle_quit);
+    siv.add_global_callback('Q', handle_quit);
+    siv.add_global_callback('s', handle_save);
+    siv.add_global_callback('S', handle_save);
+    siv.add_global_callback(Key::Esc, handle_back);
+    siv.add_global_callback('~', cursive::Cursive::toggle_debug_console);
+    // 初始菜单路径为空
+    siv.add_fullscreen_layer(menu_view(&title, "", fields));
+
+    // 运行应用
+    siv.run();
+
+    println!("Exiting jkconfig...");
+    let mut app = siv.take_user_data::<AppData>().unwrap();
+    app.on_exit()?;
+
+    Ok(())
+}
+
 impl AppContext {
     pub fn shell_run_cmd(&self, cmd: &str) -> anyhow::Result<()> {
         let mut command = self.command("sh");
@@ -53,33 +85,16 @@ impl AppContext {
 
             if let Ok(metadata) = cargo_metadata::MetadataCommand::new().no_deps().exec() {
                 let workspace_root = metadata.workspace_root.clone();
-
                 if let Some(current_package) = metadata
                     .packages
                     .iter()
                     .find(|p| p.manifest_path.starts_with(&workspace_root))
                 {
-                    info!(
-                        "features: {:?}",
-                        current_package.features.keys().collect::<Vec<_>>()
-                    );
-                    info!(
-                        "dependencies: {:?}",
-                        current_package
-                            .dependencies
-                            .iter()
-                            .map(|d| d.name.clone())
-                            .collect::<Vec<_>>()
-                    );
                     for (feature_name, _) in &current_package.features {
                         features.push(feature_name.clone());
                     }
                 }
-            } else {
-                features.push("default".to_string());
-                info!("Failed to get cargo metadata. Adding default features.");
             }
-
             features
         }));
 
@@ -94,17 +109,6 @@ impl AppContext {
                     .iter()
                     .find(|p| p.manifest_path.starts_with(&workspace_root))
                 {
-                    // 获取所有依赖项及其features
-                    info!("Current package: {}", current_package.name);
-                    info!(
-                        "dependencies: {:?}",
-                        current_package
-                            .dependencies
-                            .iter()
-                            .map(|d| d.name.clone())
-                            .collect::<Vec<_>>()
-                    );
-
                     // 遍历所有依赖项
                     for dependency in &current_package.dependencies {
                         let dep_name = dependency.name.clone();
@@ -113,72 +117,63 @@ impl AppContext {
                         if let Some(dep_package) =
                             metadata.packages.iter().find(|p| p.name == dep_name)
                         {
-                            debug!("Dependency package: {}", dep_package.name);
-                            debug!(
-                                "Dependency features: {:?}",
-                                dep_package.features.keys().collect::<Vec<_>>()
-                            );
-
                             for (feature_name, _) in &dep_package.features {
                                 dep_features.push(feature_name.clone());
                             }
                         }
 
-                        if dep_features.is_empty() {
-                            dep_features.push("default".to_string());
-                        }
-
                         depend_features.insert(dep_name, dep_features);
                     }
                 }
-            } else {
-                depend_features.insert(
-                    "default-dependency".to_string(),
-                    vec!["default".to_string()],
-                );
-                info!("Failed to get cargo metadata. Adding default dependency.");
             }
-
             depend_features
         }));
 
-        let title = app_data.root.title.clone();
-        let fields = app_data.root.menu().fields();
+        run_tui(app_data)?;
 
-        // 添加调试日志
-        debug!(
-            "depend_features_callback is set: {}",
-            app_data.depend_features_callback.is_some()
-        );
-        debug!(
-            "features_callback is set: {}",
-            app_data.features_callback.is_some()
-        );
+        Ok(true)
+    }
 
-        cursive::logger::init();
-        cursive::logger::set_internal_filter_level(log::LevelFilter::Info);
+    // axvisor
+    pub async fn launch_menuconfig_ui(
+        &mut self,
+        self_features: Vec<String>,
+        depend_features: HashMap<String, Vec<String>>,
+    ) -> anyhow::Result<bool> {
+        let config_path = match &self.build_config_path {
+            Some(path) => path.clone(),
+            None => self.workspace_folder.join(".build.toml"),
+        };
 
-        // 创建Cursive应用
-        let mut siv = Cursive::default();
-        // 设置AppData为user_data
-        siv.set_user_data(app_data);
+        // Ensure the configuration file exists
+        if !config_path.exists() {
+            println!(
+                "Configuration file does not exist, creating new file: {}",
+                config_path.display()
+            );
+            tokio::fs::write(&config_path, "").await?;
+        }
 
-        // 添加全局键盘事件处理
-        siv.add_global_callback('q', handle_quit);
-        siv.add_global_callback('Q', handle_quit);
-        siv.add_global_callback('s', handle_save);
-        siv.add_global_callback('S', handle_save);
-        siv.add_global_callback(Key::Esc, handle_back);
-        siv.add_global_callback('~', cursive::Cursive::toggle_debug_console);
-        // 初始菜单路径为空
-        siv.add_fullscreen_layer(menu_view(&title, "", fields));
-        // 运行应用
-        siv.run();
+        // Generate schema path
+        let schema_path = default_schema_by_init(&config_path);
 
-        println!("Exiting jkconfig...");
-        let mut app = siv.take_user_data::<AppData>().unwrap();
-        println!("Data: \n{:#?}", app.root);
-        app.on_exit()?;
+        // Create empty config file if it doesn't exist
+        if !config_path.exists() {
+            println!(
+                "Creating empty configuration file: {}",
+                config_path.display()
+            );
+            std::fs::write(&config_path, "")?;
+        }
+
+        let mut app_data = AppData::new(Some(config_path), Some(schema_path))?;
+
+        app_data.features_callback = Some(std::sync::Arc::new(move || self_features.clone()));
+
+        app_data.depend_features_callback =
+            Some(std::sync::Arc::new(move || depend_features.clone()));
+
+        run_tui(app_data)?;
 
         Ok(true)
     }
@@ -349,19 +344,19 @@ impl AppContext {
                     }
                     Err(e) => {
                         println!("Configuration file parsing failed: {}", e);
-                        self.launch_config_ui_and_get_config().await
+                        self.prepare_launch_ui().await
                     }
                 }
             }
             Err(e) => {
                 println!("Failed to read configuration file: {}", e);
-                self.launch_config_ui_and_get_config().await
+                self.prepare_launch_ui().await
             }
         }
     }
 
     /// Launch configuration UI interface and get configuration
-    async fn launch_config_ui_and_get_config(&mut self) -> anyhow::Result<BuildConfig> {
+    pub async fn prepare_launch_ui(&mut self) -> anyhow::Result<BuildConfig> {
         println!("Launching UI interface for configuration editing...");
         // Get configuration file path
         let config_path = match &self.build_config_path {
@@ -378,10 +373,8 @@ impl AppContext {
             tokio::fs::write(&config_path, "").await?;
         }
 
-        // Generate schema path
         let schema_path = default_schema_by_init(&config_path);
 
-        // Create empty config file if it doesn't exist
         if !config_path.exists() {
             println!(
                 "Creating empty configuration file: {}",
@@ -390,21 +383,10 @@ impl AppContext {
             std::fs::write(&config_path, "")?;
         }
 
-        // Directly run jkconfig as a standalone binary if available
         println!("Starting configuration UI interface...");
 
-        // Try to run jkconfig in different ways
-        let ui_success = Self::launch_jkconfig_ui(&config_path, &schema_path)?;
+        let _ = Self::launch_jkconfig_ui(&config_path, &schema_path)?;
 
-        // Print success message based on UI launch status
-        if ui_success {
-            println!("UI interface launched successfully");
-        } else {
-            println!("Warning: Failed to config jkconfig UI");
-            println!("Will attempt to continue with existing configuration");
-        }
-
-        // Re-read and parse the configuration
         let config_content: String = tokio::fs::read_to_string(&config_path)
             .await
             .map_err(|e| anyhow!("Failed to read configuration file after UI editing: {}", e))?;
@@ -412,8 +394,8 @@ impl AppContext {
         let config: BuildConfig = toml::from_str(&config_content)
             .map_err(|e| anyhow!("Failed to parse configuration file after UI editing: {}", e))?;
 
-        println!("Configuration has been updated from UI editor");
         self.build_config = Some(config.clone());
+
         Ok(config)
     }
 

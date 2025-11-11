@@ -687,7 +687,7 @@ fn enter_elem(s: &mut Cursive, elem: &ElementType) {
                     show_enum_select(s, &item.base.title, enum_item);
                 }
                 ItemType::Array(array_item) => {
-                    if path == "system.features.self_features" {
+                    if path == "features.self_features" || path == "system.features.self_features" {
                         let app_data = s.user_data::<AppData>().unwrap();
                         let mut variants = array_item.values.clone();
 
@@ -724,33 +724,24 @@ fn enter_elem(s: &mut Cursive, elem: &ElementType) {
                             create_multi_select_from_array_item(array_item, &enum_item.variants);
 
                         show_multi_select(s, &item.base.title, &multi_select_item);
-                    } else if path == "system.features.depend_features" {
+                    } else if path == "features.depend_features"
+                        || path == "system.features.depend_features"
+                    {
                         let app_data = s.user_data::<AppData>().unwrap();
-                        info!("Checking for depend_features_callback");
-
                         let mut depend_map = std::collections::HashMap::new();
 
                         if let Some(callback) = &app_data.depend_features_callback {
-                            info!("depend_features_callback is set, calling it");
                             let get_depend_features = || callback();
                             if let Ok(features_map) = std::panic::catch_unwind(
                                 std::panic::AssertUnwindSafe(get_depend_features),
                             ) {
                                 info!("depend_features_callback returned: {:?}", features_map);
                                 depend_map = features_map;
-                            } else {
-                                info!("depend_features_callback panicked");
                             }
                         } else {
                             info!("depend_features_callback is not set");
                         }
 
-                        if depend_map.is_empty() {
-                            depend_map.insert(
-                                "default-dependency".to_string(),
-                                vec!["default".to_string()],
-                            );
-                        }
                         let depend_names: Vec<String> = depend_map.keys().cloned().collect();
                         show_depend_features_editor(
                             s,
