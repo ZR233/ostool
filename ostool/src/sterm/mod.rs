@@ -94,8 +94,8 @@ impl SerialTerm {
 
         while handle.is_running() {
             // 非阻塞读取键盘事件
-            if event::poll(Duration::from_millis(10))?
-                && let Event::Key(key) = event::read()?
+            if event::poll(Duration::from_millis(10)).is_ok()
+                && let Ok(Event::Key(key)) = event::read()
                 && key.kind == KeyEventKind::Press
             {
                 // 检测 Ctrl+A+x 退出序列
@@ -134,7 +134,7 @@ impl SerialTerm {
 
         // 等待接收线程结束
         let _ = rx_handle.join();
-
+        info!("Serial terminal exited");
         Ok(())
     }
 

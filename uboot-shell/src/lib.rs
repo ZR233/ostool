@@ -170,13 +170,14 @@ impl UbootShell {
     pub fn cmd_without_reply(&mut self, cmd: &str) -> Result<()> {
         self.tx().write_all(cmd.as_bytes())?;
         self.tx().write_all("\n".as_bytes())?;
-        self.tx().flush()?;
+        // self.tx().flush()?;
         // self.wait_for_reply(cmd)?;
         // debug!("cmd ok");
         Ok(())
     }
 
     fn _cmd(&mut self, cmd: &str) -> Result<String> {
+        let _ = self.read_to_end(&mut vec![]);
         let ok_str = "cmd-ok";
         let cmd_with_id = format!("{cmd}&& echo {ok_str}");
         self.cmd_without_reply(&cmd_with_id)?;
