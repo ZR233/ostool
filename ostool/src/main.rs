@@ -65,7 +65,6 @@ pub struct UbootArgs {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    
     let cli = Cli::parse();
 
     let pwd = current_dir()?;
