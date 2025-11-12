@@ -18,7 +18,6 @@ use cursive::{
 };
 
 use super::editors::*;
-use crate::ui::components::editors::depend_features_editor::show_depend_features_editor;
 use crate::ui::components::editors::multi_select_editor::{
     create_multi_select_from_array_item, show_multi_select,
 };
@@ -737,7 +736,7 @@ fn enter_elem(s: &mut Cursive, elem: &ElementType) {
                             create_multi_select_from_array_item(array_item, &enum_item.variants);
 
                         show_multi_select(s, &item.base.title, &multi_select_item);
-                    } 
+                    }
                     // else if path == "features.depend_features"
                     //     || path == "system.features.depend_features"
                     // {
@@ -763,7 +762,7 @@ fn enter_elem(s: &mut Cursive, elem: &ElementType) {
                     //         &depend_names,
                     //         &depend_map,
                     //     );
-                    // } 
+                    // }
                     else {
                         show_array_edit(s, &item.base.key(), &item.base.title, &array_item.values);
                     }

@@ -361,9 +361,9 @@ impl AppContext {
                 {
                     package = pkg.clone();
                 }
-                let mut data = HashSet::new();
+                
                 // 调用显示特性选择对话框的函数
-                let res = show_feature_select(siv, &package, &cargo_toml, data);
+                show_feature_select(siv, &package, &cargo_toml);
             }),
         }
     }

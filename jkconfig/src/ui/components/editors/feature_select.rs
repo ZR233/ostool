@@ -4,27 +4,18 @@ use cursive::{
     view::{Nameable, Resizable},
     views::{Dialog, DummyView, LinearLayout, OnEventView, ScrollView, SelectView, TextView},
 };
-use std::sync::Arc;
-use std::{
-    collections::{HashMap, HashSet},
-    path::Path,
-};
+use std::{collections::HashMap, path::Path};
+use std::{collections::HashSet, sync::Arc};
 
 use crate::{
-    data::app_data::AppData,
+    data::{app_data::AppData, item::ItemType, types::ElementType},
     ui::{
         components::editors::multi_select_editor::{MultiSelectItem, show_multi_select},
         handle_back,
     },
 };
 
-pub fn show_feature_select(
-    s: &mut Cursive,
-    package: &str,
-    manifest_path: &Path,
-    selected: HashSet<String>,
-) -> HashSet<String> {
-    let mut selected = selected.clone();
+pub fn show_feature_select(s: &mut Cursive, package: &str, manifest_path: &Path) {
     if let Ok(metadata) = cargo_metadata::MetadataCommand::new()
         .manifest_path(manifest_path)
         .no_deps()
@@ -34,14 +25,38 @@ pub fn show_feature_select(
             Some(pkg) => {
                 let features: Vec<String> = pkg.features.keys().cloned().collect();
 
-                // let multi_select_item = MultiSelectItem {
-                //     variants: features,
-                //     selected_indices: features
-                //         .iter()
-                //         .enumerate()
-                //         .filter_map(|(i, f)| if selected.contains(f) { Some(i) } else { None })
-                //         .collect(),
-                // };
+                let old = if let Some(app) = s.user_data::<AppData>() {
+                    if let Some(ElementType::Item(item)) = app.current() {
+                        if let ItemType::Array(array) = &item.item_type {
+                            array.values.clone()
+                        } else {
+                            Vec::new()
+                        }
+                    } else {
+                        Vec::new()
+                    }
+                } else {
+                    Vec::new()
+                };
+
+                let mut selected: HashSet<String> = old.into_iter().collect();
+                let mut select = ;
+
+                // 添加所有选项到SelectView
+                           
+
+                s.add_fullscreen_layer(OnEventView::new(Dialog::around(
+                    LinearLayout::vertical()
+                        .child(TextView::new("Select Feature".to_string()))
+                        .child(
+                            TextView::new("(Press Enter to select feature)")
+                                .style(cursive::theme::ColorStyle::secondary()),
+                        )
+                        .child(DummyView)
+                        .child(
+                            ScrollView::new(select.with_name("feature_select")).fixed_height(20),
+                        ),
+                )));
 
                 // show_multi_select(s, &format!("Features for {}", package), &multi_select_item);
 
@@ -71,8 +86,6 @@ pub fn show_feature_select(
             }
         }
     }
-
-    selected
 }
 
 /// 显示依赖项选择对话框
