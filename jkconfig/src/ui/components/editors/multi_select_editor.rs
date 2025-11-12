@@ -7,7 +7,6 @@ use cursive::{
 
 use crate::{
     data::{app_data::AppData, item::ItemType, types::ElementType},
-    ui::handle_back,
 };
 
 /// 多选项结构体
@@ -35,6 +34,35 @@ pub struct ExtendedMultiSelectItem {
 
 use std::collections::HashMap;
 
+/// 多选临时数据结构体
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MultiSelectTempData {
+    pub selected_indices: Vec<usize>,
+    pub variants: Vec<String>,
+    pub current_key: String,
+}
+
+/// 扩展多选临时数据结构体
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ExtendedMultiSelectTempData {
+    pub selected_indices: Vec<usize>,
+    pub variants: Vec<String>,
+    pub dependencies: Vec<DepItem>,
+    pub dep_selected_features: HashMap<String, Vec<usize>>,
+    pub current_key: String,
+}
+
+/// 依赖项特性选择临时数据结构体
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DepFeaturesTempData {
+    pub main_selected_indices: Vec<usize>,
+    pub main_variants: Vec<String>,
+    pub dep_name: String,
+    pub dep_features: Vec<String>,
+    pub selected_indices: Vec<usize>,
+    pub current_key: String,
+}
+
 /// 显示多选全屏界面
 pub fn show_multi_select(s: &mut Cursive, title: &str, multi_select: &MultiSelectItem) {
     let mut select = SelectView::new();
@@ -58,11 +86,11 @@ pub fn show_multi_select(s: &mut Cursive, title: &str, multi_select: &MultiSelec
             "unknown_key".to_string()
         };
 
-        let data = (
-            multi_select.selected_indices.clone(),
-            multi_select.variants.clone(),
-            current_key.clone(),
-        );
+        let data = MultiSelectTempData {
+            selected_indices: multi_select.selected_indices.clone(),
+            variants: multi_select.variants.clone(),
+            current_key: current_key.clone(),
+        };
         app.temp_data = Some((current_key, serde_json::to_value(data).unwrap()));
     }
 
@@ -72,11 +100,12 @@ pub fn show_multi_select(s: &mut Cursive, title: &str, multi_select: &MultiSelec
 
     // 创建状态栏
     let status_text = TextView::new(format!(
-        "已选择 {} / {} 项 | Enter: 切换选择 | Tab: 确认",
+        "已选择 {} / {} 项 | Enter: 切换选择 | ESC: 退出",
         multi_select.selected_indices.len(),
         multi_select.variants.len()
     ))
-    .style(cursive::theme::ColorStyle::secondary());
+    .style(cursive::theme::ColorStyle::secondary())
+    .with_name("status_text");
 
     // 创建全屏布局
     let main_layout = LinearLayout::vertical()
@@ -91,23 +120,16 @@ pub fn show_multi_select(s: &mut Cursive, title: &str, multi_select: &MultiSelec
         )
         .child(DummyView);
 
-    // 创建按钮布局
-    let button_layout = LinearLayout::horizontal()
-        .child(DummyView.full_width())
-        .child(cursive::views::Button::new("✓ 确认选择", on_ok))
-        .child(DummyView.fixed_width(1))
-        .child(cursive::views::Button::new("✖ 取消", handle_back));
+    // 创建提示文本
+    let hint_text = TextView::new("💡 提示: 选择后自动保存，无需确认")
+        .style(cursive::theme::ColorStyle::tertiary());
 
     // 创建全屏对话框容器
     let fullscreen_dialog = cursive::views::Panel::new(
         LinearLayout::vertical()
             .child(main_layout.full_height())
-            .child(
-                LinearLayout::horizontal()
-                    .child(DummyView)
-                    .child(button_layout)
-                    .child(DummyView),
-            )
+            .child(DummyView)
+            .child(hint_text)
             .child(DummyView),
     )
     .title("🌟 多选界面");
@@ -142,13 +164,13 @@ fn toggle_selection(s: &mut Cursive) {
         if let Some(app) = s.user_data::<AppData>()
             && let Some((_, temp_value)) = &app.temp_data
         {
-            // 尝试从temp_data中获取保存的(indices, variants, current_key)元组
+            // 尝试从temp_data中获取保存的结构体数据
             if let Ok(data) =
-                serde_json::from_value::<(Vec<usize>, Vec<String>, String)>(temp_value.clone())
+                serde_json::from_value::<MultiSelectTempData>(temp_value.clone())
             {
-                selected_indices = data.0;
-                variants = data.1;
-                current_key = data.2;
+                selected_indices = data.selected_indices;
+                variants = data.variants;
+                current_key = data.current_key;
             }
         }
 
@@ -165,11 +187,33 @@ fn toggle_selection(s: &mut Cursive) {
 
         // 更新保存的数据
         if let Some(app) = s.user_data::<AppData>() {
+            let data = MultiSelectTempData {
+                selected_indices: selected_indices.clone(),
+                variants: variants.clone(),
+                current_key: current_key.clone(),
+            };
             app.temp_data = Some((
                 current_key.clone(),
-                serde_json::to_value((selected_indices.clone(), variants.clone(), current_key))
-                    .unwrap(),
+                serde_json::to_value(data).unwrap(),
             ));
+
+            // 直接更新数据到对应的ArrayItem
+            let selected_variants: Vec<String> = selected_indices
+                .iter()
+                .filter_map(|&idx| variants.get(idx).cloned())
+                .collect();
+
+            if let Some(ElementType::Item(item_mut)) = app.root.get_mut_by_key(&current_key) {
+                if let ItemType::Array(array_mut) = &mut item_mut.item_type {
+                    array_mut.values = selected_variants.clone();
+                    app.needs_save = true;
+                    info!(
+                        "Multi select updated with {} items selected for key: {}",
+                        selected_variants.len(),
+                        current_key
+                    );
+                }
+            }
         }
 
         // 更新UI显示
@@ -189,49 +233,18 @@ fn toggle_selection(s: &mut Cursive) {
             // 恢复原来的选择位置
             view.set_selection(current_selected_idx);
         });
+
+        // 更新状态栏显示
+        s.call_on_name("status_text", |view: &mut TextView| {
+            view.set_content(format!(
+                "已选择 {} / {} 项 | Enter: 切换选择 | ESC: 退出",
+                selected_indices.len(),
+                variants.len()
+            ));
+        });
     }
 }
 
-/// 确认选择
-fn on_ok(s: &mut Cursive) {
-    let app = s.user_data::<AppData>().unwrap();
-
-    // 获取保存的多选择数据
-    if let Some((key, temp_value)) = app.temp_data.take() {
-        // 检查是否是当前依赖项的key
-        if key == "current_depend" {
-        } else {
-            // 尝试解析保存的数据：(selected_indices, variants, current_key)
-            if let Ok((selected_indices, variants, current_key)) =
-                serde_json::from_value::<(Vec<usize>, Vec<String>, String)>(temp_value)
-            {
-                // 根据索引获取选中的选项文本
-                let selected_variants: Vec<String> = selected_indices
-                    .iter()
-                    .filter_map(|&idx| variants.get(idx).cloned())
-                    .collect();
-
-                // 查找并更新对应的ArrayItem
-                if let Some(ElementType::Item(item_mut)) = app.root.get_mut_by_key(&current_key) {
-                    if let ItemType::Array(array_mut) = &mut item_mut.item_type {
-                        // 更新ArrayItem的values列表，只包含选中的选项
-                        array_mut.values = selected_variants.clone();
-                        app.needs_save = true;
-                        info!(
-                            "Multi select confirmed with {} items selected for key: {}",
-                            selected_variants.len(),
-                            current_key
-                        );
-                    }
-                } else {
-                    info!("Failed to find item with key: {}", current_key);
-                }
-            }
-        }
-    }
-
-    handle_back(s);
-}
 
 /// 从ArrayItem创建MultiSelectItem
 pub fn create_multi_select_from_array_item(
@@ -307,13 +320,13 @@ pub fn show_extended_multi_select(
             "unknown_key".to_string()
         };
 
-        let data = (
-            extended_multi_select.selected_indices.clone(),
-            extended_multi_select.variants.clone(),
-            extended_multi_select.dependencies.clone(),
-            extended_multi_select.dep_selected_features.clone(),
-            current_key.clone(),
-        );
+        let data = ExtendedMultiSelectTempData {
+            selected_indices: extended_multi_select.selected_indices.clone(),
+            variants: extended_multi_select.variants.clone(),
+            dependencies: extended_multi_select.dependencies.clone(),
+            dep_selected_features: extended_multi_select.dep_selected_features.clone(),
+            current_key: current_key.clone(),
+        };
         app.temp_data = Some((current_key, serde_json::to_value(data).unwrap()));
     }
 
@@ -323,11 +336,12 @@ pub fn show_extended_multi_select(
 
     // 创建状态栏
     let status_text = TextView::new(format!(
-        "已选择 {} / {} 项 | Enter: 切换选择/进入依赖项 | Tab: 确认",
+        "已选择 {} / {} 项 | Enter: 切换选择/进入依赖项 | ESC: 退出",
         extended_multi_select.selected_indices.len(),
         extended_multi_select.variants.len()
     ))
-    .style(cursive::theme::ColorStyle::secondary());
+    .style(cursive::theme::ColorStyle::secondary())
+    .with_name("extended_status_text");
 
     // 创建全屏布局
     let main_layout = LinearLayout::vertical()
@@ -342,23 +356,16 @@ pub fn show_extended_multi_select(
         )
         .child(DummyView);
 
-    // 创建按钮布局
-    let button_layout = LinearLayout::horizontal()
-        .child(DummyView.full_width())
-        .child(cursive::views::Button::new("✓ 确认选择", on_extended_ok))
-        .child(DummyView.fixed_width(1))
-        .child(cursive::views::Button::new("✖ 取消", handle_back));
+    // 创建提示文本
+    let hint_text = TextView::new("💡 提示: 选择后自动保存，进入依赖项选择后也会自动更新")
+        .style(cursive::theme::ColorStyle::tertiary());
 
     // 创建全屏对话框容器
     let fullscreen_dialog = cursive::views::Panel::new(
         LinearLayout::vertical()
             .child(main_layout.full_height())
-            .child(
-                LinearLayout::horizontal()
-                    .child(DummyView)
-                    .child(button_layout)
-                    .child(DummyView),
-            )
+            .child(DummyView)
+            .child(hint_text)
             .child(DummyView),
     )
     .title("🌟 特性与依赖项选择");
@@ -394,19 +401,13 @@ fn toggle_extended_selection(s: &mut Cursive) {
 
         if let Some(app) = s.user_data::<AppData>()
             && let Some((_, temp_value)) = &app.temp_data
-            && let Ok(data) = serde_json::from_value::<(
-                Vec<usize>,
-                Vec<String>,
-                Vec<DepItem>,
-                HashMap<String, Vec<usize>>,
-                String,
-            )>(temp_value.clone())
+            && let Ok(data) = serde_json::from_value::<ExtendedMultiSelectTempData>(temp_value.clone())
         {
-            selected_indices = data.0;
-            variants = data.1;
-            dependencies = data.2;
-            dep_selected_features = data.3;
-            current_key = data.4;
+            selected_indices = data.selected_indices;
+            variants = data.variants;
+            dependencies = data.dependencies;
+            dep_selected_features = data.dep_selected_features;
+            current_key = data.current_key;
         }
 
         // 检查是否点击了依赖项
@@ -438,19 +439,52 @@ fn toggle_extended_selection(s: &mut Cursive) {
             selected_indices.sort();
         }
 
-        // 更新保存的数据
+        // 更新保存的数据并直接保存到ArrayItem
         if let Some(app) = s.user_data::<AppData>() {
+            let data = ExtendedMultiSelectTempData {
+                selected_indices: selected_indices.clone(),
+                variants: variants.clone(),
+                dependencies: dependencies.clone(),
+                dep_selected_features: dep_selected_features.clone(),
+                current_key: current_key.clone(),
+            };
             app.temp_data = Some((
                 current_key.clone(),
-                serde_json::to_value((
-                    selected_indices.clone(),
-                    variants.clone(),
-                    dependencies.clone(),
-                    dep_selected_features.clone(),
-                    current_key,
-                ))
-                .unwrap(),
+                serde_json::to_value(data).unwrap(),
             ));
+
+            // 直接更新数据到对应的ArrayItem
+            let selected_variants: Vec<String> = selected_indices
+                .iter()
+                .filter_map(|&idx| variants.get(idx).cloned())
+                .collect();
+
+            // 获取依赖项选中的features
+            let mut dep_features: Vec<String> = Vec::new();
+            for (dep_name, selected_feature_indices) in &dep_selected_features {
+                if let Some(dep) = dependencies.iter().find(|d| d.name == *dep_name) {
+                    for &feature_idx in selected_feature_indices {
+                        if let Some(feature) = dep.features.get(feature_idx) {
+                            dep_features.push(format!("{}/{}", dep_name, feature));
+                        }
+                    }
+                }
+            }
+
+            // 合并所有选中的特性
+            let all_selected: Vec<String> = selected_variants.into_iter().chain(dep_features).collect();
+
+            if let Some(ElementType::Item(item_mut)) = app.root.get_mut_by_key(&current_key) {
+                if let ItemType::Array(array_mut) = &mut item_mut.item_type {
+                    array_mut.values = all_selected.clone();
+                    app.needs_save = true;
+                    info!(
+                        "Extended multi select updated with {} items selected for key: {}",
+                        all_selected.len(),
+                        current_key
+                    );
+                }
+            }
         }
 
         // 更新UI显示
@@ -489,6 +523,15 @@ fn toggle_extended_selection(s: &mut Cursive) {
 
             view.set_selection(current_selected_idx);
         });
+
+        // 更新状态栏显示
+        s.call_on_name("extended_status_text", |view: &mut TextView| {
+            view.set_content(format!(
+                "已选择 {} / {} 项 | Enter: 切换选择/进入依赖项 | ESC: 退出",
+                selected_indices.len(),
+                variants.len()
+            ));
+        });
     }
 }
 
@@ -521,14 +564,14 @@ fn show_dep_features_select(
 
     // 保存依赖项选择数据
     if let Some(app) = s.user_data::<AppData>() {
-        let data = (
-            main_selected_indices.to_vec(),
-            main_variants.to_vec(),
-            dep.name.clone(),
-            dep.features.clone(),
+        let data = DepFeaturesTempData {
+            main_selected_indices: main_selected_indices.to_vec(),
+            main_variants: main_variants.to_vec(),
+            dep_name: dep.name.clone(),
+            dep_features: dep.features.clone(),
             selected_indices,
-            current_key.to_string(),
-        );
+            current_key: current_key.to_string(),
+        };
         app.temp_data = Some((
             "dep_features_select".to_string(),
             serde_json::to_value(data).unwrap(),
@@ -541,11 +584,12 @@ fn show_dep_features_select(
 
     // 创建状态栏
     let status_text = TextView::new(format!(
-        "已选择 {} / {} 项 | Enter: 切换选择 | Tab: 返回",
+        "已选择 {} / {} 项 | Enter: 切换选择 | ESC: 返回",
         selected_count,
         dep.features.len()
     ))
-    .style(cursive::theme::ColorStyle::secondary());
+    .style(cursive::theme::ColorStyle::secondary())
+    .with_name("dep_status_text");
 
     // 创建布局
     let main_layout = LinearLayout::vertical()
@@ -560,23 +604,16 @@ fn show_dep_features_select(
         )
         .child(DummyView);
 
-    // 创建按钮
-    let button_layout = LinearLayout::horizontal()
-        .child(DummyView.full_width())
-        .child(cursive::views::Button::new("✓ 确认", on_dep_features_ok))
-        .child(DummyView.fixed_width(1))
-        .child(cursive::views::Button::new("✖ 取消", handle_back));
+    // 创建提示文本
+    let hint_text = TextView::new("💡 提示: 选择后自动更新到主界面，并保存")
+        .style(cursive::theme::ColorStyle::tertiary());
 
     // 创建对话框
     let dialog = cursive::views::Panel::new(
         LinearLayout::vertical()
             .child(main_layout)
-            .child(
-                LinearLayout::horizontal()
-                    .child(DummyView)
-                    .child(button_layout)
-                    .child(DummyView),
-            )
+            .child(DummyView)
+            .child(hint_text)
             .child(DummyView),
     )
     .title("🌟 依赖项特性选择");
@@ -610,21 +647,14 @@ fn toggle_dep_features_selection(s: &mut Cursive) {
         if let Some(app) = s.user_data::<AppData>()
             && let Some((key, temp_value)) = &app.temp_data
             && key == "dep_features_select"
-            && let Ok(data) = serde_json::from_value::<(
-                Vec<usize>,
-                Vec<String>,
-                String,
-                Vec<String>,
-                Vec<usize>,
-                String,
-            )>(temp_value.clone())
+            && let Ok(data) = serde_json::from_value::<DepFeaturesTempData>(temp_value.clone())
         {
-            main_selected_indices = data.0;
-            main_variants = data.1;
-            dep_name = data.2;
-            dep_features = data.3;
-            selected_indices = data.4;
-            current_key = data.5;
+            main_selected_indices = data.main_selected_indices;
+            main_variants = data.main_variants;
+            dep_name = data.dep_name;
+            dep_features = data.dep_features;
+            selected_indices = data.selected_indices;
+            current_key = data.current_key;
         }
 
         // 切换选择状态
@@ -638,20 +668,64 @@ fn toggle_dep_features_selection(s: &mut Cursive) {
             selected_indices.sort();
         }
 
-        // 更新数据
+        // 更新数据并更新主界面和ArrayItem
         if let Some(app) = s.user_data::<AppData>() {
-            let data = (
-                main_selected_indices.clone(),
-                main_variants.clone(),
-                dep_name.clone(),
-                dep_features.clone(),
-                selected_indices.clone(),
-                current_key.clone(),
-            );
+            let data = DepFeaturesTempData {
+                main_selected_indices: main_selected_indices.clone(),
+                main_variants: main_variants.clone(),
+                dep_name: dep_name.clone(),
+                dep_features: dep_features.clone(),
+                selected_indices: selected_indices.clone(),
+                current_key: current_key.clone(),
+            };
             app.temp_data = Some((
                 "dep_features_select".to_string(),
                 serde_json::to_value(data).unwrap(),
             ));
+
+            // 创建扩展多选数据，包含当前依赖项的选择结果
+            let mut dep_selected_features = HashMap::new();
+            dep_selected_features.insert(dep_name.clone(), selected_indices.clone());
+
+            // 获取主要选中的特性
+            let selected_variants: Vec<String> = main_selected_indices
+                .iter()
+                .filter_map(|&idx| main_variants.get(idx).cloned())
+                .collect();
+
+            // 获取当前依赖项选中的features
+            let mut dep_features_selected: Vec<String> = Vec::new();
+            for &feature_idx in &selected_indices {
+                if let Some(feature) = dep_features.get(feature_idx) {
+                    dep_features_selected.push(format!("{}/{}", dep_name, feature));
+                }
+            }
+
+            // 合并所有选中的特性
+            let all_selected: Vec<String> = selected_variants.into_iter().chain(dep_features_selected).collect();
+
+            if let Some(ElementType::Item(item_mut)) = app.root.get_mut_by_key(&current_key) {
+                if let ItemType::Array(array_mut) = &mut item_mut.item_type {
+                    array_mut.values = all_selected.clone();
+                    app.needs_save = true;
+                    info!(
+                        "Dep features select updated with {} features for {} and total {} items for key: {}",
+                        selected_indices.len(),
+                        dep_name,
+                        all_selected.len(),
+                        current_key
+                    );
+                }
+            }
+
+            // 更新状态栏显示
+            s.call_on_name("dep_status_text", |view: &mut TextView| {
+                view.set_content(format!(
+                    "已选择 {} / {} 项 | Enter: 切换选择 | ESC: 返回",
+                    selected_indices.len(),
+                    dep_features.len()
+                ));
+            });
         }
 
         // 更新UI
@@ -672,106 +746,4 @@ fn toggle_dep_features_selection(s: &mut Cursive) {
     }
 }
 
-/// 确认依赖项features选择
-fn on_dep_features_ok(s: &mut Cursive) {
-    let mut main_selected_indices = Vec::new();
-    let mut main_variants = Vec::new();
-    let mut dep_name = String::new();
-    let mut dep_features = Vec::new();
-    let mut selected_indices = Vec::new();
-    let mut current_key = String::new();
 
-    if let Some(app) = s.user_data::<AppData>()
-        && let Some((key, temp_value)) = app.temp_data.take()
-        && key == "dep_features_select"
-        && let Ok(data) = serde_json::from_value::<(
-            Vec<usize>,
-            Vec<String>,
-            String,
-            Vec<String>,
-            Vec<usize>,
-            String,
-        )>(temp_value)
-    {
-        main_selected_indices = data.0;
-        main_variants = data.1;
-        dep_name = data.2;
-        dep_features = data.3;
-        selected_indices = data.4;
-        current_key = data.5;
-    }
-    // 构造临时数据，恢复到主扩展选择界面
-    // 这里我们需要重建主界面的状态，包括更新后的依赖项选择
-    if let Some(app) = s.user_data::<AppData>() {
-        // 保存依赖项选择结果，以便主界面能读取
-        app.temp_data = Some((
-            current_key.clone(),
-            serde_json::to_value((
-                main_selected_indices,
-                main_variants,
-                dep_name,
-                dep_features,
-                selected_indices,
-                current_key,
-            ))
-            .unwrap(),
-        ));
-    }
-
-    // 返回到主界面
-    handle_back(s);
-}
-
-/// 确认扩展多选
-fn on_extended_ok(s: &mut Cursive) {
-    let app = s.user_data::<AppData>().unwrap();
-
-    if let Some((key, temp_value)) = app.temp_data.take()
-        && let Ok((selected_indices, variants, dependencies, dep_selected_features, current_key)) =
-            serde_json::from_value::<(
-                Vec<usize>,
-                Vec<String>,
-                Vec<DepItem>,
-                HashMap<String, Vec<usize>>,
-                String,
-            )>(temp_value)
-    {
-        // 获取主要选中的特性
-        let selected_variants: Vec<String> = selected_indices
-            .iter()
-            .filter_map(|&idx| variants.get(idx).cloned())
-            .collect();
-
-        // 获取依赖项选中的features
-        let mut dep_features: Vec<String> = Vec::new();
-        for (dep_name, selected_feature_indices) in dep_selected_features {
-            if let Some(dep) = dependencies.iter().find(|d| d.name == dep_name) {
-                for &feature_idx in &selected_feature_indices {
-                    if let Some(feature) = dep.features.get(feature_idx) {
-                        dep_features.push(format!("{}/{}", dep_name, feature));
-                    }
-                }
-            }
-        }
-
-        // 合并所有选中的特性
-        let all_selected: Vec<String> = selected_variants.into_iter().chain(dep_features).collect();
-
-        // 查找并更新对应的ArrayItem
-        if let Some(ElementType::Item(item_mut)) = app.root.get_mut_by_key(&current_key) {
-            if let ItemType::Array(array_mut) = &mut item_mut.item_type {
-                array_mut.values = all_selected.clone();
-                app.needs_save = true;
-                info!(
-                    "Extended multi select confirmed with {} items selected for key: {}",
-                    all_selected.len(),
-                    current_key
-                );
-            }
-        } else {
-            info!("Failed to find item with key: {}", current_key);
-        }
-    }
-
-    handle_back(s);
-}
