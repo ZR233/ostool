@@ -67,15 +67,16 @@ pub fn show_multi_select(s: &mut Cursive, title: &str, multi_select: &MultiSelec
     }
 
     // 创建标题样式
-    let title_view = TextView::new(format!("📋 {}", title))
-        .style(cursive::theme::ColorStyle::title_primary());
+    let title_view =
+        TextView::new(format!("📋 {}", title)).style(cursive::theme::ColorStyle::title_primary());
 
     // 创建状态栏
     let status_text = TextView::new(format!(
         "已选择 {} / {} 项 | Enter: 切换选择 | Tab: 确认",
         multi_select.selected_indices.len(),
         multi_select.variants.len()
-    )).style(cursive::theme::ColorStyle::secondary());
+    ))
+    .style(cursive::theme::ColorStyle::secondary());
 
     // 创建全屏布局
     let main_layout = LinearLayout::vertical()
@@ -86,20 +87,16 @@ pub fn show_multi_select(s: &mut Cursive, title: &str, multi_select: &MultiSelec
         .child(
             ScrollView::new(select.with_name("multi_select"))
                 .fixed_height(20) // 设置适当的高度
-                .full_width()
+                .full_width(),
         )
         .child(DummyView);
 
     // 创建按钮布局
     let button_layout = LinearLayout::horizontal()
         .child(DummyView.full_width())
-        .child(
-            cursive::views::Button::new("✓ 确认选择", on_ok)
-        )
+        .child(cursive::views::Button::new("✓ 确认选择", on_ok))
         .child(DummyView.fixed_width(1))
-        .child(
-            cursive::views::Button::new("✖ 取消", handle_back)
-        );
+        .child(cursive::views::Button::new("✖ 取消", handle_back));
 
     // 创建全屏对话框容器
     let fullscreen_dialog = cursive::views::Panel::new(
@@ -109,9 +106,9 @@ pub fn show_multi_select(s: &mut Cursive, title: &str, multi_select: &MultiSelec
                 LinearLayout::horizontal()
                     .child(DummyView)
                     .child(button_layout)
-                    .child(DummyView)
+                    .child(DummyView),
             )
-            .child(DummyView)
+            .child(DummyView),
     )
     .title("🌟 多选界面");
 
@@ -142,16 +139,16 @@ fn toggle_selection(s: &mut Cursive) {
         let mut variants = Vec::new();
         let mut current_key = String::new();
 
-        if let Some(app) = s.user_data::<AppData>() {
-            if let Some((_, temp_value)) = &app.temp_data {
-                // 尝试从temp_data中获取保存的(indices, variants, current_key)元组
-                if let Ok(data) =
-                    serde_json::from_value::<(Vec<usize>, Vec<String>, String)>(temp_value.clone())
-                {
-                    selected_indices = data.0;
-                    variants = data.1;
-                    current_key = data.2;
-                }
+        if let Some(app) = s.user_data::<AppData>()
+            && let Some((_, temp_value)) = &app.temp_data
+        {
+            // 尝试从temp_data中获取保存的(indices, variants, current_key)元组
+            if let Ok(data) =
+                serde_json::from_value::<(Vec<usize>, Vec<String>, String)>(temp_value.clone())
+            {
+                selected_indices = data.0;
+                variants = data.1;
+                current_key = data.2;
             }
         }
 
@@ -264,7 +261,11 @@ pub fn create_multi_select_from_array_item(
 }
 
 /// 显示扩展的多选全屏界面，支持依赖项选择
-pub fn show_extended_multi_select(s: &mut Cursive, title: &str, extended_multi_select: &ExtendedMultiSelectItem) {
+pub fn show_extended_multi_select(
+    s: &mut Cursive,
+    title: &str,
+    extended_multi_select: &ExtendedMultiSelectItem,
+) {
     let mut select = SelectView::new();
 
     // 添加主要特性选项
@@ -282,7 +283,8 @@ pub fn show_extended_multi_select(s: &mut Cursive, title: &str, extended_multi_s
 
     // 添加依赖项选项，使用唯一索引
     for (dep_idx, dep) in extended_multi_select.dependencies.iter().enumerate() {
-        let selected_count = extended_multi_select.dep_selected_features
+        let selected_count = extended_multi_select
+            .dep_selected_features
             .get(&dep.name)
             .map(|indices| indices.len())
             .unwrap_or(0);
@@ -316,15 +318,16 @@ pub fn show_extended_multi_select(s: &mut Cursive, title: &str, extended_multi_s
     }
 
     // 创建标题样式
-    let title_view = TextView::new(format!("📋 {}", title))
-        .style(cursive::theme::ColorStyle::title_primary());
+    let title_view =
+        TextView::new(format!("📋 {}", title)).style(cursive::theme::ColorStyle::title_primary());
 
     // 创建状态栏
     let status_text = TextView::new(format!(
         "已选择 {} / {} 项 | Enter: 切换选择/进入依赖项 | Tab: 确认",
         extended_multi_select.selected_indices.len(),
         extended_multi_select.variants.len()
-    )).style(cursive::theme::ColorStyle::secondary());
+    ))
+    .style(cursive::theme::ColorStyle::secondary());
 
     // 创建全屏布局
     let main_layout = LinearLayout::vertical()
@@ -335,20 +338,16 @@ pub fn show_extended_multi_select(s: &mut Cursive, title: &str, extended_multi_s
         .child(
             ScrollView::new(select.with_name("extended_multi_select"))
                 .fixed_height(20)
-                .full_width()
+                .full_width(),
         )
         .child(DummyView);
 
     // 创建按钮布局
     let button_layout = LinearLayout::horizontal()
         .child(DummyView.full_width())
-        .child(
-            cursive::views::Button::new("✓ 确认选择", on_extended_ok)
-        )
+        .child(cursive::views::Button::new("✓ 确认选择", on_extended_ok))
         .child(DummyView.fixed_width(1))
-        .child(
-            cursive::views::Button::new("✖ 取消", handle_back)
-        );
+        .child(cursive::views::Button::new("✖ 取消", handle_back));
 
     // 创建全屏对话框容器
     let fullscreen_dialog = cursive::views::Panel::new(
@@ -358,9 +357,9 @@ pub fn show_extended_multi_select(s: &mut Cursive, title: &str, extended_multi_s
                 LinearLayout::horizontal()
                     .child(DummyView)
                     .child(button_layout)
-                    .child(DummyView)
+                    .child(DummyView),
             )
-            .child(DummyView)
+            .child(DummyView),
     )
     .title("🌟 特性与依赖项选择");
 
@@ -378,7 +377,9 @@ pub fn show_extended_multi_select(s: &mut Cursive, title: &str, extended_multi_s
 /// 切换扩展选择状态或进入依赖项选择
 fn toggle_extended_selection(s: &mut Cursive) {
     let selection = s
-        .call_on_name("extended_multi_select", |v: &mut SelectView<usize>| v.selection())
+        .call_on_name("extended_multi_select", |v: &mut SelectView<usize>| {
+            v.selection()
+        })
         .unwrap();
 
     if let Some(selection_idx) = selection {
@@ -391,31 +392,37 @@ fn toggle_extended_selection(s: &mut Cursive) {
         let mut dep_selected_features = HashMap::new();
         let mut current_key = String::new();
 
-        if let Some(app) = s.user_data::<AppData>() {
-            if let Some((_, temp_value)) = &app.temp_data {
-                if let Ok(data) = serde_json::from_value::<(
-                    Vec<usize>,
-                    Vec<String>,
-                    Vec<DepItem>,
-                    HashMap<String, Vec<usize>>,
-                    String
-                )>(temp_value.clone()) {
-                    selected_indices = data.0;
-                    variants = data.1;
-                    dependencies = data.2;
-                    dep_selected_features = data.3;
-                    current_key = data.4;
-                }
-            }
+        if let Some(app) = s.user_data::<AppData>()
+            && let Some((_, temp_value)) = &app.temp_data
+            && let Ok(data) = serde_json::from_value::<(
+                Vec<usize>,
+                Vec<String>,
+                Vec<DepItem>,
+                HashMap<String, Vec<usize>>,
+                String,
+            )>(temp_value.clone())
+        {
+            selected_indices = data.0;
+            variants = data.1;
+            dependencies = data.2;
+            dep_selected_features = data.3;
+            current_key = data.4;
         }
 
         // 检查是否点击了依赖项
-        if current_selected_idx >= variants.len() + 1 && current_selected_idx != usize::MAX {
+        if current_selected_idx > variants.len() && current_selected_idx != usize::MAX {
             // 这是依赖项，计算依赖项索引
             let dep_index = current_selected_idx - variants.len() - 1; // 减1是因为分隔符
             if let Some(dep) = dependencies.get(dep_index) {
                 // 显示依赖项的features选择
-                show_dep_features_select(s, dep, &dep_selected_features, &selected_indices, &variants, &current_key);
+                show_dep_features_select(
+                    s,
+                    dep,
+                    &dep_selected_features,
+                    &selected_indices,
+                    &variants,
+                    &current_key,
+                );
                 return;
             }
         }
@@ -440,8 +447,9 @@ fn toggle_extended_selection(s: &mut Cursive) {
                     variants.clone(),
                     dependencies.clone(),
                     dep_selected_features.clone(),
-                    current_key
-                )).unwrap(),
+                    current_key,
+                ))
+                .unwrap(),
             ));
         }
 
@@ -495,7 +503,10 @@ fn show_dep_features_select(
 ) {
     let mut select = SelectView::new();
 
-    let selected_indices = dep_selected_features.get(&dep.name).cloned().unwrap_or_default();
+    let selected_indices = dep_selected_features
+        .get(&dep.name)
+        .cloned()
+        .unwrap_or_default();
     let selected_count = selected_indices.len();
 
     // 添加依赖项的features
@@ -533,7 +544,8 @@ fn show_dep_features_select(
         "已选择 {} / {} 项 | Enter: 切换选择 | Tab: 返回",
         selected_count,
         dep.features.len()
-    )).style(cursive::theme::ColorStyle::secondary());
+    ))
+    .style(cursive::theme::ColorStyle::secondary());
 
     // 创建布局
     let main_layout = LinearLayout::vertical()
@@ -544,20 +556,16 @@ fn show_dep_features_select(
         .child(
             ScrollView::new(select.with_name("dep_features_select"))
                 .fixed_height(20)
-                .full_width()
+                .full_width(),
         )
         .child(DummyView);
 
     // 创建按钮
     let button_layout = LinearLayout::horizontal()
         .child(DummyView.full_width())
-        .child(
-            cursive::views::Button::new("✓ 确认", on_dep_features_ok)
-        )
+        .child(cursive::views::Button::new("✓ 确认", on_dep_features_ok))
         .child(DummyView.fixed_width(1))
-        .child(
-            cursive::views::Button::new("✖ 取消", handle_back)
-        );
+        .child(cursive::views::Button::new("✖ 取消", handle_back));
 
     // 创建对话框
     let dialog = cursive::views::Panel::new(
@@ -567,22 +575,25 @@ fn show_dep_features_select(
                 LinearLayout::horizontal()
                     .child(DummyView)
                     .child(button_layout)
-                    .child(DummyView)
+                    .child(DummyView),
             )
-            .child(DummyView)
-    ).title("🌟 依赖项特性选择");
+            .child(DummyView),
+    )
+    .title("🌟 依赖项特性选择");
 
     s.add_fullscreen_layer(
         OnEventView::new(dialog)
             .on_event(Key::Enter, toggle_dep_features_selection)
-            .on_event(' ', toggle_dep_features_selection)
+            .on_event(' ', toggle_dep_features_selection),
     );
 }
 
 /// 切换依赖项feature选择
 fn toggle_dep_features_selection(s: &mut Cursive) {
     let selection = s
-        .call_on_name("dep_features_select", |v: &mut SelectView<usize>| v.selection())
+        .call_on_name("dep_features_select", |v: &mut SelectView<usize>| {
+            v.selection()
+        })
         .unwrap();
 
     if let Some(selection_idx) = selection {
@@ -596,30 +607,31 @@ fn toggle_dep_features_selection(s: &mut Cursive) {
         let mut selected_indices = Vec::new();
         let mut current_key = String::new();
 
-        if let Some(app) = s.user_data::<AppData>() {
-            if let Some((key, temp_value)) = &app.temp_data {
-                if key == "dep_features_select" {
-                    if let Ok(data) = serde_json::from_value::<(
-                        Vec<usize>,
-                        Vec<String>,
-                        String,
-                        Vec<String>,
-                        Vec<usize>,
-                        String
-                    )>(temp_value.clone()) {
-                        main_selected_indices = data.0;
-                        main_variants = data.1;
-                        dep_name = data.2;
-                        dep_features = data.3;
-                        selected_indices = data.4;
-                        current_key = data.5;
-                    }
-                }
-            }
+        if let Some(app) = s.user_data::<AppData>()
+            && let Some((key, temp_value)) = &app.temp_data
+            && key == "dep_features_select"
+            && let Ok(data) = serde_json::from_value::<(
+                Vec<usize>,
+                Vec<String>,
+                String,
+                Vec<String>,
+                Vec<usize>,
+                String,
+            )>(temp_value.clone())
+        {
+            main_selected_indices = data.0;
+            main_variants = data.1;
+            dep_name = data.2;
+            dep_features = data.3;
+            selected_indices = data.4;
+            current_key = data.5;
         }
 
         // 切换选择状态
-        if let Some(pos) = selected_indices.iter().position(|&x| x == current_selected_idx) {
+        if let Some(pos) = selected_indices
+            .iter()
+            .position(|&x| x == current_selected_idx)
+        {
             selected_indices.remove(pos);
         } else {
             selected_indices.push(current_selected_idx);
@@ -669,28 +681,25 @@ fn on_dep_features_ok(s: &mut Cursive) {
     let mut selected_indices = Vec::new();
     let mut current_key = String::new();
 
-    if let Some(app) = s.user_data::<AppData>() {
-        if let Some((key, temp_value)) = app.temp_data.take() {
-            if key == "dep_features_select" {
-                if let Ok(data) = serde_json::from_value::<(
-                    Vec<usize>,
-                    Vec<String>,
-                    String,
-                    Vec<String>,
-                    Vec<usize>,
-                    String
-                )>(temp_value) {
-                    main_selected_indices = data.0;
-                    main_variants = data.1;
-                    dep_name = data.2;
-                    dep_features = data.3;
-                    selected_indices = data.4;
-                    current_key = data.5;
-                }
-            }
-        }
+    if let Some(app) = s.user_data::<AppData>()
+        && let Some((key, temp_value)) = app.temp_data.take()
+        && key == "dep_features_select"
+        && let Ok(data) = serde_json::from_value::<(
+            Vec<usize>,
+            Vec<String>,
+            String,
+            Vec<String>,
+            Vec<usize>,
+            String,
+        )>(temp_value)
+    {
+        main_selected_indices = data.0;
+        main_variants = data.1;
+        dep_name = data.2;
+        dep_features = data.3;
+        selected_indices = data.4;
+        current_key = data.5;
     }
-
     // 构造临时数据，恢复到主扩展选择界面
     // 这里我们需要重建主界面的状态，包括更新后的依赖项选择
     if let Some(app) = s.user_data::<AppData>() {
@@ -703,8 +712,9 @@ fn on_dep_features_ok(s: &mut Cursive) {
                 dep_name,
                 dep_features,
                 selected_indices,
-                current_key
-            )).unwrap(),
+                current_key,
+            ))
+            .unwrap(),
         ));
     }
 
@@ -716,58 +726,50 @@ fn on_dep_features_ok(s: &mut Cursive) {
 fn on_extended_ok(s: &mut Cursive) {
     let app = s.user_data::<AppData>().unwrap();
 
-    if let Some((key, temp_value)) = app.temp_data.take() {
-        if let Ok((
-            selected_indices,
-            variants,
-            dependencies,
-            dep_selected_features,
-            current_key
-        )) = serde_json::from_value::<(
-            Vec<usize>,
-            Vec<String>,
-            Vec<DepItem>,
-            HashMap<String, Vec<usize>>,
-            String
-        )>(temp_value) {
-            // 获取主要选中的特性
-            let selected_variants: Vec<String> = selected_indices
-                .iter()
-                .filter_map(|&idx| variants.get(idx).cloned())
-                .collect();
+    if let Some((key, temp_value)) = app.temp_data.take()
+        && let Ok((selected_indices, variants, dependencies, dep_selected_features, current_key)) =
+            serde_json::from_value::<(
+                Vec<usize>,
+                Vec<String>,
+                Vec<DepItem>,
+                HashMap<String, Vec<usize>>,
+                String,
+            )>(temp_value)
+    {
+        // 获取主要选中的特性
+        let selected_variants: Vec<String> = selected_indices
+            .iter()
+            .filter_map(|&idx| variants.get(idx).cloned())
+            .collect();
 
-            // 获取依赖项选中的features
-            let mut dep_features: Vec<String> = Vec::new();
-            for (dep_name, selected_feature_indices) in dep_selected_features {
-                if let Some(dep) = dependencies.iter().find(|d| d.name == dep_name) {
-                    for &feature_idx in &selected_feature_indices {
-                        if let Some(feature) = dep.features.get(feature_idx) {
-                            dep_features.push(format!("{}/{}", dep_name, feature));
-                        }
+        // 获取依赖项选中的features
+        let mut dep_features: Vec<String> = Vec::new();
+        for (dep_name, selected_feature_indices) in dep_selected_features {
+            if let Some(dep) = dependencies.iter().find(|d| d.name == dep_name) {
+                for &feature_idx in &selected_feature_indices {
+                    if let Some(feature) = dep.features.get(feature_idx) {
+                        dep_features.push(format!("{}/{}", dep_name, feature));
                     }
                 }
             }
+        }
 
-            // 合并所有选中的特性
-            let all_selected: Vec<String> = selected_variants
-                .into_iter()
-                .chain(dep_features)
-                .collect();
+        // 合并所有选中的特性
+        let all_selected: Vec<String> = selected_variants.into_iter().chain(dep_features).collect();
 
-            // 查找并更新对应的ArrayItem
-            if let Some(ElementType::Item(item_mut)) = app.root.get_mut_by_key(&current_key) {
-                if let ItemType::Array(array_mut) = &mut item_mut.item_type {
-                    array_mut.values = all_selected.clone();
-                    app.needs_save = true;
-                    info!(
-                        "Extended multi select confirmed with {} items selected for key: {}",
-                        all_selected.len(),
-                        current_key
-                    );
-                }
-            } else {
-                info!("Failed to find item with key: {}", current_key);
+        // 查找并更新对应的ArrayItem
+        if let Some(ElementType::Item(item_mut)) = app.root.get_mut_by_key(&current_key) {
+            if let ItemType::Array(array_mut) = &mut item_mut.item_type {
+                array_mut.values = all_selected.clone();
+                app.needs_save = true;
+                info!(
+                    "Extended multi select confirmed with {} items selected for key: {}",
+                    all_selected.len(),
+                    current_key
+                );
             }
+        } else {
+            info!("Failed to find item with key: {}", current_key);
         }
     }
 
