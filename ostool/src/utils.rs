@@ -9,6 +9,7 @@ use anyhow::bail;
 use colored::Colorize;
 use jkconfig::data::app_data::default_schema_by_init;
 use schemars::JsonSchema;
+use serde::Deserialize;
 use tokio::fs;
 
 pub struct Command {
@@ -100,18 +101,18 @@ impl Command {
     }
 }
 
-pub async fn prepare_config<C: JsonSchema>(
+pub async fn prepare_config<'de, C: JsonSchema + Deserialize<'de>>(
     ctx: &mut AppContext,
     config_path: Option<PathBuf>,
     config_name: &str,
-) -> anyhow::Result<String> {
+    content: &'de mut String,
+) -> anyhow::Result<C> {
     // Implementation here
     // Build logic will be implemented here
     let config_path = match config_path {
         Some(path) => path,
         None => ctx.manifest_dir.join(config_name),
     };
-    ctx.build_config_path = Some(config_path.clone());
 
     let schema_path = default_schema_by_init(&config_path);
 
@@ -123,11 +124,29 @@ pub async fn prepare_config<C: JsonSchema>(
     // 初始化AppData
     // let app_data = AppData::new(Some(&config_path), Some(schema_path))?;
 
-    let config_content = fs::read_to_string(&config_path)
+    *content = fs::read_to_string(&config_path)
         .await
         .map_err(|_| anyhow!("can not open config file: {}", config_path.display()))?;
 
-    Ok(config_content)
+    let config = match config_path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+    {
+        "json" => match serde_json::from_str::<C>(content){
+            Ok(v) => v,
+            Err(e) =>{
+                warn!("Failed to parse JSON config: {}", e);
+            },
+        },
+        "toml" => toml::from_str::<C>(content)?,
+        _ => bail!(
+            "unsupported config file extension: {}",
+            config_path.display()
+        ),
+    };
+
+    Ok(config)
 }
 
 pub fn replace_env_placeholders(input: &str) -> anyhow::Result<String> {

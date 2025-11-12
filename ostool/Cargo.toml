@@ -17,6 +17,9 @@ path = "src/main.rs"
 name = "cargo-osrun"
 path = "src/bin/cargo-osrun.rs"
 
+[features]
+ui-log = []
+
 [dependencies]
 anyhow = {workspace = true, features = ["backtrace"]}
 byte-unit = "5.1"

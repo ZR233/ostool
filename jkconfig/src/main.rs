@@ -1,7 +1,6 @@
-extern crate log;
 
 use clap::{Parser, Subcommand};
-use cursive::{Cursive, CursiveExt, event::Key, views::Dialog};
+use cursive::{Cursive, CursiveExt, event::Key};
 use std::path::PathBuf;
 
 use jkconfig::{

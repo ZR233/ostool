@@ -15,7 +15,7 @@ use jkconfig::{
 use object::{Architecture, Object};
 use tokio::fs;
 
-use crate::{build::config::BuildConfig, utils::prepare_config};
+use crate::{build::config::{self, BuildConfig}, utils::prepare_config};
 
 #[derive(Default, Clone)]
 pub struct AppContext {
@@ -332,27 +332,29 @@ impl AppContext {
         &mut self,
         config_path: Option<PathBuf>,
     ) -> anyhow::Result<BuildConfig> {
+        let config_content =
+            prepare_config::<BuildConfig>(self, config_path.clone(), ".build.toml").await?;
+         
+
         // Try to get configuration content, launch UI interface if failed
-        match prepare_config::<BuildConfig>(self, config_path, ".build.toml").await {
-            Ok(content) => {
-                // Try to parse configuration, launch UI interface if parsing failed
-                match toml::from_str::<BuildConfig>(&content) {
-                    Ok(config) => {
-                        println!("Build configuration: {:?}", config);
-                        self.build_config = Some(config.clone());
-                        Ok(config)
-                    }
-                    Err(e) => {
-                        println!("Configuration file parsing failed: {}", e);
-                        self.prepare_launch_ui().await
-                    }
-                }
-            }
-            Err(e) => {
-                println!("Failed to read configuration file: {}", e);
-                self.prepare_launch_ui().await
-            }
-        }
+        // match prepare_config::<BuildConfig>(self, config_path, ".build.toml").await {
+        //     Ok(content) => {
+        //         // Try to parse configuration, launch UI interface if parsing failed
+        //         match toml::from_str::<BuildConfig>(&content) {
+        //             Ok(config) => {
+        //                 println!("Build configuration: {:?}", config);
+        //                 self.build_config = Some(config.clone());
+        //                 Ok(config)
+        //             }
+        //             Err(e) => {
+        //                 println!("Configuration file parsing failed: {}", e);
+        //             }
+        //         }
+        //     }
+        //     Err(e) => {
+        //         println!("Failed to read configuration file: {}", e);
+        //     }
+        // }
     }
 
     /// Launch configuration UI interface and get configuration
@@ -373,7 +375,7 @@ impl AppContext {
             tokio::fs::write(&config_path, "").await?;
         }
 
-        let schema_path = default_schema_by_init(&config_path);
+        // let schema_path = default_schema_by_init(&config_path);
 
         if !config_path.exists() {
             println!(
@@ -385,7 +387,10 @@ impl AppContext {
 
         println!("Starting configuration UI interface...");
 
-        let _ = Self::launch_jkconfig_ui(&config_path, &schema_path)?;
+
+
+
+        // let _ = Self::launch_jkconfig_ui(&config_path, &schema_path)?;
 
         let config_content: String = tokio::fs::read_to_string(&config_path)
             .await
