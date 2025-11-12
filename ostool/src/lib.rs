@@ -11,3 +11,5 @@ pub mod utils;
 extern crate log;
 #[macro_use]
 extern crate anyhow;
+
+pub use jkconfig::cursive;

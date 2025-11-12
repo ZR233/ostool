@@ -6,7 +6,7 @@ mod log;
 
 pub mod data;
 // UI模块暂时注释掉，使用主程序中的 MenuView
-mod run;
+pub mod run;
 pub mod ui;
 
 // Web服务器模块（需要web feature）
