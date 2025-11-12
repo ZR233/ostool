@@ -21,7 +21,7 @@ impl AppContext {
     }
 
     pub async fn build(&mut self, config_path: Option<PathBuf>) -> anyhow::Result<()> {
-        let build_config = self.perpare_build_config(config_path).await?;
+        let build_config = self.perpare_build_config(config_path, false).await?;
         println!("Build configuration: {:?}", build_config);
         self.build_with_config(&build_config).await
     }
