@@ -365,7 +365,7 @@ impl AppContext {
                 }
 
                 // 调用显示特性选择对话框的函数
-                show_feature_select(siv, &package, &cargo_toml);
+                show_feature_select(siv, &package, &cargo_toml, None);
             }),
         }
     }
