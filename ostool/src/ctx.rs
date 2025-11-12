@@ -7,7 +7,7 @@ use std::{
 use anyhow::anyhow;
 use cargo_metadata::Metadata;
 use colored::Colorize;
-use cursive::{Cursive, CursiveExt};
+use cursive::Cursive;
 use jkconfig::{
     ElemHock,
     data::{
@@ -52,7 +52,7 @@ impl AppContext {
 
     // Helper function to launch jkconfig UI
     pub fn launch_jkconfig_ui(config_path: &Path, schema_path: &Path) -> anyhow::Result<bool> {
-        let app_data = AppData::new(Some(config_path), Some(schema_path))?;
+        let _app_data = AppData::new(Some(config_path), Some(schema_path))?;
 
         // app_data.features_callback = Some(std::sync::Arc::new(|| {
         //     let mut features = Vec::new();

@@ -42,15 +42,11 @@ pub async fn run<C: JsonSchema + DeserializeOwned>(
         return Ok(None);
     }
     let val = app.root.as_json();
-    let mut content = String::new();
 
     let c = match ext.as_str() {
-        "json" => {
-            content = serde_json::to_string_pretty(&val)?;
-            serde_json::from_value(val)?
-        }
+        "json" => serde_json::from_value(val.clone())?,
         "toml" => {
-            content = toml::to_string_pretty(&val)?;
+            let content = toml::to_string_pretty(&val)?;
             toml::from_str(&content)?
         }
         _ => {
@@ -58,9 +54,24 @@ pub async fn run<C: JsonSchema + DeserializeOwned>(
         }
     };
 
-    tokio::fs::write(&config_path, content)
-        .await
-        .with_context(|| format!("Failed to write {}", config_path.display()))?;
+    // Write the content based on the format
+    match ext.as_str() {
+        "json" => {
+            let content = serde_json::to_string_pretty(&val)?;
+            tokio::fs::write(&config_path, content)
+                .await
+                .with_context(|| format!("Failed to write {}", config_path.display()))?;
+        }
+        "toml" => {
+            let content = toml::to_string_pretty(&val)?;
+            tokio::fs::write(&config_path, content)
+                .await
+                .with_context(|| format!("Failed to write {}", config_path.display()))?;
+        }
+        _ => {
+            anyhow::bail!("unsupported config file extension: {ext}",);
+        }
+    }
 
     Ok(Some(c))
 }

@@ -78,29 +78,31 @@ fn on_depend_select(s: &mut Cursive) {
         let mut depend_features_map = HashMap::new();
 
         if let Some(app) = s.user_data::<AppData>()
-            && let Some((key, temp_value)) = &app.temp_data {
-                // 检查是否是依赖项features映射数据
-                if key == "depend_features_map" {
-                    // 尝试从temp_data中获取保存的依赖项features映射
-                    if let Ok(map) =
-                        serde_json::from_value::<HashMap<String, Vec<String>>>(temp_value.clone())
-                    {
-                        depend_features_map = map;
-                    }
+            && let Some((key, temp_value)) = &app.temp_data
+        {
+            // 检查是否是依赖项features映射数据
+            if key == "depend_features_map" {
+                // 尝试从temp_data中获取保存的依赖项features映射
+                if let Ok(map) =
+                    serde_json::from_value::<HashMap<String, Vec<String>>>(temp_value.clone())
+                {
+                    depend_features_map = map;
                 }
             }
+        }
 
         // 如果没有从temp_data获取到映射，尝试从depend_features_callback获取
         if depend_features_map.is_empty()
             && let Some(app) = s.user_data::<AppData>()
-                && let Some(callback) = &app.depend_features_callback {
-                    let get_depend_features = || callback();
-                    if let Ok(features_map) =
-                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(get_depend_features))
-                    {
-                        depend_features_map = features_map;
-                    }
-                }
+            && let Some(callback) = &app.depend_features_callback
+        {
+            let get_depend_features = || callback();
+            if let Ok(features_map) =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(get_depend_features))
+            {
+                depend_features_map = features_map;
+            }
+        }
 
         // 获取选中依赖项的features
         if let Some(features) = depend_features_map.get(&**selection_name) {

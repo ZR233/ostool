@@ -94,11 +94,10 @@ pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl Into
 }
 
 fn on_clear(s: &mut Cursive) {
-    let Some(selected) = menu_selected(s) else {
+    let Some(_selected) = menu_selected(s) else {
         return;
     };
 
-    info!("Clear value for selected item {}", selected.key());
     update_selected(s, |elem| elem.set_none());
 }
 
