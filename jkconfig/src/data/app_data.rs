@@ -13,10 +13,12 @@ use crate::data::{menu::MenuRoot, types::ElementType};
 
 pub type FeaturesCallback = Arc<dyn Fn() -> Vec<String> + Send + Sync>;
 
+pub type HockCallback = Arc<dyn Fn(&mut Cursive, &str) + Send + Sync>;
+
 #[derive(Clone)]
 pub struct ElemHock {
     pub path: String,
-    pub callback: Arc<dyn Fn(&mut Cursive, &str) + Send + Sync>,
+    pub callback: HockCallback,
 }
 
 #[derive(Clone)]
@@ -25,6 +27,7 @@ pub struct AppData {
     pub current_key: Vec<String>,
     pub needs_save: bool,
     pub config: PathBuf,
+    pub user_data: HashMap<String, String>,
     pub temp_data: Option<(String, serde_json::Value)>,
     pub elem_hocks: Vec<ElemHock>,
     pub features_callback: Option<Arc<dyn Fn() -> Vec<String> + Send + Sync>>,
@@ -80,6 +83,44 @@ impl AppData {
         init_value_path
     }
 
+    pub fn new_with_init_and_schema(
+        init: &str,
+        init_value_path: &Path,
+        schema: &serde_json::Value,
+    ) -> anyhow::Result<Self> {
+        let mut root = MenuRoot::try_from(schema)?;
+
+        if !init.trim().is_empty() {
+            let init_json: serde_json::Value = match init_value_path
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+            {
+                "json" => serde_json::from_str(init)?,
+                "toml" => {
+                    let v: toml::Value = toml::from_str(init)?;
+                    serde_json::to_value(v)?
+                }
+                ext => {
+                    bail!("Unsupported config file extension: {ext:?}");
+                }
+            };
+            root.update_by_value(&init_json)?;
+        }
+
+        Ok(AppData {
+            root,
+            current_key: Vec::new(),
+            needs_save: false,
+            config: init_value_path.into(),
+            temp_data: None,
+            features_callback: None,
+            depend_features_callback: None,
+            elem_hocks: Vec::new(),
+            user_data: HashMap::new(),
+        })
+    }
+
     pub fn new_with_schema(
         config: Option<impl AsRef<Path>>,
         schema: &serde_json::Value,
@@ -118,6 +159,7 @@ impl AppData {
             features_callback: None,
             depend_features_callback: None,
             elem_hocks: Vec::new(),
+            user_data: HashMap::new(),
         })
     }
 

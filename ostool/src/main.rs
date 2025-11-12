@@ -65,6 +65,14 @@ pub struct UbootArgs {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    #[cfg(not(feature = "ui-log"))]
+    {
+        env_logger::builder()
+            .filter_level(log::LevelFilter::Info)
+            .parse_default_env()
+            .init();
+    }
+
     let cli = Cli::parse();
 
     let pwd = current_dir()?;

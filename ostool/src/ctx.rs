@@ -1,6 +1,7 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use anyhow::anyhow;
@@ -8,14 +9,25 @@ use cargo_metadata::Metadata;
 use colored::Colorize;
 use cursive::{Cursive, CursiveExt, event::Key};
 use jkconfig::{
-    data::app_data::{AppData, default_schema_by_init},
-    ui::{components::menu::menu_view, handle_back, handle_quit, handle_save},
+    ElemHock,
+    data::{
+        app_data::{AppData, default_schema_by_init},
+        item::ItemType,
+        types::ElementType,
+    },
+    ui::{
+        components::{
+            editors::{show_feature_select, show_list_select},
+            menu::menu_view,
+        },
+        handle_back, handle_quit, handle_save,
+    },
 };
 
 use object::{Architecture, Object};
 use tokio::fs;
 
-use crate::{build::config::{self, BuildConfig}, utils::prepare_config};
+use crate::build::config::BuildConfig;
 
 #[derive(Default, Clone)]
 pub struct AppContext {
@@ -27,38 +39,6 @@ pub struct AppContext {
     pub arch: Option<Architecture>,
     pub build_config: Option<BuildConfig>,
     pub build_config_path: Option<PathBuf>,
-}
-
-fn run_tui(app_data: AppData) -> anyhow::Result<()> {
-    let title = app_data.root.title.clone();
-    let fields = app_data.root.menu().fields();
-
-    cursive::logger::init();
-    cursive::logger::set_filter_levels_from_env();
-    // 创建Cursive应用
-    let mut siv = Cursive::default();
-
-    // 设置AppData为user_data
-    siv.set_user_data(app_data);
-
-    // 添加全局键盘事件处理
-    siv.add_global_callback('q', handle_quit);
-    siv.add_global_callback('Q', handle_quit);
-    siv.add_global_callback('s', handle_save);
-    siv.add_global_callback('S', handle_save);
-    siv.add_global_callback(Key::Esc, handle_back);
-    siv.add_global_callback('~', cursive::Cursive::toggle_debug_console);
-    // 初始菜单路径为空
-    siv.add_fullscreen_layer(menu_view(&title, "", fields));
-
-    // 运行应用
-    siv.run();
-
-    println!("Exiting jkconfig...");
-    let mut app = siv.take_user_data::<AppData>().unwrap();
-    app.on_exit()?;
-
-    Ok(())
 }
 
 impl AppContext {
@@ -129,7 +109,7 @@ impl AppContext {
         //     depend_features
         // }));
 
-        run_tui(app_data)?;
+        // run_tui(app_data)?;
 
         Ok(true)
     }
@@ -173,7 +153,7 @@ impl AppContext {
         app_data.depend_features_callback =
             Some(std::sync::Arc::new(move || depend_features.clone()));
 
-        run_tui(app_data)?;
+        // run_tui(app_data)?;
 
         Ok(true)
     }
@@ -332,76 +312,24 @@ impl AppContext {
         &mut self,
         config_path: Option<PathBuf>,
     ) -> anyhow::Result<BuildConfig> {
-        let config_content =
-            prepare_config::<BuildConfig>(self, config_path.clone(), ".build.toml").await?;
-         
-
-        // Try to get configuration content, launch UI interface if failed
-        // match prepare_config::<BuildConfig>(self, config_path, ".build.toml").await {
-        //     Ok(content) => {
-        //         // Try to parse configuration, launch UI interface if parsing failed
-        //         match toml::from_str::<BuildConfig>(&content) {
-        //             Ok(config) => {
-        //                 println!("Build configuration: {:?}", config);
-        //                 self.build_config = Some(config.clone());
-        //                 Ok(config)
-        //             }
-        //             Err(e) => {
-        //                 println!("Configuration file parsing failed: {}", e);
-        //             }
-        //         }
-        //     }
-        //     Err(e) => {
-        //         println!("Failed to read configuration file: {}", e);
-        //     }
-        // }
-    }
-
-    /// Launch configuration UI interface and get configuration
-    pub async fn prepare_launch_ui(&mut self) -> anyhow::Result<BuildConfig> {
-        println!("Launching UI interface for configuration editing...");
-        // Get configuration file path
-        let config_path = match &self.build_config_path {
-            Some(path) => path.clone(),
+        let config_path = match config_path {
+            Some(path) => path,
             None => self.workspace_folder.join(".build.toml"),
         };
+        self.build_config_path = Some(config_path.clone());
 
-        // Ensure the configuration file exists
-        if !config_path.exists() {
-            println!(
-                "Configuration file does not exist, creating new file: {}",
-                config_path.display()
-            );
-            tokio::fs::write(&config_path, "").await?;
-        }
+        let Some(c): Option<BuildConfig> = jkconfig::run(
+            config_path,
+            false,
+            &[self.ui_hock_feature_select(), self.ui_hock_pacage_select()],
+        )
+        .await?
+        else {
+            anyhow::bail!("No build configuration obtained");
+        };
 
-        // let schema_path = default_schema_by_init(&config_path);
-
-        if !config_path.exists() {
-            println!(
-                "Creating empty configuration file: {}",
-                config_path.display()
-            );
-            std::fs::write(&config_path, "")?;
-        }
-
-        println!("Starting configuration UI interface...");
-
-
-
-
-        // let _ = Self::launch_jkconfig_ui(&config_path, &schema_path)?;
-
-        let config_content: String = tokio::fs::read_to_string(&config_path)
-            .await
-            .map_err(|e| anyhow!("Failed to read configuration file after UI editing: {}", e))?;
-
-        let config: BuildConfig = toml::from_str(&config_content)
-            .map_err(|e| anyhow!("Failed to parse configuration file after UI editing: {}", e))?;
-
-        self.build_config = Some(config.clone());
-
-        Ok(config)
+        self.build_config = Some(c.clone());
+        Ok(c)
     }
 
     pub fn is_cargo_build(&self) -> bool {
@@ -421,4 +349,58 @@ impl AppContext {
             format!("{}", self.workspace_folder.display()).as_ref(),
         )
     }
+    fn ui_hock_feature_select(&self) -> ElemHock {
+        let path = "system.features";
+        let cargo_toml = self.workspace_folder.join("Cargo.toml");
+        ElemHock {
+            path: path.to_string(),
+            callback: Arc::new(move |siv: &mut Cursive, _path: &str| {
+                let mut package = String::new();
+                if let Some(app) = siv.user_data::<AppData>()
+                    && let Some(pkg) = app.user_data.get("current_package")
+                {
+                    package = pkg.clone();
+                }
+                let mut data = HashSet::new();
+                // 调用显示特性选择对话框的函数
+                let res = show_feature_select(siv, &package, &cargo_toml, data);
+            }),
+        }
+    }
+
+    fn ui_hock_pacage_select(&self) -> ElemHock {
+        let path = "system.package";
+        let cargo_toml = self.workspace_folder.join("Cargo.toml");
+
+        ElemHock {
+            path: path.to_string(),
+            callback: Arc::new(move |siv: &mut Cursive, path: &str| {
+                let mut items = Vec::new();
+                if let Ok(metadata) = cargo_metadata::MetadataCommand::new()
+                    .manifest_path(&cargo_toml)
+                    .no_deps()
+                    .exec()
+                {
+                    for pkg in &metadata.packages {
+                        items.push(pkg.name.to_string());
+                    }
+                }
+
+                // 调用显示包选择对话框的函数
+                show_list_select(siv, "Pacage", &items, path, on_package_selected);
+            }),
+        }
+    }
+}
+
+fn on_package_selected(app: &mut AppData, path: &str, selected: &str) {
+    app.user_data
+        .insert("current_package".to_string(), selected.to_string());
+    let ElementType::Item(item) = app.root.get_mut_by_key(path).unwrap() else {
+        panic!("Not an item element");
+    };
+    let ItemType::String { value, .. } = &mut item.item_type else {
+        panic!("Not a string item");
+    };
+    *value = Some(selected.to_string());
 }
