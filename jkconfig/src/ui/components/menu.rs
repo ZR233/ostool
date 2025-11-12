@@ -1,10 +1,5 @@
 use crate::{
-    data::{
-        AppData,
-        item::{EnumItem, ItemType},
-        menu::Menu,
-        types::ElementType,
-    },
+    data::{AppData, item::ItemType, menu::Menu, types::ElementType},
     ui::{components::icon::ItemDisplay, handle_edit},
 };
 use cursive::{
@@ -16,14 +11,8 @@ use cursive::{
     view::{IntoBoxedView, Nameable, Resizable, Scrollable},
     views::{Dialog, DummyView, LinearLayout, OnEventView, Panel, SelectView, TextView},
 };
-use log::info;
-// 移除对ostool的依赖导入
 
 use super::editors::*;
-use crate::ui::components::editors::depend_features_editor::show_depend_features_editor;
-use crate::ui::components::editors::multi_select_editor::{
-    create_multi_select_from_array_item, show_multi_select,
-};
 
 /// 创建菜单视图
 pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl IntoBoxedView {
@@ -97,11 +86,10 @@ pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl Into
 }
 
 fn on_clear(s: &mut Cursive) {
-    let Some(selected) = menu_selected(s) else {
+    let Some(_selected) = menu_selected(s) else {
         return;
     };
 
-    info!("Clear value for selected item {}", selected.key());
     update_selected(s, |elem| elem.set_none());
 }
 
@@ -632,6 +620,21 @@ fn enter_elem(s: &mut Cursive, elem: &ElementType) {
         path = app.key_string();
     }
 
+    let mut hocked = false;
+    if let Some(app_data) = s.user_data::<AppData>() {
+        for hook in app_data.elem_hocks.iter().cloned() {
+            if hook.path == path {
+                info!("Found hock for path: {}, type: {}", path, elem.struct_name);
+                (hook.callback)(s, &path);
+                hocked = true;
+                break;
+            }
+        }
+    }
+    if hocked {
+        return;
+    }
+
     match elem {
         ElementType::Menu(menu) => {
             info!("Handling Menu: {}", menu.title);
@@ -687,71 +690,7 @@ fn enter_elem(s: &mut Cursive, elem: &ElementType) {
                     show_enum_select(s, &item.base.title, enum_item);
                 }
                 ItemType::Array(array_item) => {
-                    if path == "features.self_features" || path == "system.features.self_features" {
-                        let app_data = s.user_data::<AppData>().unwrap();
-                        let mut variants = array_item.values.clone();
-
-                        // 如果设置了features_callback，则使用它获取features
-                        if let Some(callback) = &app_data.features_callback {
-                            let get_features = || callback();
-                            if let Ok(features) =
-                                std::panic::catch_unwind(std::panic::AssertUnwindSafe(get_features))
-                            {
-                                info!("features_callback returned: {:?}", features);
-                                for feature in features {
-                                    if !variants.contains(&feature) {
-                                        variants.push(feature);
-                                    }
-                                }
-                            }
-                        }
-
-                        // 创建一个临时的EnumItem用于显示选择界面
-                        let enum_item = EnumItem {
-                            variants,
-                            value: None,
-                            default: None,
-                        };
-
-                        // 保存原始的ArrayItem和键，以便在选择后更新
-                        s.user_data::<AppData>().unwrap().temp_data = Some((
-                            item.base.key().to_string(),
-                            serde_json::to_value(array_item.clone()).unwrap(),
-                        ));
-
-                        // 使用create_multi_select_from_array_item函数创建MultiSelectItem
-                        let multi_select_item =
-                            create_multi_select_from_array_item(array_item, &enum_item.variants);
-
-                        show_multi_select(s, &item.base.title, &multi_select_item);
-                    } else if path == "features.depend_features"
-                        || path == "system.features.depend_features"
-                    {
-                        let app_data = s.user_data::<AppData>().unwrap();
-                        let mut depend_map = std::collections::HashMap::new();
-
-                        if let Some(callback) = &app_data.depend_features_callback {
-                            let get_depend_features = || callback();
-                            if let Ok(features_map) = std::panic::catch_unwind(
-                                std::panic::AssertUnwindSafe(get_depend_features),
-                            ) {
-                                info!("depend_features_callback returned: {:?}", features_map);
-                                depend_map = features_map;
-                            }
-                        } else {
-                            info!("depend_features_callback is not set");
-                        }
-
-                        let depend_names: Vec<String> = depend_map.keys().cloned().collect();
-                        show_depend_features_editor(
-                            s,
-                            &item.base.title,
-                            &depend_names,
-                            &depend_map,
-                        );
-                    } else {
-                        show_array_edit(s, &item.base.key(), &item.base.title, &array_item.values);
-                    }
+                    show_array_edit(s, &item.base.key(), &item.base.title, &array_item.values);
                 }
             }
         }

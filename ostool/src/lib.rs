@@ -2,6 +2,7 @@
 
 pub mod build;
 pub mod ctx;
+pub mod menuconfig;
 pub mod run;
 pub mod sterm;
 pub mod utils;

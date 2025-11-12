@@ -7,6 +7,7 @@ use log::info;
 use ostool::{
     build,
     ctx::AppContext,
+    menuconfig::{MenuConfigHandler, MenuConfigMode},
     run::{cargo::CargoRunnerKind, qemu::RunQemuArgs, uboot::RunUbootArgs},
 };
 
@@ -27,6 +28,11 @@ enum SubCommands {
         config: Option<PathBuf>,
     },
     Run(RunArgs),
+    Menuconfig {
+        /// Menu configuration mode (qemu or uboot)
+        #[arg(value_enum)]
+        mode: Option<MenuConfigMode>,
+    },
 }
 
 #[derive(Args, Debug)]
@@ -65,6 +71,14 @@ pub struct UbootArgs {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    #[cfg(not(feature = "ui-log"))]
+    {
+        env_logger::builder()
+            .filter_level(log::LevelFilter::Info)
+            .parse_default_env()
+            .init();
+    }
+
     let cli = Cli::parse();
 
     let pwd = current_dir()?;
@@ -85,7 +99,7 @@ async fn main() -> Result<()> {
             ctx.build(config).await?;
         }
         SubCommands::Run(args) => {
-            let config = ctx.perpare_build_config(args.config).await?;
+            let config = ctx.perpare_build_config(args.config, false).await?;
             match config.system {
                 build::config::BuildSystem::Cargo(config) => {
                     let kind = match args.command {
@@ -99,37 +113,6 @@ async fn main() -> Result<()> {
                         },
                     };
                     ctx.cargo_run(&config, &kind).await?;
-
-                    // let build_config_path = ctx.build_config_path.clone().unwrap();
-                    // let mut cargo = CargoRunner::new("run", true, &build_config_path);
-                    // cargo.arg("--");
-
-                    // if config.to_bin {
-                    //     cargo.arg("--to-bin");
-                    // }
-
-                    // match args.command {
-                    //     RunSubCommands::Qemu(qemu_args) => {
-                    //         cargo.arg("qemu");
-                    //         if let Some(cfg) = qemu_args.qemu_config {
-                    //             cargo.arg("--config");
-                    //             cargo.arg(cfg.display().to_string());
-                    //         }
-                    //         ctx.debug = qemu_args.debug;
-
-                    //         if qemu_args.dtb_dump {
-                    //             cargo.arg("--dtb-dump");
-                    //         }
-                    //     }
-                    //     RunSubCommands::Uboot(uboot_args) => {
-                    //         cargo.arg("uboot");
-                    //         if let Some(cfg) = uboot_args.uboot_config {
-                    //             cargo.arg("--config");
-                    //             cargo.arg(cfg.display().to_string());
-                    //         }
-                    //     }
-                    // }
-                    // cargo.run(&mut ctx, config).await?;
                 }
                 build::config::BuildSystem::Custom(custom_cfg) => {
                     ctx.shell_run_cmd(&custom_cfg.build_cmd)?;
@@ -169,6 +152,9 @@ async fn main() -> Result<()> {
                     }
                 }
             }
+        }
+        SubCommands::Menuconfig { mode } => {
+            MenuConfigHandler::handle_menuconfig(&mut ctx, mode).await?;
         }
     }
 

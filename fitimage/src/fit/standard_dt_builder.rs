@@ -5,7 +5,6 @@
 use crate::error::Result;
 use crate::fit::config::{ComponentConfig, FitImageConfig};
 use crate::fit::{FdtHeader, FdtToken, FdtTokenUtils, MemReserveEntry, StringTable};
-use crate::hash::{calculate_hashes, default_hash_algorithms};
 
 /// Standard FDT builder that creates U-Boot compatible FIT images
 pub struct StandardFdtBuilder {
@@ -300,30 +299,6 @@ impl StandardFdtBuilder {
         // self.add_hash_nodes(&component.data)?;
 
         self.end_node()?;
-        Ok(())
-    }
-
-    /// Add hash nodes for component data
-    fn add_hash_nodes(&mut self, data: &[u8]) -> Result<()> {
-        let hash_algorithms = default_hash_algorithms();
-        let hash_results = calculate_hashes(data, &hash_algorithms);
-
-        for (i, hash_result) in hash_results.iter().enumerate() {
-            // Create hash node name (hash-1, hash-2, etc.)
-            let hash_node_name = format!("hash-{}", i + 1);
-            self.begin_node(&hash_node_name)?;
-
-            // Add algorithm property
-            self.add_property_string("algo", hash_result.algorithm_name())?;
-
-            // Add value property - convert hex string to bytes
-            let hash_value = hash_result.value();
-            let hash_bytes = hex::decode(hash_value).unwrap_or_default();
-            self.add_property_data("value", &hash_bytes)?;
-
-            self.end_node()?;
-        }
-
         Ok(())
     }
 

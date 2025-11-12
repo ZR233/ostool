@@ -1,7 +1,6 @@
 pub mod array_editor;
-pub mod depend_features_editor;
-pub mod depend_select_editor;
 pub mod enum_editor;
+mod feature_select;
 pub mod integer_editor;
 pub mod multi_select_editor;
 pub mod number_editor;
@@ -9,9 +8,8 @@ pub mod oneof_editor;
 pub mod string_editor;
 
 pub use array_editor::show_array_edit;
-pub use depend_features_editor::show_depend_features_editor;
-pub use depend_select_editor::show_depend_select;
-pub use enum_editor::show_enum_select;
+pub use enum_editor::{show_enum_select, show_list_select};
+pub use feature_select::show_feature_select;
 pub use integer_editor::show_integer_edit;
 pub use multi_select_editor::{create_multi_select_from_array_item, show_multi_select};
 pub use number_editor::show_number_edit;

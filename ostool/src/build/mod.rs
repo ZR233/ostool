@@ -21,7 +21,7 @@ impl AppContext {
     }
 
     pub async fn build(&mut self, config_path: Option<PathBuf>) -> anyhow::Result<()> {
-        let build_config = self.perpare_build_config(config_path).await?;
+        let build_config = self.perpare_build_config(config_path, false).await?;
         println!("Build configuration: {:?}", build_config);
         self.build_with_config(&build_config).await
     }
@@ -36,7 +36,7 @@ impl AppContext {
             self.shell_run_cmd(cmd)?;
         }
 
-        let mut features = config.features.self_features.clone();
+        let mut features = config.features.clone();
         if let Some(log_level) = &self.log_level_feature(config) {
             features.push(log_level.to_string());
         }
