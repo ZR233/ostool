@@ -2,7 +2,7 @@ use cursive::{
     Cursive,
     event::Key,
     view::{Nameable, Resizable},
-    views::{Dialog, DummyView, LinearLayout, OnEventView, ScrollView, SelectView, TextView},
+    views::{DummyView, LinearLayout, OnEventView, ScrollView, SelectView, TextView},
 };
 
 use crate::{
@@ -17,16 +17,16 @@ pub struct MultiSelectItem {
     pub selected_indices: Vec<usize>,
 }
 
-/// 显示多选对话框
+/// 显示多选全屏界面
 pub fn show_multi_select(s: &mut Cursive, title: &str, multi_select: &MultiSelectItem) {
     let mut select = SelectView::new();
 
-    // 添加所有选项到SelectView
+    // 添加所有选项到SelectView，使用更美观的标记
     for (idx, variant) in multi_select.variants.iter().enumerate() {
         let label = if multi_select.selected_indices.contains(&idx) {
-            format!("[*] {}", variant) // 已选中
+            format!("✓ {}  [已选择]", variant) // 已选中 - 使用对勾符号
         } else {
-            format!("[ ] {}", variant) // 未选中
+            format!("○ {}  [未选择]", variant) // 未选中 - 使用圆圈符号
         };
         select.add_item(label, idx);
     }
@@ -48,26 +48,63 @@ pub fn show_multi_select(s: &mut Cursive, title: &str, multi_select: &MultiSelec
         app.temp_data = Some((current_key, serde_json::to_value(data).unwrap()));
     }
 
-    s.add_layer(
-        OnEventView::new(
-            Dialog::around(
-                LinearLayout::vertical()
-                    .child(TextView::new(format!("Select Multiple: {}", title)))
-                    .child(
-                        TextView::new("(Press Enter to toggle selection)")
-                            .style(cursive::theme::ColorStyle::secondary()),
-                    )
-                    .child(DummyView)
-                    .child(ScrollView::new(select.with_name("multi_select")).fixed_height(20)),
-            )
-            .title("Features")
-            .button("OK", on_ok)
-            .button("Cancel", handle_back),
+    // 创建标题样式
+    let title_view = TextView::new(format!("📋 {}", title))
+        .style(cursive::theme::ColorStyle::title_primary());
+
+    // 创建状态栏
+    let status_text = TextView::new(format!(
+        "已选择 {} / {} 项 | Enter: 切换选择 | Tab: 确认",
+        multi_select.selected_indices.len(),
+        multi_select.variants.len()
+    )).style(cursive::theme::ColorStyle::secondary());
+
+    // 创建全屏布局
+    let main_layout = LinearLayout::vertical()
+        .child(title_view)
+        .child(DummyView)
+        .child(status_text)
+        .child(DummyView)
+        .child(
+            ScrollView::new(select.with_name("multi_select"))
+                .fixed_height(20) // 设置适当的高度
+                .full_width()
         )
-        .on_event(Key::Enter, toggle_selection)
-        .on_event(Key::Right, |s| {
-            s.on_event(cursive::event::Event::Key(cursive::event::Key::Tab));
-        }),
+        .child(DummyView);
+
+    // 创建按钮布局
+    let button_layout = LinearLayout::horizontal()
+        .child(DummyView.full_width())
+        .child(
+            cursive::views::Button::new("✓ 确认选择", on_ok)
+        )
+        .child(DummyView.fixed_width(1))
+        .child(
+            cursive::views::Button::new("✖ 取消", handle_back)
+        );
+
+    // 创建全屏对话框容器
+    let fullscreen_dialog = cursive::views::Panel::new(
+        LinearLayout::vertical()
+            .child(main_layout.full_height())
+            .child(
+                LinearLayout::horizontal()
+                    .child(DummyView)
+                    .child(button_layout)
+                    .child(DummyView)
+            )
+            .child(DummyView)
+    )
+    .title("🌟 多选界面");
+
+    // 添加全屏层
+    s.add_fullscreen_layer(
+        OnEventView::new(fullscreen_dialog)
+            .on_event(Key::Enter, toggle_selection)
+            .on_event(' ', toggle_selection) // 添加空格键支持
+            .on_event(Key::Right, |s| {
+                s.on_event(cursive::event::Event::Key(cursive::event::Key::Tab));
+            }),
     );
 }
 
@@ -124,12 +161,12 @@ fn toggle_selection(s: &mut Cursive) {
         s.call_on_name("multi_select", |view: &mut SelectView<usize>| {
             view.clear();
 
-            // 重新添加所有项，更新选中状态
+            // 重新添加所有项，更新选中状态（使用新的美观标记）
             for (idx, variant) in variants.iter().enumerate() {
                 let label = if selected_indices.contains(&idx) {
-                    format!("[*] {}", variant)
+                    format!("✓ {}  [已选择]", variant) // 已选中 - 使用对勾符号
                 } else {
-                    format!("[ ] {}", variant)
+                    format!("○ {}  [未选择]", variant) // 未选中 - 使用圆圈符号
                 };
                 view.add_item(label, idx);
             }

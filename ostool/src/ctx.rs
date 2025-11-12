@@ -357,9 +357,11 @@ impl AppContext {
             callback: Arc::new(move |siv: &mut Cursive, _path: &str| {
                 let mut package = String::new();
                 if let Some(app) = siv.user_data::<AppData>()
-                    && let Some(pkg) = app.user_data.get("current_package")
+                    && let Some(pkg) = app.root.get_by_key("system.package")
+                    && let ElementType::Item(item) = pkg
+                    && let ItemType::String { value: Some(v), .. } = &item.item_type
                 {
-                    package = pkg.clone();
+                    package = v.clone();
                 }
 
                 // 调用显示特性选择对话框的函数
@@ -394,8 +396,6 @@ impl AppContext {
 }
 
 fn on_package_selected(app: &mut AppData, path: &str, selected: &str) {
-    app.user_data
-        .insert("current_package".to_string(), selected.to_string());
     let ElementType::Item(item) = app.root.get_mut_by_key(path).unwrap() else {
         panic!("Not an item element");
     };
