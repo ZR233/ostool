@@ -7,6 +7,7 @@ use log::info;
 use ostool::{
     build,
     ctx::AppContext,
+    menuconfig::{MenuConfigHandler, MenuConfigMode},
     run::{cargo::CargoRunnerKind, qemu::RunQemuArgs, uboot::RunUbootArgs},
 };
 
@@ -27,7 +28,11 @@ enum SubCommands {
         config: Option<PathBuf>,
     },
     Run(RunArgs),
-    Menuconfig,
+    Menuconfig {
+        /// Menu configuration mode (qemu or uboot)
+        #[arg(value_enum)]
+        mode: Option<MenuConfigMode>,
+    },
 }
 
 #[derive(Args, Debug)]
@@ -148,9 +153,8 @@ async fn main() -> Result<()> {
                 }
             }
         }
-        SubCommands::Menuconfig => {
-            let build_config = ctx.perpare_build_config(None, true).await?;
-            println!("Build configuration: {:?}", build_config);
+        SubCommands::Menuconfig { mode } => {
+            MenuConfigHandler::handle_menuconfig(&mut ctx, mode).await?;
         }
     }
 

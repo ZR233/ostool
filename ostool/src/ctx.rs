@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{path::PathBuf, sync::Arc};
 
 use anyhow::anyhow;
 use cargo_metadata::Metadata;
@@ -10,11 +6,7 @@ use colored::Colorize;
 use cursive::Cursive;
 use jkconfig::{
     ElemHock,
-    data::{
-        app_data::{AppData, default_schema_by_init},
-        item::ItemType,
-        types::ElementType,
-    },
+    data::{app_data::AppData, item::ItemType, types::ElementType},
     ui::components::editors::{show_feature_select, show_list_select},
 };
 
@@ -48,39 +40,6 @@ impl AppContext {
         command.run()?;
 
         Ok(())
-    }
-
-    // axvisor
-    pub async fn launch_menuconfig_ui(&mut self) -> anyhow::Result<bool> {
-        let config_path = match &self.build_config_path {
-            Some(path) => path.clone(),
-            None => self.workspace_folder.join(".build.toml"),
-        };
-
-        // Ensure the configuration file exists
-        if !config_path.exists() {
-            println!(
-                "Configuration file does not exist, creating new file: {}",
-                config_path.display()
-            );
-            tokio::fs::write(&config_path, "").await?;
-        }
-
-        // Generate schema path
-        let schema_path = default_schema_by_init(&config_path);
-
-        // Create empty config file if it doesn't exist
-        if !config_path.exists() {
-            println!(
-                "Creating empty configuration file: {}",
-                config_path.display()
-            );
-            std::fs::write(&config_path, "")?;
-        }
-
-        let mut app_data = AppData::new(Some(config_path), Some(schema_path))?;
-
-        Ok(true)
     }
 
     pub fn command(&self, program: &str) -> crate::utils::Command {
@@ -275,6 +234,11 @@ impl AppContext {
             format!("{}", self.workspace_folder.display()).as_ref(),
         )
     }
+
+    pub fn ui_hocks(&self) -> Vec<ElemHock> {
+        vec![self.ui_hock_feature_select(), self.ui_hock_pacage_select()]
+    }
+
     fn ui_hock_feature_select(&self) -> ElemHock {
         let path = "system.features";
         let cargo_toml = self.workspace_folder.join("Cargo.toml");
