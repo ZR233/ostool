@@ -280,8 +280,8 @@ pub fn show_extended_multi_select(s: &mut Cursive, title: &str, extended_multi_s
     // 添加分隔符
     select.add_item("--- 依赖项 Features ---".to_string(), usize::MAX);
 
-    // 添加依赖项选项
-    for dep in &extended_multi_select.dependencies {
+    // 添加依赖项选项，使用唯一索引
+    for (dep_idx, dep) in extended_multi_select.dependencies.iter().enumerate() {
         let selected_count = extended_multi_select.dep_selected_features
             .get(&dep.name)
             .map(|indices| indices.len())
@@ -292,7 +292,9 @@ pub fn show_extended_multi_select(s: &mut Cursive, title: &str, extended_multi_s
         } else {
             format!("📦 {} (no features selected)", dep.name)
         };
-        select.add_item(label, usize::MAX - 1);
+        // 使用 variants.len() + 1 + dep_idx 作为唯一索引
+        let unique_dep_index = extended_multi_select.variants.len() + 1 + dep_idx;
+        select.add_item(label, unique_dep_index);
     }
 
     // 保存数据到应用数据中
@@ -408,7 +410,7 @@ fn toggle_extended_selection(s: &mut Cursive) {
         }
 
         // 检查是否点击了依赖项
-        if current_selected_idx >= variants.len() {
+        if current_selected_idx >= variants.len() + 1 && current_selected_idx != usize::MAX {
             // 这是依赖项，计算依赖项索引
             let dep_index = current_selected_idx - variants.len() - 1; // 减1是因为分隔符
             if let Some(dep) = dependencies.get(dep_index) {
@@ -460,8 +462,8 @@ fn toggle_extended_selection(s: &mut Cursive) {
             // 添加分隔符
             view.add_item("--- 依赖项 Features ---".to_string(), usize::MAX);
 
-            // 重新添加依赖项
-            for dep in &dependencies {
+            // 重新添加依赖项，使用唯一索引
+            for (dep_idx, dep) in dependencies.iter().enumerate() {
                 let selected_count = dep_selected_features
                     .get(&dep.name)
                     .map(|indices| indices.len())
@@ -472,7 +474,9 @@ fn toggle_extended_selection(s: &mut Cursive) {
                 } else {
                     format!("📦 {} (no features selected)", dep.name)
                 };
-                view.add_item(label, usize::MAX - 1);
+                // 使用 variants.len() + 1 + dep_idx 作为唯一索引
+                let unique_dep_index = variants.len() + 1 + dep_idx;
+                view.add_item(label, unique_dep_index);
             }
 
             view.set_selection(current_selected_idx);
