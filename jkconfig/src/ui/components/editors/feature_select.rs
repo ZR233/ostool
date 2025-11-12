@@ -4,8 +4,7 @@ use cursive::{
     view::{Nameable, Resizable},
     views::{Dialog, DummyView, LinearLayout, OnEventView, ScrollView, SelectView, TextView},
 };
-use std::{collections::HashMap, path::Path};
-use std::{collections::HashSet, sync::Arc};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
 use crate::{
     data::{app_data::AppData, item::ItemType, types::ElementType},
@@ -23,9 +22,10 @@ pub fn show_feature_select(s: &mut Cursive, package: &str, manifest_path: &Path)
     {
         match metadata.packages.iter().find(|p| p.name == package) {
             Some(pkg) => {
-                let features: Vec<String> = pkg.features.keys().cloned().collect();
+                let all_features: Vec<String> = pkg.features.keys().cloned().collect();
 
-                let old = if let Some(app) = s.user_data::<AppData>() {
+                // 获取当前选中的特性列表
+                let selected_values = if let Some(app) = s.user_data::<AppData>() {
                     if let Some(ElementType::Item(item)) = app.current() {
                         if let ItemType::Array(array) = &item.item_type {
                             array.values.clone()
@@ -39,39 +39,20 @@ pub fn show_feature_select(s: &mut Cursive, package: &str, manifest_path: &Path)
                     Vec::new()
                 };
 
-                let mut selected: HashSet<String> = old.into_iter().collect();
-                let mut select = ;
+                // 找到已选中值在所有特性中的索引
+                let selected_indices: Vec<usize> = selected_values
+                    .iter()
+                    .filter_map(|value| all_features.iter().position(|f| f == value))
+                    .collect();
 
-                // 添加所有选项到SelectView
-                           
+                // 创建MultiSelectItem用于显示多选界面
+                let multi_select_item = MultiSelectItem {
+                    variants: all_features,
+                    selected_indices,
+                };
 
-                s.add_fullscreen_layer(OnEventView::new(Dialog::around(
-                    LinearLayout::vertical()
-                        .child(TextView::new("Select Feature".to_string()))
-                        .child(
-                            TextView::new("(Press Enter to select feature)")
-                                .style(cursive::theme::ColorStyle::secondary()),
-                        )
-                        .child(DummyView)
-                        .child(
-                            ScrollView::new(select.with_name("feature_select")).fixed_height(20),
-                        ),
-                )));
-
-                // show_multi_select(s, &format!("Features for {}", package), &multi_select_item);
-
-                // // 在multi-select界面关闭后，更新selected集合
-                // if let Some(app) = s.user_data::<AppData>() {
-                //     if let Some((key, temp_value)) = &app.temp_data {
-                //         if key == "selected_features" {
-                //             if let Ok(new_selected) =
-                //                 serde_json::from_value::<HashSet<String>>(temp_value.clone())
-                //             {
-                //                 selected = new_selected;
-                //             }
-                //         }
-                //     }
-                // }
+                // 显示多选对话框
+                show_multi_select(s, &format!("Features for {}", package), &multi_select_item);
             }
             None => {
                 let mut dialog =
