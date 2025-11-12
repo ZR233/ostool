@@ -203,8 +203,8 @@ fn toggle_selection(s: &mut Cursive) {
                 .filter_map(|&idx| variants.get(idx).cloned())
                 .collect();
 
-            if let Some(ElementType::Item(item_mut)) = app.root.get_mut_by_key(&current_key) {
-                if let ItemType::Array(array_mut) = &mut item_mut.item_type {
+            if let Some(ElementType::Item(item_mut)) = app.root.get_mut_by_key(&current_key)
+                && let ItemType::Array(array_mut) = &mut item_mut.item_type {
                     array_mut.values = selected_variants.clone();
                     app.needs_save = true;
                     info!(
@@ -213,7 +213,6 @@ fn toggle_selection(s: &mut Cursive) {
                         current_key
                     );
                 }
-            }
         }
 
         // 更新UI显示
@@ -474,8 +473,8 @@ fn toggle_extended_selection(s: &mut Cursive) {
             // 合并所有选中的特性
             let all_selected: Vec<String> = selected_variants.into_iter().chain(dep_features).collect();
 
-            if let Some(ElementType::Item(item_mut)) = app.root.get_mut_by_key(&current_key) {
-                if let ItemType::Array(array_mut) = &mut item_mut.item_type {
+            if let Some(ElementType::Item(item_mut)) = app.root.get_mut_by_key(&current_key)
+                && let ItemType::Array(array_mut) = &mut item_mut.item_type {
                     array_mut.values = all_selected.clone();
                     app.needs_save = true;
                     info!(
@@ -484,7 +483,6 @@ fn toggle_extended_selection(s: &mut Cursive) {
                         current_key
                     );
                 }
-            }
         }
 
         // 更新UI显示
@@ -704,8 +702,8 @@ fn toggle_dep_features_selection(s: &mut Cursive) {
             // 合并所有选中的特性
             let all_selected: Vec<String> = selected_variants.into_iter().chain(dep_features_selected).collect();
 
-            if let Some(ElementType::Item(item_mut)) = app.root.get_mut_by_key(&current_key) {
-                if let ItemType::Array(array_mut) = &mut item_mut.item_type {
+            if let Some(ElementType::Item(item_mut)) = app.root.get_mut_by_key(&current_key)
+                && let ItemType::Array(array_mut) = &mut item_mut.item_type {
                     array_mut.values = all_selected.clone();
                     app.needs_save = true;
                     info!(
@@ -716,7 +714,6 @@ fn toggle_dep_features_selection(s: &mut Cursive) {
                         current_key
                     );
                 }
-            }
 
             // 更新状态栏显示
             s.call_on_name("dep_status_text", |view: &mut TextView| {

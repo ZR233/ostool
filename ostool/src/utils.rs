@@ -1,16 +1,11 @@
 use std::{
     ffi::OsStr,
     ops::{Deref, DerefMut},
-    path::{Path, PathBuf},
+    path::Path,
 };
 
-use crate::ctx::AppContext;
 use anyhow::bail;
 use colored::Colorize;
-use jkconfig::data::app_data::default_schema_by_init;
-use schemars::JsonSchema;
-use serde::Deserialize;
-use tokio::fs;
 
 pub struct Command {
     inner: std::process::Command,

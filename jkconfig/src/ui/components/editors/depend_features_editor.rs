@@ -84,8 +84,8 @@ fn on_depend_feature_select(s: &mut Cursive) {
         // 获取保存的依赖项features映射
         let mut depend_features_map = HashMap::new();
 
-        if let Some(app) = s.user_data::<AppData>() {
-            if let Some((key, temp_value)) = &app.temp_data {
+        if let Some(app) = s.user_data::<AppData>()
+            && let Some((key, temp_value)) = &app.temp_data {
                 // 检查是否是依赖项features映射数据
                 if key == "depend_features_map" {
                     // 尝试从temp_data中获取保存的依赖项features映射
@@ -96,12 +96,11 @@ fn on_depend_feature_select(s: &mut Cursive) {
                     }
                 }
             }
-        }
 
         // 如果没有从temp_data获取到映射，尝试从depend_features_callback获取
-        if depend_features_map.is_empty() {
-            if let Some(app) = s.user_data::<AppData>() {
-                if let Some(callback) = &app.depend_features_callback {
+        if depend_features_map.is_empty()
+            && let Some(app) = s.user_data::<AppData>()
+                && let Some(callback) = &app.depend_features_callback {
                     let get_depend_features = || callback();
                     if let Ok(features_map) =
                         std::panic::catch_unwind(std::panic::AssertUnwindSafe(get_depend_features))
@@ -109,8 +108,6 @@ fn on_depend_feature_select(s: &mut Cursive) {
                         depend_features_map = features_map;
                     }
                 }
-            }
-        }
 
         // 获取选中依赖项的features（使用依赖项名称而不是索引）
         if let Some(features) = depend_features_map.get(&**selection_name) {

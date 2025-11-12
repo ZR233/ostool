@@ -102,7 +102,7 @@ impl CargoRunner {
         }
 
         let mut features = config.features.clone();
-        if let Some(log_level) = &self.log_level_feature(ctx, &config) {
+        if let Some(log_level) = &self.log_level_feature(ctx, config) {
             features.push(log_level.to_string());
         }
 

@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -7,7 +7,7 @@ use std::{
 use anyhow::anyhow;
 use cargo_metadata::Metadata;
 use colored::Colorize;
-use cursive::{Cursive, CursiveExt, event::Key};
+use cursive::{Cursive, CursiveExt};
 use jkconfig::{
     ElemHock,
     data::{
@@ -15,13 +15,7 @@ use jkconfig::{
         item::ItemType,
         types::ElementType,
     },
-    ui::{
-        components::{
-            editors::{show_feature_select, show_list_select},
-            menu::menu_view,
-        },
-        handle_back, handle_quit, handle_save,
-    },
+    ui::components::editors::{show_feature_select, show_list_select},
 };
 
 use object::{Architecture, Object};
@@ -58,7 +52,7 @@ impl AppContext {
 
     // Helper function to launch jkconfig UI
     pub fn launch_jkconfig_ui(config_path: &Path, schema_path: &Path) -> anyhow::Result<bool> {
-        let mut app_data = AppData::new(Some(config_path), Some(schema_path))?;
+        let app_data = AppData::new(Some(config_path), Some(schema_path))?;
 
         // app_data.features_callback = Some(std::sync::Arc::new(|| {
         //     let mut features = Vec::new();
