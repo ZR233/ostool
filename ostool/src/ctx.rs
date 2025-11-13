@@ -1,12 +1,19 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use anyhow::anyhow;
 use cargo_metadata::Metadata;
 use colored::Colorize;
+use cursive::Cursive;
+use jkconfig::{
+    ElemHock,
+    data::{app_data::AppData, item::ItemType, types::ElementType},
+    ui::components::editors::{show_feature_select, show_list_select},
+};
+
 use object::{Architecture, Object};
 use tokio::fs;
 
-use crate::{build::config::BuildConfig, utils::prepare_config};
+use crate::build::config::BuildConfig;
 
 #[derive(Default, Clone)]
 pub struct AppContext {
@@ -188,15 +195,26 @@ impl AppContext {
     pub async fn perpare_build_config(
         &mut self,
         config_path: Option<PathBuf>,
+        menu: bool,
     ) -> anyhow::Result<BuildConfig> {
-        let content = prepare_config::<BuildConfig>(self, config_path, ".build.toml").await?;
+        let config_path = match config_path {
+            Some(path) => path,
+            None => self.workspace_folder.join(".build.toml"),
+        };
+        self.build_config_path = Some(config_path.clone());
 
-        let config: BuildConfig = toml::from_str(&content)?;
-        println!("Build configuration: {:?}", config);
+        let Some(c): Option<BuildConfig> = jkconfig::run(
+            config_path,
+            menu,
+            &[self.ui_hock_feature_select(), self.ui_hock_pacage_select()],
+        )
+        .await?
+        else {
+            anyhow::bail!("No build configuration obtained");
+        };
 
-        self.build_config = Some(config.clone());
-
-        Ok(config)
+        self.build_config = Some(c.clone());
+        Ok(c)
     }
 
     pub fn is_cargo_build(&self) -> bool {
@@ -216,4 +234,63 @@ impl AppContext {
             format!("{}", self.workspace_folder.display()).as_ref(),
         )
     }
+
+    pub fn ui_hocks(&self) -> Vec<ElemHock> {
+        vec![self.ui_hock_feature_select(), self.ui_hock_pacage_select()]
+    }
+
+    fn ui_hock_feature_select(&self) -> ElemHock {
+        let path = "system.features";
+        let cargo_toml = self.workspace_folder.join("Cargo.toml");
+        ElemHock {
+            path: path.to_string(),
+            callback: Arc::new(move |siv: &mut Cursive, _path: &str| {
+                let mut package = String::new();
+                if let Some(app) = siv.user_data::<AppData>()
+                    && let Some(pkg) = app.root.get_by_key("system.package")
+                    && let ElementType::Item(item) = pkg
+                    && let ItemType::String { value: Some(v), .. } = &item.item_type
+                {
+                    package = v.clone();
+                }
+
+                // 调用显示特性选择对话框的函数
+                show_feature_select(siv, &package, &cargo_toml, None);
+            }),
+        }
+    }
+
+    fn ui_hock_pacage_select(&self) -> ElemHock {
+        let path = "system.package";
+        let cargo_toml = self.workspace_folder.join("Cargo.toml");
+
+        ElemHock {
+            path: path.to_string(),
+            callback: Arc::new(move |siv: &mut Cursive, path: &str| {
+                let mut items = Vec::new();
+                if let Ok(metadata) = cargo_metadata::MetadataCommand::new()
+                    .manifest_path(&cargo_toml)
+                    .no_deps()
+                    .exec()
+                {
+                    for pkg in &metadata.packages {
+                        items.push(pkg.name.to_string());
+                    }
+                }
+
+                // 调用显示包选择对话框的函数
+                show_list_select(siv, "Pacage", &items, path, on_package_selected);
+            }),
+        }
+    }
+}
+
+fn on_package_selected(app: &mut AppData, path: &str, selected: &str) {
+    let ElementType::Item(item) = app.root.get_mut_by_key(path).unwrap() else {
+        panic!("Not an item element");
+    };
+    let ItemType::String { value, .. } = &mut item.item_type else {
+        panic!("Not a string item");
+    };
+    *value = Some(selected.to_string());
 }

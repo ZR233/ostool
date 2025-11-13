@@ -1492,6 +1492,7 @@ version = "0.1.3"
 dependencies = [
  "anyhow",
  "axum",
+ "cargo_metadata",
  "chrono",
  "clap",
  "cursive",
@@ -1866,6 +1867,7 @@ dependencies = [
  "clap",
  "colored",
  "crossterm 0.29.0",
+ "cursive",
  "env_logger",
  "fitimage",
  "indicatif",

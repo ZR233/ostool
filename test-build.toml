@@ -1,0 +1,9 @@
+[system]
+# 使用 Cargo 系统
+
+[system.cargo]
+target = "x86_64-unknown-none"
+package = "test-kernel"
+features = []
+log = "Info"
+to_bin = true

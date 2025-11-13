@@ -2,6 +2,7 @@
 
 pub mod build;
 pub mod ctx;
+pub mod menuconfig;
 pub mod run;
 pub mod sterm;
 pub mod utils;
@@ -10,3 +11,5 @@ pub mod utils;
 extern crate log;
 #[macro_use]
 extern crate anyhow;
+
+pub use jkconfig::cursive;

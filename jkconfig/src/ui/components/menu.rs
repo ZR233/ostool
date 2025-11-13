@@ -1,3 +1,7 @@
+use crate::{
+    data::{AppData, item::ItemType, menu::Menu, types::ElementType},
+    ui::{components::icon::ItemDisplay, handle_edit},
+};
 use cursive::{
     Cursive,
     align::HAlign,
@@ -6,12 +10,6 @@ use cursive::{
     utils::markup::StyledString,
     view::{IntoBoxedView, Nameable, Resizable, Scrollable},
     views::{Dialog, DummyView, LinearLayout, OnEventView, Panel, SelectView, TextView},
-};
-use log::info;
-
-use crate::{
-    data::{AppData, item::ItemType, menu::Menu, types::ElementType},
-    ui::{components::icon::ItemDisplay, handle_edit},
 };
 
 use super::editors::*;
@@ -88,11 +86,10 @@ pub fn menu_view(title: &str, path: &str, fields: Vec<ElementType>) -> impl Into
 }
 
 fn on_clear(s: &mut Cursive) {
-    let Some(selected) = menu_selected(s) else {
+    let Some(_selected) = menu_selected(s) else {
         return;
     };
 
-    info!("Clear value for selected item {}", selected.key());
     update_selected(s, |elem| elem.set_none());
 }
 
@@ -617,6 +614,27 @@ pub fn enter_menu(s: &mut Cursive, menu: &Menu) {
 fn enter_elem(s: &mut Cursive, elem: &ElementType) {
     let key = elem.key();
     info!("Entering key: {}, type {}", key, elem.struct_name);
+    let mut path = String::new();
+
+    if let Some(app) = s.user_data::<AppData>() {
+        path = app.key_string();
+    }
+
+    let mut hocked = false;
+    if let Some(app_data) = s.user_data::<AppData>() {
+        for hook in app_data.elem_hocks.iter().cloned() {
+            if hook.path == path {
+                info!("Found hock for path: {}, type: {}", path, elem.struct_name);
+                (hook.callback)(s, &path);
+                hocked = true;
+                break;
+            }
+        }
+    }
+    if hocked {
+        return;
+    }
+
     match elem {
         ElementType::Menu(menu) => {
             info!("Handling Menu: {}", menu.title);

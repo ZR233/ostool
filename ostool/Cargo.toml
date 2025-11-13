@@ -17,6 +17,9 @@ path = "src/main.rs"
 name = "cargo-osrun"
 path = "src/bin/cargo-osrun.rs"
 
+[features]
+ui-log = ["jkconfig/logging"]
+
 [dependencies]
 anyhow = {workspace = true, features = ["backtrace"]}
 byte-unit = "5.1"
@@ -24,6 +27,7 @@ cargo_metadata = "0.23"
 clap = {workspace = true, features = ["derive"]}
 colored = "3"
 crossterm = {workspace = true}
+cursive = {workspace = true, features = ["crossterm-backend"]}
 env_logger = {workspace = true}
 indicatif = "0.18"
 jkconfig = {version = "0.1", path = "../jkconfig"}

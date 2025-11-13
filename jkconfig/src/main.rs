@@ -1,12 +1,10 @@
-extern crate log;
-
 use clap::{Parser, Subcommand};
-use cursive::{Cursive, CursiveExt, event::Key, views::Dialog};
+use cursive::{Cursive, CursiveExt, event::Key};
 use std::path::PathBuf;
 
 use jkconfig::{
     data::AppData,
-    ui::{components::menu::menu_view, handle_back, handle_quit},
+    ui::{components::menu::menu_view, handle_back, handle_quit, handle_save},
 };
 
 // mod menu_view;
@@ -105,20 +103,4 @@ fn run_tui(app_data: AppData) -> anyhow::Result<()> {
     app.on_exit()?;
 
     Ok(())
-}
-
-/// 处理保存 - S键
-fn handle_save(siv: &mut Cursive) {
-    siv.add_layer(
-        Dialog::text("Save and exit?")
-            .title("Save")
-            .button("Ok", |s| {
-                let app = s.user_data::<AppData>().unwrap();
-                app.needs_save = true;
-                s.quit();
-            })
-            .button("Cancel", |s| {
-                s.pop_layer();
-            }),
-    );
 }

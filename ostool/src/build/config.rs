@@ -51,6 +51,12 @@ pub struct Cargo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub struct Depend {
+    pub name: String,
+    pub d_features: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub enum LogLevel {
     Trace,
     Debug,

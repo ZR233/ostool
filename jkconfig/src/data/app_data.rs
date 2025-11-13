@@ -1,12 +1,25 @@
 use std::{
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
+    sync::Arc,
     time::SystemTime,
 };
 
 use anyhow::bail;
+use cursive::Cursive;
 
 use crate::data::{menu::MenuRoot, types::ElementType};
+
+pub type FeaturesCallback = Arc<dyn Fn() -> Vec<String> + Send + Sync>;
+
+pub type HockCallback = Arc<dyn Fn(&mut Cursive, &str) + Send + Sync>;
+
+#[derive(Clone)]
+pub struct ElemHock {
+    pub path: String,
+    pub callback: HockCallback,
+}
 
 #[derive(Clone)]
 pub struct AppData {
@@ -14,6 +27,9 @@ pub struct AppData {
     pub current_key: Vec<String>,
     pub needs_save: bool,
     pub config: PathBuf,
+    pub user_data: HashMap<String, String>,
+    pub temp_data: Option<(String, serde_json::Value)>,
+    pub elem_hocks: Vec<ElemHock>,
 }
 
 const DEFAULT_CONFIG_PATH: &str = ".config.toml";
@@ -39,10 +55,7 @@ impl AppData {
         config: Option<impl AsRef<Path>>,
         schema: Option<impl AsRef<Path>>,
     ) -> anyhow::Result<Self> {
-        let mut init_value_path = PathBuf::from(DEFAULT_CONFIG_PATH);
-        if let Some(cfg) = config {
-            init_value_path = cfg.as_ref().to_path_buf();
-        }
+        let init_value_path = Self::init_value_path(config);
 
         let schema_path = if let Some(sch) = schema {
             sch.as_ref().to_path_buf()
@@ -56,8 +69,60 @@ impl AppData {
 
         let schema_content = fs::read_to_string(&schema_path)?;
         let schema_json: serde_json::Value = serde_json::from_str(&schema_content)?;
+        Self::new_with_schema(Some(init_value_path), &schema_json)
+    }
 
-        let mut root = MenuRoot::try_from(&schema_json)?;
+    fn init_value_path(config: Option<impl AsRef<Path>>) -> PathBuf {
+        let mut init_value_path = PathBuf::from(DEFAULT_CONFIG_PATH);
+        if let Some(cfg) = config {
+            init_value_path = cfg.as_ref().to_path_buf();
+        }
+        init_value_path
+    }
+
+    pub fn new_with_init_and_schema(
+        init: &str,
+        init_value_path: &Path,
+        schema: &serde_json::Value,
+    ) -> anyhow::Result<Self> {
+        let mut root = MenuRoot::try_from(schema)?;
+
+        if !init.trim().is_empty() {
+            let init_json: serde_json::Value = match init_value_path
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+            {
+                "json" => serde_json::from_str(init)?,
+                "toml" => {
+                    let v: toml::Value = toml::from_str(init)?;
+                    serde_json::to_value(v)?
+                }
+                ext => {
+                    bail!("Unsupported config file extension: {ext:?}");
+                }
+            };
+            root.update_by_value(&init_json)?;
+        }
+
+        Ok(AppData {
+            root,
+            current_key: Vec::new(),
+            needs_save: false,
+            config: init_value_path.into(),
+            temp_data: None,
+            elem_hocks: Vec::new(),
+            user_data: HashMap::new(),
+        })
+    }
+
+    pub fn new_with_schema(
+        config: Option<impl AsRef<Path>>,
+        schema: &serde_json::Value,
+    ) -> anyhow::Result<Self> {
+        let init_value_path = Self::init_value_path(config);
+
+        let mut root = MenuRoot::try_from(schema)?;
 
         if init_value_path.exists() {
             let init_content = fs::read_to_string(&init_value_path)?;
@@ -85,6 +150,9 @@ impl AppData {
             current_key: Vec::new(),
             needs_save: false,
             config: init_value_path,
+            temp_data: None,
+            elem_hocks: Vec::new(),
+            user_data: HashMap::new(),
         })
     }
 
