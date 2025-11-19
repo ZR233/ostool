@@ -67,6 +67,8 @@ impl UbootConfig {
 pub struct Net {
     pub interface: String,
     pub board_ip: Option<String>,
+    pub gatewayip: Option<String>,
+    pub netmask: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -324,6 +326,16 @@ impl Runner {
 
         let mut uboot = handle.join().unwrap()?;
         uboot.set_env("autoload", "yes")?;
+
+        if let Some(ref net) = self.config.net {
+            if let Some(ref gatewayip) = net.gatewayip {
+                uboot.set_env("gatewayip", gatewayip)?;
+            }
+
+            if let Some(ref netmask) = net.netmask {
+                uboot.set_env("netmask", netmask)?;
+            }
+        }
 
         if let Some(ref ip) = ip_string
             && let Ok(output) = uboot.cmd("net list")
