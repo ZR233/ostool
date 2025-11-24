@@ -97,6 +97,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     app.set_elf_path(args.elf).await;
+    app.objcopy_elf()?;
 
     app.debug = args.no_run;
     if args.to_bin {

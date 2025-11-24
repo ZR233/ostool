@@ -76,6 +76,47 @@ impl AppContext {
         self.arch = Some(file.architecture())
     }
 
+    pub fn objcopy_elf(&mut self) -> anyhow::Result<PathBuf> {
+        let elf_path = self
+            .elf_path
+            .as_ref()
+            .ok_or(anyhow!("elf not exist"))?
+            .canonicalize()?;
+
+        let stripped_elf_path = elf_path.with_file_name(
+            elf_path
+                .file_stem()
+                .ok_or(anyhow!("Invalid file path"))?
+                .to_string_lossy()
+                .to_string()
+                + ".elf",
+        );
+        println!(
+            "{}",
+            format!(
+                "Stripping ELF file...\r\n  original elf: {}\r\n  stripped elf: {}",
+                elf_path.display(),
+                stripped_elf_path.display()
+            )
+            .bold()
+            .purple()
+        );
+
+        let mut objcopy = self.command("rust-objcopy");
+
+        objcopy.arg(format!(
+            "--binary-architecture={}",
+            format!("{:?}", self.arch.unwrap()).to_lowercase()
+        ));
+        objcopy.arg(&elf_path);
+        objcopy.arg(&stripped_elf_path);
+
+        objcopy.run()?;
+        self.elf_path = Some(stripped_elf_path.clone());
+
+        Ok(stripped_elf_path)
+    }
+
     pub fn objcopy_output_bin(&mut self) -> anyhow::Result<PathBuf> {
         if self.bin_path.is_some() {
             debug!("BIN file already exists: {:?}", self.bin_path);
