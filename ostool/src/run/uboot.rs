@@ -49,6 +49,7 @@ pub struct UbootConfig {
     pub board_power_off_cmd: Option<String>,
     pub success_regex: Vec<String>,
     pub fail_regex: Vec<String>,
+    pub uboot_cmd: Option<Vec<String>>,
 }
 
 impl UbootConfig {
@@ -326,6 +327,13 @@ impl Runner {
 
         let mut uboot = handle.join().unwrap()?;
         uboot.set_env("autoload", "yes")?;
+
+        if let Some(ref cmds) = self.config.uboot_cmd {
+            for cmd in cmds.iter() {
+                info!("Running U-Boot command: {}", cmd);
+                uboot.cmd(cmd)?;
+            }
+        }
 
         if let Some(ref net) = self.config.net {
             if let Some(ref gatewayip) = net.gatewayip {
