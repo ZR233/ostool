@@ -128,6 +128,9 @@ ostool run uboot
 ostool run uboot --uboot-config my-uboot.toml
 ```
 
+> 交互退出：在串口终端（如 `ostool run uboot`）中，按下 `Ctrl+A` 后再按 `x`，工具会检测到该序列并优雅退出，不会将按键发送到目标设备。
+> 更多键盘快捷键映射可参考源码 `ostool/src/sterm/mod.rs`。
+
 ## ⚙️ 配置文件
 
 ostool 使用多个独立的 TOML 配置文件，每个文件负责不同的功能模块：

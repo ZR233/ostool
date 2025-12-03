@@ -128,6 +128,9 @@ ostool run uboot
 ostool run uboot --uboot-config my-uboot.toml
 ```
 
+> Exit shortcut: In the serial terminal (e.g., `ostool run uboot`), press `Ctrl+A` then `x` to quit; the tool captures this sequence and exits gracefully instead of sending it to the target device.
+> For more keyboard mappings, see `ostool/src/sterm/mod.rs`.
+
 ## ⚙️ Configuration Files
 
 ostool uses multiple independent TOML configuration files, each responsible for different functional modules:
