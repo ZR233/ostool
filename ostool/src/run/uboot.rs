@@ -50,6 +50,7 @@ pub struct UbootConfig {
     pub success_regex: Vec<String>,
     pub fail_regex: Vec<String>,
     pub uboot_cmd: Option<Vec<String>>,
+
 }
 
 impl UbootConfig {
@@ -70,6 +71,7 @@ pub struct Net {
     pub board_ip: Option<String>,
     pub gatewayip: Option<String>,
     pub netmask: Option<String>,
+    pub tftp_dir: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -82,7 +84,7 @@ pub async fn run_uboot(ctx: AppContext, args: RunUbootArgs) -> anyhow::Result<()
     // Build logic will be implemented here
     let config_path = match args.config.clone() {
         Some(path) => path,
-        None => ctx.workspace_folder.join(".uboot.toml"),
+        None => ctx.paths.workspace.join(".uboot.toml"),
     };
 
     let schema_path = default_schema_by_init(&config_path);
@@ -285,7 +287,7 @@ impl Runner {
         self.preper_regex()?;
         self.ctx.objcopy_output_bin()?;
 
-        let kernel = self.ctx.bin_path.as_ref().ok_or(anyhow!("bin not exist"))?;
+        let kernel = self.ctx.paths.artifacts.bin.as_ref().ok_or(anyhow!("bin not exist"))?;
 
         info!("Starting U-Boot runner...");
 
@@ -293,9 +295,16 @@ impl Runner {
 
         let ip_string = self.detect_tftp_ip();
 
-        if let Some(ip) = ip_string.as_ref() {
-            info!("TFTP server IP: {}", ip);
-            tftp::run_tftp_server(&self.ctx)?;
+        let is_tftp = self.config.net
+            .as_ref()
+            .and_then(|net| net.tftp_dir.as_ref())
+            .is_some();
+
+        if !is_tftp {
+            if let Some(ip) = ip_string.as_ref() {
+                info!("TFTP server IP: {}", ip);
+                tftp::run_tftp_server(&self.ctx)?;
+            }
         }
 
         info!(
@@ -417,7 +426,33 @@ impl Runner {
             )
             .await?;
 
-        let fitname = fitimage.file_name().unwrap().to_str().unwrap();
+        let fitname = if is_tftp {
+            let bin = self.ctx.paths.artifacts.bin
+                .as_ref()
+                .ok_or(anyhow!("bin not exist"))?;
+
+            let file_name = bin.file_name()
+                .ok_or(anyhow!("Invalid bin path"))?
+                .to_str()
+                .ok_or(anyhow!("Invalid filename encoding"))?;
+
+            let tftp_dir = self.config.net
+                .as_ref()
+                .and_then(|net| net.tftp_dir.as_ref())
+                .unwrap();
+
+            let tftp_path = PathBuf::from(tftp_dir).join(file_name);
+            
+            info!("Setting TFTP file path: {}", tftp_path.display());
+            tftp_path.display().to_string()
+        } else {
+            let name = fitimage.file_name()
+                .and_then(|n| n.to_str())
+                .ok_or(anyhow!("Invalid fitimage filename"))?;
+            
+            info!("Using fitimage filename: {}", name);
+            name.to_string()
+        };
 
         let bootcmd =
             if let Some(ref board_ip) = self.config.net.as_ref().and_then(|e| e.board_ip.clone()) {

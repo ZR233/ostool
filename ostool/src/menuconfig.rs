@@ -36,14 +36,14 @@ impl MenuConfigHandler {
     }
 
     async fn handle_default_config(ctx: &mut AppContext) -> Result<()> {
-        ctx.perpare_build_config(None, true).await?;
+        ctx.prepare_build_config(None, true).await?;
 
         Ok(())
     }
 
     async fn handle_qemu_config(ctx: &mut AppContext) -> Result<()> {
         info!("配置 QEMU 运行参数");
-        let config_path = ctx.workspace_folder.join(".qemu.toml");
+        let config_path = ctx.paths.workspace.join(".qemu.toml");
         if config_path.exists() {
             println!("\n当前 U-Boot 配置文件: {}", config_path.display());
             // 这里可以读取并显示当前的 U-Boot 配置
@@ -55,7 +55,7 @@ impl MenuConfigHandler {
 
         if let Some(c) = config {
             fs::write(
-                ctx.value_replace_with_var(ctx.workspace_folder.join(".qemu.toml")),
+                ctx.value_replace_with_var(ctx.paths.workspace.join(".qemu.toml")),
                 toml::to_string_pretty(&c)?,
             )
             .await?;
@@ -73,7 +73,7 @@ impl MenuConfigHandler {
         println!("=== U-Boot 配置模式 ===");
 
         // 检查是否存在 U-Boot 配置文件
-        let uboot_config_path = ctx.workspace_folder.join(".uboot.toml");
+        let uboot_config_path = ctx.paths.workspace.join(".uboot.toml");
         if uboot_config_path.exists() {
             println!("\n当前 U-Boot 配置文件: {}", uboot_config_path.display());
             // 这里可以读取并显示当前的 U-Boot 配置
@@ -83,7 +83,7 @@ impl MenuConfigHandler {
         let config = jkconfig::run::<UbootConfig>(uboot_config_path, true, &[]).await?;
         if let Some(c) = config {
             fs::write(
-                ctx.value_replace_with_var(ctx.workspace_folder.join(".uboot.toml")),
+                ctx.value_replace_with_var(ctx.paths.workspace.join(".uboot.toml")),
                 toml::to_string_pretty(&c)?,
             )
             .await?;

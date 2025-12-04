@@ -15,13 +15,47 @@ use tokio::fs;
 
 use crate::build::config::BuildConfig;
 
+/// Configuration for output directories (set from external config)
+#[derive(Default, Clone)]
+pub struct OutputConfig {
+    pub build_dir: Option<PathBuf>,
+    pub bin_dir: Option<PathBuf>,
+}
+
+/// Build artifacts (generated during build)
+#[derive(Default, Clone)]
+pub struct OutputArtifacts {
+    pub elf: Option<PathBuf>,
+    pub bin: Option<PathBuf>,
+}
+
+/// Path configuration grouping all path-related fields
+#[derive(Default, Clone)]
+pub struct PathConfig {
+    pub workspace: PathBuf,
+    pub manifest: PathBuf,
+    pub config: OutputConfig,
+    pub artifacts: OutputArtifacts,
+}
+
+impl PathConfig {
+    /// Get build directory, defaulting to manifest/target if not configured
+    pub fn build_dir(&self) -> PathBuf {
+        self.config.build_dir
+            .clone()
+            .unwrap_or_else(|| self.manifest.join("target"))
+    }
+
+    /// Get bin directory, defaulting to build_dir if not configured
+    pub fn bin_dir(&self) -> Option<PathBuf> {
+        self.config.bin_dir.clone()
+    }
+}
+
 #[derive(Default, Clone)]
 pub struct AppContext {
-    pub workspace_folder: PathBuf,
-    pub manifest_dir: PathBuf,
+    pub paths: PathConfig,
     pub debug: bool,
-    pub elf_path: Option<PathBuf>,
-    pub bin_path: Option<PathBuf>,
     pub arch: Option<Architecture>,
     pub build_config: Option<BuildConfig>,
     pub build_config_path: Option<PathBuf>,
@@ -33,7 +67,7 @@ impl AppContext {
         command.arg("-c");
         command.arg(cmd);
 
-        if let Some(elf) = &self.elf_path {
+        if let Some(elf) = &self.paths.artifacts.elf {
             command.env("KERNEL_ELF", elf.display().to_string());
         }
 
@@ -44,21 +78,21 @@ impl AppContext {
 
     pub fn command(&self, program: &str) -> crate::utils::Command {
         let this = self.clone();
-        crate::utils::Command::new(program, &self.manifest_dir, move |s| {
+        crate::utils::Command::new(program, &self.paths.manifest, move |s| {
             this.value_replace_with_var(s)
         })
     }
 
     pub fn metadata(&self) -> anyhow::Result<Metadata> {
         let res = cargo_metadata::MetadataCommand::new()
-            .current_dir(&self.manifest_dir)
+            .current_dir(&self.paths.manifest)
             .no_deps()
             .exec()?;
         Ok(res)
     }
 
     pub async fn set_elf_path(&mut self, path: PathBuf) {
-        self.elf_path = Some(path.clone());
+        self.paths.artifacts.elf = Some(path.clone());
         let binary_data = match fs::read(path).await {
             Ok(data) => data,
             Err(e) => {
@@ -78,7 +112,9 @@ impl AppContext {
 
     pub fn objcopy_elf(&mut self) -> anyhow::Result<PathBuf> {
         let elf_path = self
-            .elf_path
+            .paths
+            .artifacts
+            .elf
             .as_ref()
             .ok_or(anyhow!("elf not exist"))?
             .canonicalize()?;
@@ -112,32 +148,41 @@ impl AppContext {
         objcopy.arg(&stripped_elf_path);
 
         objcopy.run()?;
-        self.elf_path = Some(stripped_elf_path.clone());
+        self.paths.artifacts.elf = Some(stripped_elf_path.clone());
 
         Ok(stripped_elf_path)
     }
 
     pub fn objcopy_output_bin(&mut self) -> anyhow::Result<PathBuf> {
-        if self.bin_path.is_some() {
-            debug!("BIN file already exists: {:?}", self.bin_path);
-            return Ok(self.bin_path.as_ref().unwrap().clone());
+        if self.paths.artifacts.bin.is_some() {
+            debug!("BIN file already exists: {:?}", self.paths.artifacts.bin);
+            return Ok(self.paths.artifacts.bin.as_ref().unwrap().clone());
         }
 
         let elf_path = self
-            .elf_path
+            .paths
+            .artifacts
+            .elf
             .as_ref()
             .ok_or(anyhow!("elf not exist"))?
             .canonicalize()?;
 
-        // 去掉原文件的扩展名后添加 .bin
-        let bin_path = elf_path.with_file_name(
-            elf_path
-                .file_stem()
-                .ok_or(anyhow!("Invalid file path"))?
-                .to_string_lossy()
-                .to_string()
-                + ".bin",
-        );
+        let bin_name = elf_path
+            .file_stem()
+            .ok_or(anyhow!("Invalid file path"))?
+            .to_string_lossy()
+            .to_string() + ".bin";
+
+        let bin_path = if let Some(bin_dir) = self.paths.config.bin_dir.clone() {
+            bin_dir.join(bin_name)
+        } else {
+            elf_path.with_file_name(bin_name)
+        };
+
+        if let Some(parent) = bin_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
         println!(
             "{}",
             format!(
@@ -162,85 +207,19 @@ impl AppContext {
             .arg(&bin_path);
 
         objcopy.run()?;
-        self.bin_path = Some(bin_path.clone());
+        self.paths.artifacts.bin = Some(bin_path.clone());
 
         Ok(bin_path)
     }
 
-    // pub fn objcopy_output_bin(&mut self) -> anyhow::Result<PathBuf> {
-    //     let elf_path = self.elf_path.as_ref().ok_or(anyhow!("elf not exist"))?;
-    //     let bin_path = elf_path.with_extension("bin");
-    //     println!(
-    //         "{}",
-    //         format!(
-    //             "Converting ELF to BIN format...\r\n  elf: {}\r\n  bin: {}",
-    //             elf_path.display(),
-    //             bin_path.display()
-    //         )
-    //         .bold()
-    //         .purple()
-    //     );
-
-    //     // Read ELF file
-    //     let binary_data =
-    //         std::fs::read(elf_path).map_err(|e| anyhow!("Failed to read ELF file: {}", e))?;
-
-    //     // Parse ELF file
-    //     let obj_file = object::File::parse(binary_data.as_slice())
-    //         .map_err(|e| anyhow!("Failed to parse ELF file: {}", e))?;
-
-    //     // Extract loadable segments and write to binary file
-    //     let mut binary_output = Vec::new();
-    //     let mut min_addr = u64::MAX;
-    //     let mut max_addr = 0u64;
-
-    //     // First pass: find memory range
-    //     for segment in obj_file.segments() {
-    //         // Only include loadable segments
-    //         if segment.size() > 0 {
-    //             let addr = segment.address();
-    //             min_addr = min_addr.min(addr);
-    //             max_addr = max_addr.max(addr + segment.size());
-    //         }
-    //     }
-
-    //     if min_addr == u64::MAX {
-    //         return Err(anyhow!("No loadable segments found in ELF file"));
-    //     }
-
-    //     // Allocate buffer for binary output
-    //     let total_size = (max_addr - min_addr) as usize;
-    //     binary_output.resize(total_size, 0u8);
-
-    //     // Second pass: copy segment data
-    //     for segment in obj_file.segments() {
-    //         if let Ok(data) = segment.data()
-    //             && !data.is_empty()
-    //         {
-    //             let addr = segment.address();
-    //             let offset = (addr - min_addr) as usize;
-    //             if offset + data.len() <= binary_output.len() {
-    //                 binary_output[offset..offset + data.len()].copy_from_slice(data);
-    //             }
-    //         }
-    //     }
-
-    //     // Write binary file
-    //     std::fs::write(&bin_path, binary_output)
-    //         .map_err(|e| anyhow!("Failed to write binary file: {}", e))?;
-
-    //     self.bin_path = Some(bin_path.clone());
-    //     Ok(bin_path)
-    // }
-
-    pub async fn perpare_build_config(
+    pub async fn prepare_build_config(
         &mut self,
         config_path: Option<PathBuf>,
         menu: bool,
     ) -> anyhow::Result<BuildConfig> {
         let config_path = match config_path {
             Some(path) => path,
-            None => self.workspace_folder.join(".build.toml"),
+            None => self.paths.workspace.join(".build.toml"),
         };
         self.build_config_path = Some(config_path.clone());
 
@@ -258,13 +237,6 @@ impl AppContext {
         Ok(c)
     }
 
-    pub fn is_cargo_build(&self) -> bool {
-        match &self.build_config {
-            Some(cfg) => matches!(cfg.system, crate::build::config::BuildSystem::Cargo(_)),
-            None => false,
-        }
-    }
-
     pub fn value_replace_with_var<S>(&self, value: S) -> String
     where
         S: AsRef<std::ffi::OsStr>,
@@ -272,7 +244,7 @@ impl AppContext {
         let raw = value.as_ref().to_string_lossy();
         raw.replace(
             "${workspaceFolder}",
-            format!("{}", self.workspace_folder.display()).as_ref(),
+            format!("{}", self.paths.workspace.display()).as_ref(),
         )
     }
 
@@ -282,7 +254,7 @@ impl AppContext {
 
     fn ui_hock_feature_select(&self) -> ElemHock {
         let path = "system.features";
-        let cargo_toml = self.workspace_folder.join("Cargo.toml");
+        let cargo_toml = self.paths.workspace.join("Cargo.toml");
         ElemHock {
             path: path.to_string(),
             callback: Arc::new(move |siv: &mut Cursive, _path: &str| {
@@ -303,7 +275,7 @@ impl AppContext {
 
     fn ui_hock_pacage_select(&self) -> ElemHock {
         let path = "system.package";
-        let cargo_toml = self.workspace_folder.join("Cargo.toml");
+        let cargo_toml = self.paths.workspace.join("Cargo.toml");
 
         ElemHock {
             path: path.to_string(),
