@@ -427,21 +427,13 @@ impl Runner {
             .await?;
 
         let fitname = if is_tftp {
-            let bin = self.ctx.paths.artifacts.bin
-                .as_ref()
-                .ok_or(anyhow!("bin not exist"))?;
-
-            let file_name = bin.file_name()
-                .ok_or(anyhow!("Invalid bin path"))?
-                .to_str()
-                .ok_or(anyhow!("Invalid filename encoding"))?;
-
             let tftp_dir = self.config.net
                 .as_ref()
                 .and_then(|net| net.tftp_dir.as_ref())
                 .unwrap();
 
-            let tftp_path = PathBuf::from(tftp_dir).join(file_name);
+            let fitimage = fitimage.file_name().unwrap();
+            let tftp_path = PathBuf::from(tftp_dir).join(fitimage);
             
             info!("Setting TFTP file path: {}", tftp_path.display());
             tftp_path.display().to_string()
