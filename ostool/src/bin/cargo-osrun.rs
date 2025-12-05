@@ -3,7 +3,7 @@ use std::{env, path::PathBuf, process::exit};
 use clap::{Parser, Subcommand};
 use log::{LevelFilter, debug};
 use ostool::{
-    ctx::AppContext,
+    ctx::{AppContext, OutputConfig, PathConfig},
     run::{
         qemu,
         uboot::{self, RunUbootArgs},
@@ -53,6 +53,12 @@ struct RunnerArgs {
     #[arg(allow_hyphen_values = true)]
     /// Arguments to be run
     runner_args: Vec<String>,
+
+    #[arg(long)]
+    build_dir: Option<String>,
+
+    #[arg(long)]
+    bin_dir: Option<String>,
 }
 
 #[derive(Debug, Subcommand, Clone)]
@@ -90,9 +96,18 @@ async fn main() -> anyhow::Result<()> {
         Err(_) => manifest_dir.clone(),
     };
 
+    let bin_dir: Option<PathBuf> = args.bin_dir.map(PathBuf::from);
+    let build_dir: Option<PathBuf> = args.build_dir.map(PathBuf::from);
+
+    let output_config = OutputConfig { build_dir, bin_dir };
+
     let mut app = AppContext {
-        workspace_folder,
-        manifest_dir,
+        paths: PathConfig {
+            workspace: workspace_folder,
+            manifest: manifest_dir,
+            config: output_config,
+            ..Default::default()
+        },
         ..Default::default()
     };
 

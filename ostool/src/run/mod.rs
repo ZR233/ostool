@@ -1,4 +1,3 @@
-pub mod cargo;
 pub mod qemu;
 pub mod tftp;
 pub mod uboot;

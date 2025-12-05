@@ -63,7 +63,7 @@ fn test_object() {
 
 #[test]
 fn test_value() {
-    env_logger::builder().is_test(true).init();
+    let _ = env_logger::builder().is_test(true).try_init();
 
     let schema = schema_for!(AnimalObject);
 
