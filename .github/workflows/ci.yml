@@ -24,9 +24,10 @@ jobs:
         targets: ${{ matrix.targets }}
     - uses: Swatinem/rust-cache@v2
     - name: Install qemu
-      run: sudo apt-get update
-           sudo apt install qemu-system-aarch64 -y
-    - run: sudo apt install u-boot-tools -y
+      run: |
+        sudo apt-get update
+        sudo apt install qemu-system-aarch64 -y
+        sudo apt install u-boot-tools -y
     - name: Install lib libudev-dev
       run: sudo apt install libudev-dev -y
     - name: Check rust version
