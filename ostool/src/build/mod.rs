@@ -5,7 +5,7 @@ use anyhow::Context;
 use crate::{
     build::{
         cargo_builder::CargoBuilder,
-        config::{Cargo, Custom}
+        config::{Cargo, Custom},
     },
     ctx::AppContext,
 };
@@ -66,10 +66,12 @@ impl AppContext {
                 dir.clone()
             };
 
-            bin_path.canonicalize()
+            bin_path
+                .canonicalize()
                 .or_else(|_| {
                     if let Some(parent) = bin_path.parent() {
-                        parent.canonicalize()
+                        parent
+                            .canonicalize()
                             .map(|p| p.join(bin_path.file_name().unwrap()))
                     } else {
                         Ok(bin_path.clone())
@@ -78,12 +80,18 @@ impl AppContext {
                 .context("Failed to normalize path")
         };
 
-        let build_dir = self.paths.config.build_dir
+        let build_dir = self
+            .paths
+            .config
+            .build_dir
             .as_ref()
             .map(|d| normalize(d))
             .transpose()?;
 
-        let bin_dir = self.paths.config.bin_dir
+        let bin_dir = self
+            .paths
+            .config
+            .bin_dir
             .as_ref()
             .map(|d| normalize(d))
             .transpose()?;
@@ -99,9 +107,7 @@ impl AppContext {
         }
 
         if let Some(bin_dir) = bin_dir {
-            builder = builder
-                .arg("--bin-dir")
-                .arg(bin_dir.display().to_string())
+            builder = builder.arg("--bin-dir").arg(bin_dir.display().to_string())
         }
 
         match runner {
@@ -111,9 +117,7 @@ impl AppContext {
                 dtb_dump,
             } => {
                 if let Some(cfg) = qemu_config {
-                    builder = builder
-                        .arg("--config")
-                        .arg(cfg.display().to_string());
+                    builder = builder.arg("--config").arg(cfg.display().to_string());
                 }
 
                 builder = builder.debug(*debug);
@@ -125,9 +129,7 @@ impl AppContext {
             }
             CargoRunnerKind::Uboot { uboot_config } => {
                 if let Some(cfg) = uboot_config {
-                    builder = builder
-                        .arg("--config")
-                        .arg(cfg.display().to_string());
+                    builder = builder.arg("--config").arg(cfg.display().to_string());
                 }
                 builder = builder.arg("uboot");
             }

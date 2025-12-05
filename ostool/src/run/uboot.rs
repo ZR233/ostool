@@ -50,7 +50,6 @@ pub struct UbootConfig {
     pub success_regex: Vec<String>,
     pub fail_regex: Vec<String>,
     pub uboot_cmd: Option<Vec<String>>,
-
 }
 
 impl UbootConfig {
@@ -287,7 +286,13 @@ impl Runner {
         self.preper_regex()?;
         self.ctx.objcopy_output_bin()?;
 
-        let kernel = self.ctx.paths.artifacts.bin.as_ref().ok_or(anyhow!("bin not exist"))?;
+        let kernel = self
+            .ctx
+            .paths
+            .artifacts
+            .bin
+            .as_ref()
+            .ok_or(anyhow!("bin not exist"))?;
 
         info!("Starting U-Boot runner...");
 
@@ -295,7 +300,9 @@ impl Runner {
 
         let ip_string = self.detect_tftp_ip();
 
-        let is_tftp = self.config.net
+        let is_tftp = self
+            .config
+            .net
             .as_ref()
             .and_then(|net| net.tftp_dir.as_ref())
             .is_some();
@@ -427,21 +434,24 @@ impl Runner {
             .await?;
 
         let fitname = if is_tftp {
-            let tftp_dir = self.config.net
+            let tftp_dir = self
+                .config
+                .net
                 .as_ref()
                 .and_then(|net| net.tftp_dir.as_ref())
                 .unwrap();
 
             let fitimage = fitimage.file_name().unwrap();
             let tftp_path = PathBuf::from(tftp_dir).join(fitimage);
-            
+
             info!("Setting TFTP file path: {}", tftp_path.display());
             tftp_path.display().to_string()
         } else {
-            let name = fitimage.file_name()
+            let name = fitimage
+                .file_name()
                 .and_then(|n| n.to_str())
                 .ok_or(anyhow!("Invalid fitimage filename"))?;
-            
+
             info!("Using fitimage filename: {}", name);
             name.to_string()
         };

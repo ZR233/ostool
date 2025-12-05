@@ -99,10 +99,7 @@ async fn main() -> anyhow::Result<()> {
     let bin_dir: Option<PathBuf> = args.bin_dir.map(PathBuf::from);
     let build_dir: Option<PathBuf> = args.build_dir.map(PathBuf::from);
 
-    let output_config = OutputConfig {
-        build_dir,
-        bin_dir,
-    };
+    let output_config = OutputConfig { build_dir, bin_dir };
 
     let mut app = AppContext {
         paths: PathConfig {

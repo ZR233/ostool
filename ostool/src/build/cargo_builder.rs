@@ -5,10 +5,7 @@ use std::{
 
 use colored::Colorize;
 
-use crate::{
-    build::config::Cargo,
-    ctx::AppContext, utils::Command,
-};
+use crate::{build::config::Cargo, ctx::AppContext, utils::Command};
 
 pub struct CargoBuilder<'a> {
     ctx: &'a mut AppContext,
@@ -21,11 +18,7 @@ pub struct CargoBuilder<'a> {
 }
 
 impl<'a> CargoBuilder<'a> {
-    pub fn build(
-        ctx: &'a mut AppContext,
-        config: &'a Cargo,
-        config_path: Option<PathBuf>,
-    ) -> Self {
+    pub fn build(ctx: &'a mut AppContext, config: &'a Cargo, config_path: Option<PathBuf>) -> Self {
         Self {
             ctx,
             config,
@@ -37,11 +30,7 @@ impl<'a> CargoBuilder<'a> {
         }
     }
 
-    pub fn run(
-        ctx: &'a mut AppContext,
-        config: &'a Cargo,
-        config_path: Option<PathBuf>,
-    ) -> Self {
+    pub fn run(ctx: &'a mut AppContext, config: &'a Cargo, config_path: Option<PathBuf>) -> Self {
         Self {
             ctx,
             config,
@@ -336,11 +325,7 @@ impl<'a> CargoBuilder<'a> {
             .map_err(|e| anyhow::anyhow!("Failed to download from {}: {}", url, e))?;
 
         if !response.status().is_success() {
-            return Err(anyhow::anyhow!(
-                "HTTP error {}: {}",
-                response.status(),
-                url
-            ));
+            return Err(anyhow::anyhow!("HTTP error {}: {}", response.status(), url));
         }
 
         let content = response

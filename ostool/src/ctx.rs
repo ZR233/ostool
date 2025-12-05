@@ -41,7 +41,8 @@ pub struct PathConfig {
 impl PathConfig {
     /// Get build directory, defaulting to manifest/target if not configured
     pub fn build_dir(&self) -> PathBuf {
-        self.config.build_dir
+        self.config
+            .build_dir
             .clone()
             .unwrap_or_else(|| self.manifest.join("target"))
     }
@@ -171,7 +172,8 @@ impl AppContext {
             .file_stem()
             .ok_or(anyhow!("Invalid file path"))?
             .to_string_lossy()
-            .to_string() + ".bin";
+            .to_string()
+            + ".bin";
 
         let bin_path = if let Some(bin_dir) = self.paths.config.bin_dir.clone() {
             bin_dir.join(bin_name)
