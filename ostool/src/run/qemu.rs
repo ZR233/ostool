@@ -41,7 +41,7 @@ pub async fn run_qemu(ctx: AppContext, args: RunQemuArgs) -> anyhow::Result<()> 
     // Build logic will be implemented here
     let config_path = match args.qemu_config.clone() {
         Some(path) => path,
-        None => ctx.manifest_dir.join(".qemu.toml"),
+        None => ctx.paths.manifest.join(".qemu.toml"),
     };
 
     let schema_path = default_schema_by_init(&config_path);
@@ -166,9 +166,9 @@ impl QemuRunner {
             cmd.arg("-bios").arg(bios);
         }
 
-        if let Some(bin_path) = &self.ctx.bin_path {
+        if let Some(bin_path) = &self.ctx.paths.artifacts.bin {
             cmd.arg("-kernel").arg(bin_path);
-        } else if let Some(elf_path) = &self.ctx.elf_path {
+        } else if let Some(elf_path) = &self.ctx.paths.artifacts.elf {
             cmd.arg("-kernel").arg(elf_path);
         }
         cmd.stdout(Stdio::piped());

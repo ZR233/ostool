@@ -5,10 +5,10 @@ use clap::*;
 
 use log::info;
 use ostool::{
-    build,
+    build::{self, CargoRunnerKind},
     ctx::AppContext,
     menuconfig::{MenuConfigHandler, MenuConfigMode},
-    run::{cargo::CargoRunnerKind, qemu::RunQemuArgs, uboot::RunUbootArgs},
+    run::{qemu::RunQemuArgs, uboot::RunUbootArgs},
 };
 
 #[derive(Parser)]
@@ -89,8 +89,11 @@ async fn main() -> Result<()> {
     };
 
     let mut ctx = AppContext {
-        manifest_dir: workspace_folder.clone(),
-        workspace_folder,
+        paths: ostool::ctx::PathConfig {
+            workspace: workspace_folder.clone(),
+            manifest: workspace_folder.clone(),
+            ..Default::default()
+        },
         ..Default::default()
     };
 
@@ -99,7 +102,7 @@ async fn main() -> Result<()> {
             ctx.build(config).await?;
         }
         SubCommands::Run(args) => {
-            let config = ctx.perpare_build_config(args.config, false).await?;
+            let config = ctx.prepare_build_config(args.config, false).await?;
             match config.system {
                 build::config::BuildSystem::Cargo(config) => {
                     let kind = match args.command {
@@ -120,7 +123,7 @@ async fn main() -> Result<()> {
                     info!(
                         "ELF {:?}: {}",
                         ctx.arch,
-                        ctx.elf_path.as_ref().unwrap().display()
+                        ctx.paths.artifacts.elf.as_ref().unwrap().display()
                     );
 
                     if custom_cfg.to_bin {
