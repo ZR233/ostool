@@ -307,11 +307,9 @@ impl Runner {
             .and_then(|net| net.tftp_dir.as_ref())
             .is_some();
 
-        if !is_tftp {
-            if let Some(ip) = ip_string.as_ref() {
-                info!("TFTP server IP: {}", ip);
-                tftp::run_tftp_server(&self.ctx)?;
-            }
+        if !is_tftp && let Some(ip) = ip_string.as_ref() {
+            info!("TFTP server IP: {}", ip);
+            tftp::run_tftp_server(&self.ctx)?;
         }
 
         info!(
