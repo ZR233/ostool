@@ -85,7 +85,7 @@ impl AppContext {
             .config
             .build_dir
             .as_ref()
-            .map(|d| normalize(d))
+            .map(&normalize)
             .transpose()?;
 
         let bin_dir = self
@@ -93,7 +93,7 @@ impl AppContext {
             .config
             .bin_dir
             .as_ref()
-            .map(|d| normalize(d))
+            .map(normalize)
             .transpose()?;
 
         let mut builder = CargoBuilder::run(self, config, build_config_path);

@@ -8,7 +8,6 @@ use std::{
 use anyhow::anyhow;
 use colored::Colorize;
 use crossterm::terminal::disable_raw_mode;
-use jkconfig::data::app_data::default_schema_by_init;
 use object::Architecture;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -44,15 +43,7 @@ pub async fn run_qemu(ctx: AppContext, args: RunQemuArgs) -> anyhow::Result<()> 
         None => ctx.paths.manifest.join(".qemu.toml"),
     };
 
-    let schema_path = default_schema_by_init(&config_path);
-
-    let schema = schemars::schema_for!(QemuConfig);
-    let schema_json = serde_json::to_value(&schema)?;
-    let schema_content = serde_json::to_string_pretty(&schema_json)?;
-    fs::write(&schema_path, schema_content).await?;
-
-    // 初始化AppData
-    // let app_data = AppData::new(Some(&config_path), Some(schema_path))?;
+    info!("Using QEMU config file: {}", config_path.display());
 
     let config = if config_path.exists() {
         let config_content = fs::read_to_string(&config_path)
