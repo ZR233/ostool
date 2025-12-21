@@ -42,6 +42,9 @@ struct RunnerArgs {
     #[arg(long)]
     no_run: bool,
 
+    #[arg(long)]
+    debug: bool,
+
     /// Sub-commands
     #[command(subcommand)]
     command: Option<SubCommands>,
@@ -82,7 +85,11 @@ async fn main() -> anyhow::Result<()> {
 
     let args = RunnerArgs::parse();
 
-    debug!("Parsed arguments: {:?}", args);
+    debug!("Parsed arguments: {:#?}", args);
+
+    if args.no_run {
+        exit(0);
+    }
 
     if env::var("CARGO").is_err() {
         eprintln!("This binary may only be called via `cargo ndk-runner`.");
@@ -114,7 +121,7 @@ async fn main() -> anyhow::Result<()> {
     app.set_elf_path(args.elf).await;
     app.objcopy_elf()?;
 
-    app.debug = args.no_run;
+    app.debug = args.debug;
     if args.to_bin {
         app.objcopy_output_bin()?;
     }
