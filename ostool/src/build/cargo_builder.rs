@@ -42,6 +42,10 @@ impl<'a> CargoBuilder<'a> {
         }
     }
 
+    pub fn is_run(&self) -> bool {
+        self.command == "run"
+    }
+
     pub fn debug(self, debug: bool) -> Self {
         self.ctx.debug = debug;
         self
@@ -163,6 +167,10 @@ impl<'a> CargoBuilder<'a> {
         // Extra args
         for arg in &self.extra_args {
             cmd.arg(arg);
+        }
+
+        if self.is_run() && self.ctx.debug {
+            cmd.arg("--debug");
         }
 
         Ok(cmd)
