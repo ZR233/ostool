@@ -64,8 +64,19 @@ pub struct AppContext {
 
 impl AppContext {
     pub fn shell_run_cmd(&self, cmd: &str) -> anyhow::Result<()> {
-        let mut command = self.command("sh");
-        command.arg("-c");
+        let mut command = match std::env::consts::OS {
+            "windows" => {
+                let mut command = self.command("powershell");
+                command.arg("-Command");
+                command
+            }
+            _ => {
+                let mut command = self.command("sh");
+                command.arg("-c");
+                command
+            }
+        };
+
         command.arg(cmd);
 
         if let Some(elf) = &self.paths.artifacts.elf {

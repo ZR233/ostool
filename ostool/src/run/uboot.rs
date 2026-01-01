@@ -39,6 +39,7 @@ pub struct UbootConfig {
     /// Kernel load address
     /// if not specified, use U-Boot env variable 'loadaddr'
     pub kernel_load_addr: Option<String>,
+    pub fit_load_addr: Option<String>,
     /// TFTP boot configuration
     pub net: Option<Net>,
     /// Board reset command
@@ -54,7 +55,15 @@ pub struct UbootConfig {
 
 impl UbootConfig {
     pub fn kernel_load_addr_int(&self) -> Option<u64> {
-        self.kernel_load_addr.as_ref().and_then(|addr_str| {
+        self.addr_int(self.kernel_load_addr.as_ref())
+    }
+
+    pub fn fit_load_addr_int(&self) -> Option<u64> {
+        self.addr_int(self.fit_load_addr.as_ref())
+    }
+
+    fn addr_int(&self, addr_str: Option<&String>) -> Option<u64> {
+        addr_str.as_ref().and_then(|addr_str| {
             if addr_str.starts_with("0x") || addr_str.starts_with("0X") {
                 u64::from_str_radix(&addr_str[2..], 16).ok()
             } else {
@@ -398,7 +407,7 @@ impl Runner {
             return Err(anyhow!("Cannot determine kernel entry address"));
         };
 
-        let fit_loadaddr = if let Ok(addr) = uboot.env_int("kernel_comp_addr_r") {
+        let mut fit_loadaddr = if let Ok(addr) = uboot.env_int("kernel_comp_addr_r") {
             info!("image load to kernel_comp_addr_r: {addr:#x}");
             addr as u64
         } else if let Ok(addr) = uboot.env_int("kernel_addr_c") {
@@ -409,6 +418,10 @@ impl Runner {
             info!("No kernel_comp_addr_r or kernel_addr_c, use calculated address: {addr:#x}");
             addr
         };
+
+        if let Some(fit_load_addr_int) = self.config.fit_load_addr_int() {
+            fit_loadaddr = fit_load_addr_int;
+        }
 
         uboot.set_env("loadaddr", format!("{:#x}", fit_loadaddr))?;
 
@@ -551,6 +564,7 @@ impl Runner {
 
         let interfaces = NetworkInterface::show().unwrap();
         for interface in interfaces.iter() {
+            debug!("net Interface: {}", interface.name);
             if interface.name == net.interface {
                 let addr_list: Vec<Addr> = interface.addr.to_vec();
                 for one in addr_list {
