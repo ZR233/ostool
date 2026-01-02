@@ -39,6 +39,8 @@ pub struct UbootConfig {
     /// Kernel load address
     /// if not specified, use U-Boot env variable 'loadaddr'
     pub kernel_load_addr: Option<String>,
+    /// Fit Image load address
+    /// if not specified, use automatically calculated address
     pub fit_load_addr: Option<String>,
     /// TFTP boot configuration
     pub net: Option<Net>,
