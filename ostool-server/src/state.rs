@@ -184,6 +184,7 @@ impl AppState {
     pub async fn create_session(
         &self,
         board_type: &str,
+        board_id: Option<&str>,
         required_tags: &[String],
         client_name: Option<String>,
     ) -> Result<Session, BoardAllocationStatus> {
@@ -196,7 +197,13 @@ impl AppState {
                 .filter(|(_, runtime)| runtime.lease_state != BoardLeaseState::Idle)
                 .map(|(board_id, _)| board_id.clone())
                 .collect::<BTreeSet<_>>();
-            let board = allocate_board(&boards, &unavailable_board_ids, board_type, required_tags)?;
+            let board = allocate_board(
+                &boards,
+                &unavailable_board_ids,
+                board_type,
+                board_id,
+                required_tags,
+            )?;
             drop(runtimes);
             drop(boards);
 
@@ -937,7 +944,7 @@ mod tests {
             .insert("board-1".into(), sample_board("board-1"));
         state.sync_board_runtime_states().await;
 
-        let session = state.create_session("demo", &[], None).await.unwrap();
+        let session = state.create_session("demo", None, &[], None).await.unwrap();
         let runtime = state.board_runtime_status("board-1").await.unwrap();
         assert_eq!(runtime.lease_state, BoardLeaseState::Using);
         assert_eq!(
@@ -957,7 +964,7 @@ mod tests {
             .await
             .insert("board-1".into(), sample_board("board-1"));
         state.sync_board_runtime_states().await;
-        let session = state.create_session("demo", &[], None).await.unwrap();
+        let session = state.create_session("demo", None, &[], None).await.unwrap();
         let handle = state.session_state(&session.id).await.unwrap();
         handle.set_serial_connected(true);
 
