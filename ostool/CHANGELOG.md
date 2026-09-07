@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.0](https://github.com/drivercraft/ostool/compare/ostool-v0.28.2...ostool-v0.29.0) - 2026-09-07
+
+### Added
+
+- *(ostool-server)* add network axloader control plane ([#179](https://github.com/drivercraft/ostool/pull/179))
+
 ## [0.28.2](https://github.com/drivercraft/ostool/compare/ostool-v0.28.1...ostool-v0.28.2) - 2026-09-03
 
 ### Fixed
