@@ -4,6 +4,7 @@ use std::sync::{
 };
 
 use chrono::{DateTime, Duration, Utc};
+use httpboot_protocol::{BootArch, ImageFormat, LoaderStatusPhase, LoaderStatusResponse};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, mpsc, watch};
 
@@ -102,7 +103,31 @@ pub struct SessionState {
     lifecycle_state: AtomicU8,
     stop_requested: AtomicBool,
     serial_connected: AtomicBool,
+    loader: RwLock<SessionLoaderState>,
     command_tx: Option<mpsc::UnboundedSender<SessionCommand>>,
+}
+
+#[derive(Debug, Default)]
+struct SessionLoaderState {
+    boot_command: Option<SessionBootCommand>,
+    status: Option<LoaderStatusResponse>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionBootCommand {
+    pub boot_id: String,
+    pub kernel_path: String,
+    pub kernel_size: u64,
+    pub kernel_sha256: String,
+    pub arch: BootArch,
+    pub image_format: ImageFormat,
+    pub entry_symbol: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoaderStatusUpdateError {
+    NoBootCommand,
+    StaleBoot,
 }
 
 impl SessionState {
@@ -140,6 +165,7 @@ impl SessionState {
             lifecycle_state: AtomicU8::new(SessionLifecycleState::Active.as_u8()),
             stop_requested: AtomicBool::new(false),
             serial_connected: AtomicBool::new(false),
+            loader: RwLock::new(SessionLoaderState::default()),
             command_tx,
         })
     }
@@ -229,6 +255,56 @@ impl SessionState {
     pub fn is_serial_connected(&self) -> bool {
         self.serial_connected.load(Ordering::Acquire)
     }
+
+    pub async fn publish_boot_command(&self, command: SessionBootCommand) {
+        let mut loader = self.loader.write().await;
+        loader.boot_command = Some(command);
+        loader.status = None;
+    }
+
+    pub async fn boot_command(&self) -> Option<SessionBootCommand> {
+        self.loader.read().await.boot_command.clone()
+    }
+
+    pub async fn update_loader_status(
+        &self,
+        registration_id: String,
+        boot_id: &str,
+        status: LoaderStatusPhase,
+    ) -> Result<(), LoaderStatusUpdateError> {
+        let session_id = self.info.read().await.id.clone();
+        let mut loader = self.loader.write().await;
+        let Some(command) = loader.boot_command.as_ref() else {
+            return Err(LoaderStatusUpdateError::NoBootCommand);
+        };
+        if command.boot_id != boot_id {
+            return Err(LoaderStatusUpdateError::StaleBoot);
+        }
+        loader.status = Some(LoaderStatusResponse {
+            session_id,
+            boot_id: boot_id.to_string(),
+            registration_id: Some(registration_id),
+            status: Some(status),
+        });
+        Ok(())
+    }
+
+    pub async fn loader_status(&self) -> Option<LoaderStatusResponse> {
+        let loader = self.loader.read().await;
+        let command = loader.boot_command.clone();
+        let status = loader.status.clone();
+        drop(loader);
+        if status.is_some() {
+            return status;
+        }
+        let command = command?;
+        Some(LoaderStatusResponse {
+            session_id: self.info.read().await.id.clone(),
+            boot_id: command.boot_id,
+            registration_id: None,
+            status: None,
+        })
+    }
 }
 
 impl Drop for SessionState {
@@ -280,7 +356,9 @@ async fn run_session_actor(
 mod tests {
     use std::thread;
 
-    use super::{SESSION_TTL, Session, SessionLifecycleState, SessionState};
+    use httpboot_protocol::{BootArch, ImageFormat, LoaderStatusPhase};
+
+    use super::{SESSION_TTL, Session, SessionBootCommand, SessionLifecycleState, SessionState};
     use crate::config::{
         BoardConfig, BootConfig, CustomPowerManagement, PowerManagementConfig, PxeProfile,
     };
@@ -296,6 +374,7 @@ mod tests {
                 power_off_cmd: "echo off".into(),
             }),
             boot: BootConfig::Pxe(PxeProfile::default()),
+            network_identity: None,
             notes: None,
             disabled: false,
         }
@@ -326,5 +405,34 @@ mod tests {
         assert!(state.begin_release());
         assert!(!state.begin_release());
         assert!(state.is_releasing());
+    }
+
+    #[tokio::test]
+    async fn publishing_a_new_boot_atomically_discards_the_old_generation_status() {
+        let state = SessionState::new(sample_board(), None);
+        let command = |boot_id: &str| SessionBootCommand {
+            boot_id: boot_id.into(),
+            kernel_path: "/kernel.elf".into(),
+            kernel_size: 4096,
+            kernel_sha256: "00".repeat(32),
+            arch: BootArch::X86_64,
+            image_format: ImageFormat::Elf64,
+            entry_symbol: None,
+        };
+        state.publish_boot_command(command("boot-1")).await;
+        state
+            .update_loader_status(
+                "registration-1".into(),
+                "boot-1",
+                LoaderStatusPhase::Verified,
+            )
+            .await
+            .unwrap();
+
+        state.publish_boot_command(command("boot-2")).await;
+        let status = state.loader_status().await.unwrap();
+        assert_eq!(status.boot_id, "boot-2");
+        assert_eq!(status.registration_id, None);
+        assert_eq!(status.status, None);
     }
 }

@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{Context, bail};
+use httpboot_protocol::MacAddress;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tokio::fs;
@@ -22,6 +23,10 @@ pub struct ServerConfig {
     pub tftp: TftpConfig,
     #[serde(default)]
     pub http_boot: HttpBootConfig,
+    #[serde(default)]
+    pub loader_network: LoaderNetworkConfig,
+    #[serde(default)]
+    pub virtual_qemu: VirtualQemuConfig,
     pub network: TftpNetworkConfig,
     #[serde(default)]
     pub upload_limits: UploadLimitsConfig,
@@ -45,6 +50,7 @@ impl ServerConfig {
         let board_dir = data_dir.join("boards");
         let dtb_dir = data_dir.join("dtbs");
         let http_boot = HttpBootConfig::default_with_root(data_dir.join("http-boot"));
+        let virtual_qemu = VirtualQemuConfig::default_with_runtime_dir(data_dir.join("qemu"));
 
         #[cfg(target_os = "linux")]
         let tftp = TftpConfig::SystemTftpdHpa(SystemTftpdHpaConfig::default());
@@ -61,6 +67,8 @@ impl ServerConfig {
             dtb_dir,
             tftp,
             http_boot,
+            loader_network: LoaderNetworkConfig::default(),
+            virtual_qemu,
             network: TftpNetworkConfig::default(),
             upload_limits: UploadLimitsConfig::default(),
         }
@@ -153,6 +161,14 @@ impl ServerConfig {
         self.board_dir = absolutize_path(&config_dir, &self.board_dir);
         self.dtb_dir = absolutize_path(&config_dir, &self.dtb_dir);
         self.http_boot.root_dir = absolutize_path(&config_dir, &self.http_boot.root_dir);
+        self.virtual_qemu.runtime_dir =
+            absolutize_path(&config_dir, &self.virtual_qemu.runtime_dir);
+        self.virtual_qemu.qemu_binary =
+            absolutize_path(&config_dir, &self.virtual_qemu.qemu_binary);
+        self.virtual_qemu.ovmf_code = absolutize_path(&config_dir, &self.virtual_qemu.ovmf_code);
+        self.virtual_qemu.ovmf_vars = absolutize_path(&config_dir, &self.virtual_qemu.ovmf_vars);
+        self.virtual_qemu.axloader_efi =
+            absolutize_path(&config_dir, &self.virtual_qemu.axloader_efi);
 
         match &mut self.tftp {
             TftpConfig::Builtin(cfg) => {
@@ -176,6 +192,20 @@ impl ServerConfig {
         if self.upload_limits.session_file_max_mib == 0 {
             bail!("upload_limits.session_file_max_mib must be greater than 0");
         }
+        if self.loader_network.bind_addr.port() != httpboot_protocol::DISCOVERY_PORT {
+            bail!(
+                "loader_network.bind_addr must use UDP port {}",
+                httpboot_protocol::DISCOVERY_PORT
+            );
+        }
+        if let Some(public_base_url) = self.loader_network.public_base_url.as_deref() {
+            let url = url::Url::parse(public_base_url)
+                .context("loader_network.public_base_url must be an absolute URL")?;
+            if url.scheme() != "http" || url.cannot_be_a_base() {
+                bail!("loader_network.public_base_url must be an HTTP base URL");
+            }
+        }
+        self.virtual_qemu.validate()?;
         Ok(())
     }
 }
@@ -185,6 +215,87 @@ pub struct HttpBootConfig {
     pub enabled: bool,
     pub root_dir: PathBuf,
     pub public_base_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct LoaderNetworkConfig {
+    pub enabled: bool,
+    pub bind_addr: SocketAddr,
+    pub public_base_url: Option<String>,
+}
+
+impl Default for LoaderNetworkConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            bind_addr: SocketAddr::from(([0, 0, 0, 0], httpboot_protocol::DISCOVERY_PORT)),
+            public_base_url: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct VirtualQemuConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    pub qemu_binary: PathBuf,
+    pub ovmf_code: PathBuf,
+    pub ovmf_vars: PathBuf,
+    pub axloader_efi: PathBuf,
+    pub runtime_dir: PathBuf,
+    pub network_namespace: String,
+    pub bridge: String,
+    #[serde(default)]
+    pub tap_pool: Vec<String>,
+    pub memory_mib: u32,
+    pub cpus: u16,
+}
+
+impl Default for VirtualQemuConfig {
+    fn default() -> Self {
+        Self::default_with_runtime_dir(PathBuf::from(".ostool-server/qemu"))
+    }
+}
+
+impl VirtualQemuConfig {
+    pub fn default_with_runtime_dir(runtime_dir: PathBuf) -> Self {
+        Self {
+            enabled: false,
+            qemu_binary: PathBuf::from("/usr/local/bin/qemu-system-x86_64"),
+            ovmf_code: PathBuf::from("/usr/share/OVMF/OVMF_CODE_4M.fd"),
+            ovmf_vars: PathBuf::from("/usr/share/OVMF/OVMF_VARS_4M.fd"),
+            axloader_efi: PathBuf::from("axloader.efi"),
+            runtime_dir,
+            network_namespace: "ostool-qemu".into(),
+            bridge: "ostool-br0".into(),
+            tap_pool: vec!["ostool-tap0".into()],
+            memory_mib: 512,
+            cpus: 2,
+        }
+    }
+
+    fn validate(&self) -> anyhow::Result<()> {
+        if !self.enabled {
+            return Ok(());
+        }
+        if self.network_namespace.trim().is_empty() || self.bridge.trim().is_empty() {
+            bail!("virtual_qemu.network_namespace and bridge must not be empty");
+        }
+        if self.tap_pool.is_empty() || self.tap_pool.iter().any(|name| name.trim().is_empty()) {
+            bail!("virtual_qemu.tap_pool must contain at least one non-empty TAP name");
+        }
+        let unique_taps = self
+            .tap_pool
+            .iter()
+            .collect::<std::collections::BTreeSet<_>>();
+        if unique_taps.len() != self.tap_pool.len() {
+            bail!("virtual_qemu.tap_pool must not contain duplicate TAP names");
+        }
+        if self.memory_mib == 0 || self.cpus == 0 {
+            bail!("virtual_qemu memory_mib and cpus must be greater than 0");
+        }
+        Ok(())
+    }
 }
 
 impl HttpBootConfig {
@@ -375,6 +486,8 @@ pub struct BoardConfig {
     pub serial: Option<SerialConfig>,
     pub power_management: PowerManagementConfig,
     pub boot: BootConfig,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network_identity: Option<BoardNetworkIdentity>,
     pub notes: Option<String>,
     #[serde(default)]
     pub disabled: bool,
@@ -385,8 +498,42 @@ impl BoardConfig {
         if let BootConfig::Uboot(profile) = &self.boot {
             profile.validate()?;
         }
+        if matches!(self.boot, BootConfig::UefiHttp(_)) && self.network_identity.is_none() {
+            anyhow::bail!("network_identity.mac_address is required for httpboot boards");
+        }
+        if let PowerManagementConfig::Qemu { virtual_device_id } = &self.power_management {
+            if !matches!(self.boot, BootConfig::UefiHttp(_)) {
+                anyhow::bail!("QEMU boards must use httpboot");
+            }
+            if virtual_device_id.trim().is_empty() {
+                anyhow::bail!("QEMU virtual_device_id must not be empty");
+            }
+            let serial = self
+                .serial
+                .as_ref()
+                .context("QEMU boards must configure a QEMU serial key")?;
+            if serial.key.kind != SerialPortKeyKind::Qemu || serial.key.value != *virtual_device_id
+            {
+                anyhow::bail!("QEMU power and serial must reference the same virtual_device_id");
+            }
+            if self.network_identity.is_none() {
+                anyhow::bail!("QEMU boards must configure network_identity.mac_address");
+            }
+        } else if self
+            .serial
+            .as_ref()
+            .is_some_and(|serial| serial.key.kind == SerialPortKeyKind::Qemu)
+        {
+            anyhow::bail!("QEMU serial keys require QEMU power management");
+        }
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct BoardNetworkIdentity {
+    #[schemars(with = "String")]
+    pub mac_address: MacAddress,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -410,6 +557,7 @@ pub struct SerialPortKey {
 pub enum SerialPortKeyKind {
     SerialNumber,
     UsbPath,
+    Qemu,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -417,6 +565,7 @@ pub enum SerialPortKeyKind {
 pub enum PowerManagementConfig {
     Custom(CustomPowerManagement),
     ZhongshengRelay(ZhongshengRelayPowerManagement),
+    Qemu { virtual_device_id: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -529,9 +678,6 @@ pub enum UefiBootArch {
 pub struct UefiHttpProfile {
     #[serde(default)]
     pub boot_arch: Option<UefiBootArch>,
-    #[serde(default, skip_serializing)]
-    #[schemars(skip)]
-    pub mac: Option<String>,
 }
 
 #[cfg(test)]
@@ -545,9 +691,9 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        BoardConfig, BootConfig, CustomPowerManagement, PowerManagementConfig, SerialPortKey,
-        SerialPortKeyKind, ServerConfig, UbootNetworkMode, UbootProfile, UefiBootArch,
-        UefiHttpProfile, ZhongshengRelayPowerManagement,
+        BoardConfig, BoardNetworkIdentity, BootConfig, CustomPowerManagement,
+        PowerManagementConfig, SerialPortKey, SerialPortKeyKind, ServerConfig, UbootNetworkMode,
+        UbootProfile, UefiBootArch, UefiHttpProfile, ZhongshengRelayPowerManagement,
     };
 
     #[test]
@@ -799,6 +945,7 @@ network_mode = "static_ip"
                 dtb_name: Some("board.dtb".into()),
                 ..Default::default()
             }),
+            network_identity: None,
             notes: None,
             disabled: false,
         };
@@ -854,7 +1001,9 @@ bootm_addr = "0x82200000"
             }),
             boot: BootConfig::UefiHttp(UefiHttpProfile {
                 boot_arch: Some(UefiBootArch::X86_64),
-                mac: None,
+            }),
+            network_identity: Some(BoardNetworkIdentity {
+                mac_address: "02:00:00:00:00:01".parse().unwrap(),
             }),
             notes: None,
             disabled: false,
@@ -862,14 +1011,93 @@ bootm_addr = "0x82200000"
 
         let encoded = toml::to_string_pretty(&board).unwrap();
         assert!(encoded.contains("kind = \"httpboot\""));
-        assert!(!encoded.contains("mac = "));
+        assert!(encoded.contains("mac_address = \"02:00:00:00:00:01\""));
 
         let decoded: BoardConfig = toml::from_str(&encoded).unwrap();
         let BootConfig::UefiHttp(profile) = decoded.boot else {
             panic!("expected httpboot");
         };
         assert_eq!(profile.boot_arch, Some(UefiBootArch::X86_64));
-        assert_eq!(profile.mac, None);
+        assert_eq!(
+            decoded.network_identity.unwrap().mac_address.to_string(),
+            "02:00:00:00:00:01"
+        );
+    }
+
+    #[test]
+    fn httpboot_board_requires_persistent_network_identity() {
+        let mut board = BoardConfig {
+            id: "uefi-http-01".into(),
+            board_type: "x86_64-uefi-http".into(),
+            tags: vec![],
+            serial: None,
+            power_management: PowerManagementConfig::Custom(CustomPowerManagement {
+                power_on_cmd: "true".into(),
+                power_off_cmd: "true".into(),
+            }),
+            boot: BootConfig::UefiHttp(UefiHttpProfile {
+                boot_arch: Some(UefiBootArch::X86_64),
+            }),
+            network_identity: None,
+            notes: None,
+            disabled: false,
+        };
+
+        assert!(
+            board
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("network_identity.mac_address is required for httpboot boards")
+        );
+        board.network_identity = Some(BoardNetworkIdentity {
+            mac_address: "02:00:00:00:00:01".parse().unwrap(),
+        });
+        board.validate().unwrap();
+    }
+
+    #[test]
+    fn qemu_board_requires_httpboot_and_matching_virtual_serial() {
+        let mut board = BoardConfig {
+            id: "qemu-01".into(),
+            board_type: "qemu-x86_64".into(),
+            tags: vec![],
+            serial: Some(super::SerialConfig {
+                key: SerialPortKey {
+                    kind: SerialPortKeyKind::Qemu,
+                    value: "virtual-1".into(),
+                },
+                baud_rate: 115_200,
+                resolved_device_path: None,
+                resolved_usb_path: None,
+            }),
+            power_management: PowerManagementConfig::Qemu {
+                virtual_device_id: "virtual-1".into(),
+            },
+            boot: BootConfig::Pxe(Default::default()),
+            network_identity: Some(BoardNetworkIdentity {
+                mac_address: "02:00:00:00:00:01".parse().unwrap(),
+            }),
+            notes: None,
+            disabled: false,
+        };
+
+        assert_eq!(
+            board.validate().unwrap_err().to_string(),
+            "QEMU boards must use httpboot"
+        );
+        board.boot = BootConfig::UefiHttp(UefiHttpProfile {
+            boot_arch: Some(UefiBootArch::X86_64),
+        });
+        board.validate().unwrap();
+        board.serial.as_mut().unwrap().key.value = "virtual-2".into();
+        assert!(
+            board
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("QEMU power and serial must reference the same virtual_device_id")
+        );
     }
 
     #[test]
@@ -895,7 +1123,10 @@ mac = "1c:69:7a:dc:f3:47"
         )
         .unwrap_err();
 
-        assert!(error.to_string().contains("unknown field `strategy`"));
+        assert!(
+            error.to_string().contains("unknown field `strategy`")
+                || error.to_string().contains("unknown field `mac`")
+        );
     }
 
     #[test]
@@ -914,6 +1145,7 @@ mac = "1c:69:7a:dc:f3:47"
                 },
             ),
             boot: BootConfig::Pxe(Default::default()),
+            network_identity: None,
             notes: None,
             disabled: false,
         };

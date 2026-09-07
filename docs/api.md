@@ -179,6 +179,8 @@ token=<refresh_token>
 | 开发板电源状态 | `GET /api/v1/admin/boards/{board_id}/power-status` |
 | 开发板租约状态 | `GET /api/v1/admin/boards/{board_id}/runtime-status` |
 | 串口与网卡发现 | `GET /api/v1/admin/serial-ports`；`GET /api/v1/admin/network-interfaces` |
+| axloader 设备发现 | `GET /api/v1/admin/loader-devices` |
+| QEMU 虚拟设备 | `GET /api/v1/admin/virtual-devices`；`POST /api/v1/admin/virtual-devices`；`DELETE /api/v1/admin/virtual-devices/{device_id}` |
 | DTB 列表与创建 | `GET /api/v1/admin/dtbs`；`POST /api/v1/admin/dtbs` |
 | 单个 DTB | `GET /api/v1/admin/dtbs/{dtb_name}`；`PUT /api/v1/admin/dtbs/{dtb_name}`；`DELETE /api/v1/admin/dtbs/{dtb_name}` |
 | 活动会话 | `GET /api/v1/admin/sessions`；`DELETE /api/v1/admin/sessions/{session_id}` |
@@ -288,7 +290,7 @@ Content-Type: application/json
 - 创建时 `id` 为 `null` 或空字符串，服务端自动选择首个可用的 `{board_type}-{number}`；指定的 ID 已存在时返回 `409 Conflict`。
 - 更新时 `id` 为 `null` 保持路径中的 `board_id`，指定不同 ID 表示重命名。只有租约状态为 `idle` 的开发板可以更新或删除，否则返回 `409 Conflict`。
 - `board_type`、串口 key、Custom 电源命令不能为空；配置串口时 `baud_rate` 必须大于 0。请求中的 `resolved_device_path` 和 `resolved_usb_path` 会被清除，由服务端重新发现。
-- `serial.key.kind` 可为 `serial_number` 或 `usb_path`。
+- `serial.key.kind` 可为 `serial_number`、`usb_path` 或 `qemu`。`qemu` 的 value 是虚拟设备 ID。
 - `power_management.kind` 可为上例的 `custom`，或中盛继电器配置：
 
   ```json
@@ -298,7 +300,10 @@ Content-Type: application/json
   }
   ```
 
+  启用内建虚拟板时也可使用 `{"kind":"qemu","virtual_device_id":"..."}`。此时串口必须为同一个虚拟设备 ID 的 `qemu` key，并配置相同虚拟设备的 MAC。
+
 - `boot.kind` 可为上例的 `uboot`、`{"kind":"pxe","notes":null}`，或 `{"kind":"httpboot","boot_arch":"aarch64"}`。`boot_arch` 可为 `x86_64`、`aarch64`、`loongarch64`、`riscv64` 或 `other`。
+- `httpboot` 板卡必须提供 `network_identity: {"mac_address":"02:00:00:00:00:01"}`。MAC 会规范化为小写六字节冒号格式并在全部板卡配置中保持唯一；重复绑定返回 `409` 和错误码 `mac_already_bound`。`board_type` 始终由管理员填写，不根据 SMBIOS 或架构推断。
 - U-Boot `network_mode` 可为 `dhcp` 或 `static_ip`。未启用 TFTP 或使用 DHCP 时服务端清除静态网络字段；使用 `static_ip` 时 `board_ip` 必填，所有已提供的网络字段必须是 IPv4 地址。`dtb_name` 必须符合单层 DTB 文件名格式，但创建或更新开发板时不会检查对应文件是否已经上传。
 
 创建成功返回 `201 Created` 和规范化后的 `BoardConfig`；更新成功返回 `200 OK`。删除请求没有请求体，成功返回 `204 No Content`：
@@ -381,6 +386,38 @@ GET /api/v1/admin/network-interfaces
 ```
 
 枚举失败时返回 `503 Service Unavailable`。
+
+### axloader 发现与虚拟设备
+
+```http
+GET /api/v1/admin/loader-devices
+```
+
+返回当前内存探测表，包括永久/当前 MAC、IP、架构、loader 版本、SMBIOS Type 1 摘要、最近出现时间、在线状态、冲突状态、当前注册代次和实时解析出的 `bound_board_id`。10 秒未上报视为离线，记录保留 24 小时；绑定关系始终从板卡 TOML 按 MAC 计算，不单独持久化。Web UI 只为 `bound_board_id = null` 的设备提供“创建配置”。
+
+内建 QEMU 默认关闭。启用后可管理真实 QEMU 进程：
+
+```http
+GET /api/v1/admin/virtual-devices
+POST /api/v1/admin/virtual-devices
+Content-Type: application/json
+
+{"mac_address":"02:00:00:00:00:09"}
+
+DELETE /api/v1/admin/virtual-devices/{device_id}
+```
+
+GET 返回 `{ "enabled": false, "devices": [] }` 或当前设备列表。POST 的 MAC 可省略，由服务生成本地管理、单播 MAC；成功返回 `201 Created`。虚拟设备必须经真实 UDP/HTTP 发现后才能绑定，管理接口不会注入探测记录。已被板卡配置引用的设备不能删除。
+
+虚拟环境由服务端子命令幂等管理：
+
+```bash
+ostool-server --config .ostool-server.toml virtual-lab up
+ostool-server --config .ostool-server.toml virtual-lab status
+ostool-server --config .ostool-server.toml virtual-lab down
+```
+
+默认创建独立 network namespace、bridge、veth、dnsmasq 和当前用户拥有的 TAP 池，客户机网段为 `10.77.0.0/24`，服务端地址为 `10.77.0.1`。该操作需要 Linux `CAP_NET_ADMIN`。
 
 ### DTB 管理
 
@@ -559,6 +596,8 @@ Content-Type: application/json
 
 本节定义两种后端共用的开发板服务契约：本地局域网模式由 `ostool-server` 直接提供，认证模式由独立认证后端提供受认证的对应接口。这里覆盖 `ostool-server` 的全部公开、非管理 REST 接口。`ostool` 当前命令会使用会话文件上传，但不会直接调用会话详情、会话文件列表/查询/删除、显式电源控制和普通 HTTP Boot 文件上传；后者仍属于公开 board 服务契约，其中显式电源控制和普通 HTTP Boot 文件上传也已有 `BoardServerClient` 方法。
 
+axloader 0.2 另使用 `POST /api/v1/loaders/poll`、`POST /api/v1/loaders/status` 和 `GET /api/v1/sessions/{session_id}/loader-status`。poll/status 由 UDP 发现返回的一次性 `registration_id` 关联本次固件启动；状态以 `session_id + boot_id + registration_id` 定位，旧代次迟到上报不能覆盖新代次。Session 释放时删除启动清单和 loader 状态。
+
 ### 查询开发板类型
 
 ```http
@@ -723,7 +762,7 @@ GET /api/v1/sessions/{session_id}/boot-profile
 }
 ```
 
-`boot.kind` 可为 `uboot`、`pxe` 或 `httpboot`（客户端也接受别名 `uefi_http`）。`pxe` 的对象仅含可选 `notes`；`httpboot` 的对象含可选 `boot_arch`（`x86_64`、`aarch64`、`loongarch64`、`riscv64` 或 `other`）。客户端还兼容认证后端返回可选 `mac`，但当前 `ostool-server` 不序列化该字段。顶层 `server_ip`、`netmask`、`interface`、`http_base_url` 均可为 `null`。`server_ip` 和 `http_base_url` 使用板端可访问的网络地址，不一定等于管理网地址。
+`boot.kind` 可为 `uboot`、`pxe` 或 `httpboot`（客户端也接受别名 `uefi_http`）。`pxe` 的对象仅含可选 `notes`；`httpboot` 的对象含可选 `boot_arch`（`x86_64`、`aarch64`、`loongarch64`、`riscv64` 或 `other`）。HTTP Boot 的 MAC 位于顶层 `network_identity.mac_address`，不属于 boot profile。顶层 `server_ip`、`netmask`、`interface`、`http_base_url` 均可为 `null`。`server_ip` 和 `http_base_url` 使用板端可访问的网络地址，不一定等于管理网地址。
 
 ### 获取串口状态
 

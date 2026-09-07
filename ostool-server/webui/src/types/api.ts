@@ -47,7 +47,7 @@ export interface TftpStatus {
   last_error: string | null;
 }
 
-export type SerialPortKeyKind = "serial_number" | "usb_path";
+export type SerialPortKeyKind = "serial_number" | "usb_path" | "qemu";
 
 export interface SerialPortKey {
   kind: SerialPortKeyKind;
@@ -95,9 +95,15 @@ export interface ZhongshengRelayPowerManagement {
   key: SerialPortKey;
 }
 
+export interface QemuPowerManagement {
+  kind: "qemu";
+  virtual_device_id: string;
+}
+
 export type PowerManagementConfig =
   | CustomPowerManagement
-  | ZhongshengRelayPowerManagement;
+  | ZhongshengRelayPowerManagement
+  | QemuPowerManagement;
 
 export type UbootNetworkMode = "dhcp" | "static_ip";
 
@@ -134,6 +140,7 @@ export interface BoardConfig {
   serial: SerialConfig | null;
   power_management: PowerManagementConfig;
   boot: BootConfig;
+  network_identity: BoardNetworkIdentity | null;
   notes: string | null;
   disabled: boolean;
 }
@@ -147,6 +154,46 @@ export interface AdminBoardUpsertRequest {
   serial: SerialConfig | null;
   power_management: PowerManagementConfig;
   boot: BootConfig;
+  network_identity: BoardNetworkIdentity | null;
+}
+
+export interface BoardNetworkIdentity {
+  mac_address: string;
+}
+
+export interface LoaderHardwareInfo {
+  manufacturer: string | null;
+  product: string | null;
+  version: string | null;
+  serial: string | null;
+}
+
+export interface LoaderDeviceSummary {
+  mac_address: string;
+  current_mac_address: string;
+  ip_address: string;
+  arch: string;
+  loader_version: string;
+  hardware: LoaderHardwareInfo;
+  last_seen_at: string;
+  online: boolean;
+  conflict: boolean;
+  bound_board_id: string | null;
+  current_registration_id: string | null;
+}
+
+export interface VirtualDeviceSummary {
+  id: string;
+  mac_address: string;
+  tap: string;
+  powered: boolean;
+  serial_connected: boolean;
+  generation: number;
+}
+
+export interface VirtualDevicesResponse {
+  enabled: boolean;
+  devices: VirtualDeviceSummary[];
 }
 
 export interface BoardTypeSummary {

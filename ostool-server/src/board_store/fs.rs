@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, ffi::OsStr, path::PathBuf};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    ffi::OsStr,
+    path::PathBuf,
+};
 
 use anyhow::{Context, bail};
 use tokio::fs;
@@ -26,6 +30,7 @@ impl FileBoardStore {
 
     pub async fn load_all(&self) -> anyhow::Result<BTreeMap<String, BoardConfig>> {
         let mut boards = BTreeMap::new();
+        let mut network_identities = BTreeSet::new();
         let mut dir = fs::read_dir(&self.board_dir).await?;
 
         while let Some(entry) = dir.next_entry().await? {
@@ -55,6 +60,16 @@ impl FileBoardStore {
                     "board id mismatch in {}: file stem is `{stem}` but content id is `{}`",
                     path.display(),
                     board.id
+                );
+            }
+
+            if let Some(identity) = board.network_identity.as_ref()
+                && !network_identities.insert(identity.mac_address)
+            {
+                bail!(
+                    "duplicate network identity MAC `{}` in {}",
+                    identity.mac_address,
+                    path.display()
                 );
             }
 
@@ -109,6 +124,7 @@ mod tests {
                 power_off_cmd: "echo off".into(),
             }),
             boot: BootConfig::Pxe(PxeProfile::default()),
+            network_identity: None,
             notes: None,
             disabled: false,
         };

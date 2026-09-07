@@ -50,6 +50,7 @@ function makeBoard(id = "orangepi5plus-1"): BoardConfig {
       netmask: null,
       gatewayip: null,
     },
+    network_identity: null,
     notes: null,
     disabled: false,
   };

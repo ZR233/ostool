@@ -1,15 +1,11 @@
 use std::{
-    collections::VecDeque,
     fs,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
 use anyhow::{Context as _, anyhow, bail};
-use httpboot_protocol::{
-    BootArch, ImageFormat, SERIAL_PROTOCOL_VERSION, SERIAL_READY_PREFIX, SerialBootOfferMessage,
-    SerialReadyMessage, parse_serial_ready, render_serial_boot_offer,
-};
+use httpboot_protocol::{BootArch, LoaderStatusPhase};
 use sha2::{Digest, Sha256};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -39,10 +35,7 @@ use crate::{
     sterm::{AsyncTerminal, TerminalConfig},
 };
 
-const READY_WAIT_TIMEOUT: Duration = Duration::from_secs(180);
-const READY_LINE_LIMIT: usize = 4096;
-const READY_DIAGNOSTIC_LINES: usize = 8;
-const BOOT_OFFER_SEND_DELAY: Duration = Duration::from_millis(200);
+const LOADER_STATUS_POLL_INTERVAL: Duration = Duration::from_millis(500);
 
 pub(crate) async fn run_httpboot_remote(
     input: UbootRunInput,
@@ -128,41 +121,31 @@ impl HttpBootBoardRunner {
                 .map(|value| value.to_string())
                 .unwrap_or_else(|| "unknown".into())
         );
-        println!("Waiting for axloader on board serial...");
+        println!("Waiting for axloader through the network control plane...");
 
         let (serial_tx, serial_rx, tasks) =
             connect_serial_stream(ws_url, self.client.websocket_authorization().await?).await?;
-        let mut serial_rx = serial_rx.compat();
-        let mut serial_tx = serial_tx.compat_write();
-        wait_for_loader_ready(&mut serial_rx, arch).await?;
-        tokio::time::sleep(BOOT_OFFER_SEND_DELAY).await;
-
-        let offer = SerialBootOfferMessage {
-            protocol_version: SERIAL_PROTOCOL_VERSION,
-            boot_id: &upload.boot_id,
-            kernel_url: &upload.kernel_url,
-            kernel_size: upload.kernel_size,
-            image_format: ImageFormat::Elf64,
-            arch,
-            entry_symbol: Some("httpboot_entry"),
-        };
-        let line = render_serial_boot_offer(&offer).context("failed to render boot offer")?;
-        println!("{line}");
-        send_boot_offer_line(&mut serial_tx, &line).await?;
-        println!("HTTP Boot offer sent, entering serial terminal...");
-
-        let result = run_terminal(
+        let serial_rx = serial_rx.compat();
+        let serial_tx = serial_tx.compat_write();
+        println!("Serial is connected for target-system interaction only.");
+        let status_client = self.client.clone();
+        let status_session_id = self.session.session_id.clone();
+        let terminal = run_terminal(
             serial_rx,
             serial_tx,
             TerminalRunOptions {
-                boot_offer_line: line,
-                arch,
                 fail_regex: self.board_config.fail_regex,
                 shell_check_steps: self.board_config.shell_check_steps,
                 timeout: self.board_config.timeout,
             },
-        )
-        .await;
+        );
+        let status = monitor_loader_status(status_client, status_session_id);
+        tokio::pin!(terminal);
+        tokio::pin!(status);
+        let result = tokio::select! {
+            result = &mut terminal => result,
+            result = &mut status => result,
+        };
         let shutdown_result = tasks.shutdown_with_timeout(Duration::from_secs(2)).await;
         if result.is_ok() {
             shutdown_result?;
@@ -173,121 +156,41 @@ impl HttpBootBoardRunner {
     }
 }
 
-async fn send_boot_offer_line<W>(serial_tx: &mut W, line: &str) -> anyhow::Result<()>
-where
-    W: tokio::io::AsyncWrite + Unpin,
-{
-    serial_tx
-        .write_all(line.as_bytes())
-        .await
-        .context("failed to write HTTP Boot offer line")?;
-    serial_tx
-        .write_all(b"\n")
-        .await
-        .context("failed to terminate HTTP Boot offer line")?;
-    serial_tx
-        .flush()
-        .await
-        .context("failed to flush HTTP Boot offer")?;
-    Ok(())
-}
-
-async fn wait_for_loader_ready<R>(serial_rx: &mut R, arch: BootArch) -> anyhow::Result<()>
-where
-    R: tokio::io::AsyncRead + Unpin,
-{
-    let mut line = Vec::new();
-    let mut received_bytes = 0usize;
-    let mut recent_lines = VecDeque::with_capacity(READY_DIAGNOSTIC_LINES);
-    let started = Instant::now();
-    let mut buffer = [0u8; 256];
-    while started.elapsed() < READY_WAIT_TIMEOUT {
-        let read = tokio::time::timeout(Duration::from_millis(250), serial_rx.read(&mut buffer))
+async fn monitor_loader_status(
+    client: BoardServerClient,
+    session_id: String,
+) -> anyhow::Result<()> {
+    let mut last_phase = None;
+    loop {
+        let status = client
+            .get_loader_status(&session_id)
             .await
-            .ok()
-            .transpose()
-            .context("failed to read serial while waiting for axloader")?
-            .unwrap_or(0);
-        if read == 0 {
-            continue;
-        }
-        received_bytes += read;
-        for byte in &buffer[..read] {
-            match *byte {
-                b'\r' => {}
-                b'\n' => {
-                    let text = String::from_utf8_lossy(&line).to_string();
-                    if text.trim_start().starts_with(SERIAL_READY_PREFIX) {
-                        println!("{text}");
-                        let ready = parse_serial_ready(&text)
-                            .with_context(|| format!("invalid axloader ready line: {text}"))?;
-                        validate_ready(&ready, arch)?;
-                        return Ok(());
-                    }
-                    log::debug!("serial output before axloader ready: {text}");
-                    remember_ready_diagnostic_line(&mut recent_lines, text);
-                    line.clear();
-                }
-                byte => {
-                    if line.len() >= READY_LINE_LIMIT {
-                        line.clear();
-                    }
-                    line.push(byte);
-                }
+            .context("failed to query axloader network status")?;
+        if let Some(phase) = status.status {
+            let phase_name = loader_phase_name(&phase);
+            if last_phase.as_deref() != Some(phase_name) {
+                println!("axloader: {phase_name}");
+                last_phase = Some(phase_name.to_string());
+            }
+            if let LoaderStatusPhase::Failed { code, message } = phase {
+                bail!("axloader failed ({code}): {message}");
             }
         }
+        tokio::time::sleep(LOADER_STATUS_POLL_INTERVAL).await;
     }
-
-    if !line.is_empty() {
-        let text = String::from_utf8_lossy(&line).to_string();
-        log::debug!("partial serial output before axloader ready: {text}");
-        remember_ready_diagnostic_line(&mut recent_lines, text);
-    }
-    if received_bytes == 0 {
-        bail!("timed out waiting for axloader ready on board serial; no serial bytes received")
-    }
-    if recent_lines.is_empty() {
-        bail!(
-            "timed out waiting for axloader ready on board serial; received {received_bytes} bytes but no complete lines"
-        )
-    }
-    bail!(
-        "timed out waiting for axloader ready on board serial; received {received_bytes} bytes; recent serial lines:\n{}",
-        recent_lines
-            .into_iter()
-            .map(|line| format!("  {line}"))
-            .collect::<Vec<_>>()
-            .join("\n")
-    )
 }
 
-fn remember_ready_diagnostic_line(lines: &mut VecDeque<String>, line: String) {
-    if lines.len() == READY_DIAGNOSTIC_LINES {
-        lines.pop_front();
+fn loader_phase_name(phase: &LoaderStatusPhase) -> &'static str {
+    match phase {
+        LoaderStatusPhase::Accepted => "accepted",
+        LoaderStatusPhase::Downloading { .. } => "downloading",
+        LoaderStatusPhase::Verified => "verified",
+        LoaderStatusPhase::ReadyToHandoff => "ready_to_handoff",
+        LoaderStatusPhase::Failed { .. } => "failed",
     }
-    lines.push_back(line);
-}
-
-fn validate_ready(ready: &SerialReadyMessage<'_>, expected_arch: BootArch) -> anyhow::Result<()> {
-    if ready.protocol_version != SERIAL_PROTOCOL_VERSION {
-        bail!(
-            "unsupported axloader serial protocol version `{}`",
-            ready.protocol_version
-        );
-    }
-    if ready.arch != expected_arch {
-        bail!(
-            "axloader arch {:?} does not match published kernel arch {:?}",
-            ready.arch,
-            expected_arch
-        );
-    }
-    Ok(())
 }
 
 struct TerminalRunOptions {
-    boot_offer_line: String,
-    arch: BootArch,
     fail_regex: Vec<String>,
     shell_check_steps: Vec<ShellCheckStep>,
     timeout: Option<u64>,
@@ -326,8 +229,6 @@ where
     W: tokio::io::AsyncWrite + Send + Unpin + 'static,
 {
     let TerminalRunOptions {
-        boot_offer_line,
-        arch,
         fail_regex,
         shell_check_steps,
         timeout,
@@ -346,9 +247,6 @@ where
     };
     let shell_check_driver = shell_check_matcher.map(ShellCheckDriver::new);
     let shell_check_driver_clone = shell_check_driver.clone();
-    let ready_monitor = Arc::new(Mutex::new(LoaderReadyMonitor::new(arch)));
-    let ready_monitor_clone = ready_monitor.clone();
-    let boot_offer_bytes = boot_offer_line_bytes(&boot_offer_line);
 
     let (inbound_tx, inbound_rx) = mpsc::unbounded_channel::<Vec<u8>>();
     let (outbound_tx, mut outbound_rx) = mpsc::unbounded_channel::<crate::sterm::TerminalInput>();
@@ -404,13 +302,6 @@ where
             if matcher.should_stop() {
                 handle.stop();
             }
-
-            let mut ready_monitor = ready_monitor_clone.lock().unwrap();
-            for byte in chunk {
-                if ready_monitor.observe_byte(*byte) {
-                    handle.send_after(BOOT_OFFER_SEND_DELAY, boot_offer_bytes.clone());
-                }
-            }
         })
         .await;
 
@@ -434,51 +325,6 @@ where
     .with_shell_check_completed(shell_check_completed)
     .with_fail_match(res_lock.take())
     .into_result()
-}
-
-fn boot_offer_line_bytes(line: &str) -> Vec<u8> {
-    let mut bytes = line.as_bytes().to_vec();
-    bytes.push(b'\n');
-    bytes
-}
-
-struct LoaderReadyMonitor {
-    arch: BootArch,
-    line: Vec<u8>,
-}
-
-impl LoaderReadyMonitor {
-    fn new(arch: BootArch) -> Self {
-        Self {
-            arch,
-            line: Vec::new(),
-        }
-    }
-
-    fn observe_byte(&mut self, byte: u8) -> bool {
-        match byte {
-            b'\r' => false,
-            b'\n' => {
-                let ready = self.observe_line();
-                self.line.clear();
-                ready
-            }
-            byte => {
-                if self.line.len() >= READY_LINE_LIMIT {
-                    self.line.clear();
-                }
-                self.line.push(byte);
-                false
-            }
-        }
-    }
-
-    fn observe_line(&self) -> bool {
-        let text = String::from_utf8_lossy(&self.line);
-        parse_serial_ready(&text)
-            .map(|ready| validate_ready(&ready, self.arch).is_ok())
-            .unwrap_or(false)
-    }
 }
 
 async fn shutdown_serial_task(

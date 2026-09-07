@@ -8,10 +8,13 @@ import type {
   BoardConfig,
   DtbFileResponse,
   ErrorResponse,
+  LoaderDeviceSummary,
   NetworkInterfaceSummary,
   SerialPortSummary,
   TftpConfig,
   UpdateServerConfigRequest,
+  VirtualDeviceSummary,
+  VirtualDevicesResponse,
 } from "@/types/api";
 
 type RequestOptions = RequestInit & {
@@ -60,6 +63,23 @@ export const api = {
   },
   listBoards() {
     return request<BoardConfig[]>("/api/v1/admin/boards");
+  },
+  listLoaderDevices() {
+    return request<LoaderDeviceSummary[]>("/api/v1/admin/loader-devices");
+  },
+  listVirtualDevices() {
+    return request<VirtualDevicesResponse>("/api/v1/admin/virtual-devices");
+  },
+  createVirtualDevice(macAddress?: string) {
+    return request<VirtualDeviceSummary>("/api/v1/admin/virtual-devices", {
+      method: "POST",
+      bodyJson: { mac_address: macAddress || null },
+    });
+  },
+  deleteVirtualDevice(deviceId: string) {
+    return request<void>(`/api/v1/admin/virtual-devices/${encodeURIComponent(deviceId)}`, {
+      method: "DELETE",
+    });
   },
   getBoard(boardId: string) {
     return request<BoardConfig>(`/api/v1/admin/boards/${encodeURIComponent(boardId)}`);

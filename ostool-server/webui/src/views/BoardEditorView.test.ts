@@ -10,6 +10,8 @@ const route = {
 const push = vi.fn();
 const listSerialPorts = vi.fn();
 const listDtbs = vi.fn();
+const listLoaderDevices = vi.fn();
+const listVirtualDevices = vi.fn();
 const getTftpStatus = vi.fn();
 const createDtb = vi.fn();
 const getBoard = vi.fn();
@@ -31,6 +33,8 @@ vi.mock("@/api/client", () => ({
   api: {
     listSerialPorts,
     listDtbs,
+    listLoaderDevices,
+    listVirtualDevices,
     getTftpStatus,
     createDtb,
     getBoard,
@@ -95,6 +99,7 @@ function makeBoard(id = "demo-board"): BoardConfig {
       netmask: null,
       gatewayip: null,
     },
+    network_identity: null,
     notes: "rack-a",
     disabled: false,
   };
@@ -145,6 +150,9 @@ function makeUefiHttpBoard(id = "uefi-http-board", bootArch = "x86_64"): BoardCo
       kind: "httpboot",
       boot_arch: bootArch,
     },
+    network_identity: {
+      mac_address: "02:00:00:00:00:01",
+    },
   };
 }
 
@@ -154,6 +162,8 @@ describe("BoardEditorView", () => {
     push.mockReset();
     listSerialPorts.mockReset();
     listDtbs.mockReset();
+    listLoaderDevices.mockReset();
+    listVirtualDevices.mockReset();
     getTftpStatus.mockReset();
     createDtb.mockReset();
     getBoard.mockReset();
@@ -165,6 +175,8 @@ describe("BoardEditorView", () => {
     uiStore.setSuccess.mockReset();
     listSerialPorts.mockResolvedValue(makeSerialPorts());
     listDtbs.mockResolvedValue([]);
+    listLoaderDevices.mockResolvedValue([]);
+    listVirtualDevices.mockResolvedValue({ enabled: false, devices: [] });
     getTftpStatus.mockResolvedValue({
       status: {
         provider: "builtin",
@@ -256,6 +268,7 @@ describe("BoardEditorView", () => {
         netmask: null,
         gatewayip: null,
       },
+      network_identity: null,
     });
     expect(uiStore.setSuccess).toHaveBeenCalledWith("已保存开发板 rk3568-1");
     expect(push).toHaveBeenCalledWith("/boards/rk3568-1");
@@ -372,7 +385,9 @@ describe("BoardEditorView", () => {
     expect((wrapper.get('input[placeholder="例如 x86_64"]').element as HTMLInputElement).value).toBe("aarch64");
     expect(wrapper.find('input[placeholder="例如 BOOTX64.EFI"]').exists()).toBe(false);
     expect(wrapper.find('input[placeholder="例如 kernel.bin"]').exists()).toBe(false);
-    expect(wrapper.find('input[placeholder="例如 1c:69:7a:dc:f3:47"]').exists()).toBe(false);
+    expect((wrapper.get('input[placeholder="02:00:00:00:00:01"]').element as HTMLInputElement).value).toBe(
+      "02:00:00:00:00:01",
+    );
 
     const saveButton = wrapper.findAll("button").find((button) => button.text() === "保存配置");
     await saveButton!.trigger("click");
@@ -390,8 +405,46 @@ describe("BoardEditorView", () => {
           kind: "httpboot",
           boot_arch: "aarch64",
         },
+        network_identity: {
+          mac_address: "02:00:00:00:00:01",
+        },
       }),
     );
+  });
+
+  it("uses a discovered MAC without filling manual board fields", async () => {
+    listLoaderDevices.mockResolvedValue([
+      {
+        mac_address: "02:00:00:00:00:09",
+        current_mac_address: "02:00:00:00:00:09",
+        ip_address: "10.77.0.9",
+        arch: "x86_64",
+        loader_version: "0.2.0",
+        hardware: {
+          manufacturer: "QEMU",
+          product: "Standard PC",
+          version: "Q35",
+          serial: "virtual-9",
+        },
+        last_seen_at: "2026-09-04T08:00:00Z",
+        online: true,
+        conflict: false,
+        bound_board_id: null,
+        current_registration_id: "registration-9",
+      },
+    ]);
+    const BoardEditorView = (await import("./BoardEditorView.vue")).default;
+    const wrapper = mount(BoardEditorView);
+    await flushPromises();
+
+    const bootMode = wrapper.findAll("select").find((select) => select.text().includes("HTTPboot"));
+    await bootMode!.setValue("httpboot");
+    await wrapper.get('input[placeholder="02:00:00:00:00:01"]').setValue("02:00:00:00:00:09");
+
+    expect(wrapper.text()).toContain("QEMU Standard PC Q35");
+    expect(wrapper.text()).toContain("virtual-9");
+    expect((wrapper.get('input[placeholder="例如 rk3568"]').element as HTMLInputElement).value).toBe("");
+    expect((wrapper.get('input[placeholder="留空则自动分配 {board type}-{num}"]').element as HTMLInputElement).value).toBe("");
   });
 
   it("updates a board and keeps blank id as null in the payload", async () => {

@@ -9,7 +9,10 @@ use axum::{
     routing::{delete, get, post, put},
 };
 use futures_util::future::join_all;
-use httpboot_protocol::{BootArch, ImageFormat};
+use httpboot_protocol::{
+    BootArch, ImageFormat, LoaderPollRequest, LoaderPollResponse, LoaderStatusReport,
+    LoaderStatusResponse, MacAddress,
+};
 use mime_guess::from_path;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
@@ -27,11 +30,12 @@ use crate::{
             AdminServerConfigEditable, AdminServerConfigReadonly, AdminServerConfigResponse,
             AdminSessionsResponse, AdminTftpConfigResponse, AdminTftpStatusResponse,
             BoardPowerAction, BoardPowerStatusResponse, BoardRuntimeStatusResponse,
-            BoardTypeSummary, BootProfileResponse, CreateSessionRequest, DtbFileResponse,
-            HeartbeatResponse, HttpBootFileResponse, KernelPublishResponse,
-            NetworkInterfaceSummary, SerialPortSummary, SerialStatusResponse,
-            SessionCreatedResponse, SessionDetailResponse, SessionDtbResponse,
-            SharedSessionFileResponse, TftpSessionResponse, UpdateServerConfigRequest,
+            BoardTypeSummary, BootProfileResponse, CreateSessionRequest,
+            CreateVirtualDeviceRequest, DtbFileResponse, HeartbeatResponse, HttpBootFileResponse,
+            KernelPublishResponse, LoaderDeviceSummary, NetworkInterfaceSummary, SerialPortSummary,
+            SerialStatusResponse, SessionCreatedResponse, SessionDetailResponse,
+            SessionDtbResponse, SharedSessionFileResponse, TftpSessionResponse,
+            UpdateServerConfigRequest, VirtualDeviceSummary, VirtualDevicesResponse,
         },
     },
     board_pool::BoardAllocationStatus,
@@ -40,6 +44,7 @@ use crate::{
     },
     dtb_store::normalize_dtb_name,
     http_boot::publish::{KernelPublishInput, publish_kernel},
+    loader::RegistrationError,
     power::{PowerAction, PowerActionError},
     serial::{
         discovery::list_serial_ports as discover_serial_ports,
@@ -50,8 +55,8 @@ use crate::{
         },
         ws::run_serial_ws,
     },
-    session::SessionState,
     session::SessionStopReason,
+    session::{LoaderStatusUpdateError, SessionBootCommand, SessionState},
     state::{AppState, BoardLeaseState, TouchSessionError},
     tftp::{
         files::{TftpFileRef, normalize_relative_path},
@@ -83,6 +88,17 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route("/api/v1/admin/overview", get(get_admin_overview))
         .route("/api/v1/admin/boards", get(list_boards).post(create_board))
+        .route("/api/v1/admin/loader-devices", get(list_loader_devices))
+        .route(
+            "/api/v1/admin/virtual-devices",
+            get(list_virtual_devices).post(create_virtual_device),
+        )
+        .route(
+            "/api/v1/admin/virtual-devices/{device_id}",
+            delete(delete_virtual_device),
+        )
+        .route("/api/v1/loaders/poll", post(poll_loader))
+        .route("/api/v1/loaders/status", post(report_loader_status))
         .route("/api/v1/admin/dtbs", get(list_dtbs).post(create_dtb))
         .route("/api/v1/admin/serial-ports", get(list_serial_ports))
         .route(
@@ -96,6 +112,10 @@ pub fn build_router(state: AppState) -> Router {
         .route(
             "/api/v1/admin/boards/{board_id}/runtime-status",
             get(get_board_runtime_status),
+        )
+        .route(
+            "/api/v1/sessions/{session_id}/loader-status",
+            get(get_loader_status),
         )
         .route(
             "/api/v1/admin/boards/{board_id}",
@@ -354,7 +374,10 @@ async fn create_board(
     State(state): State<AppState>,
     axum::Json(request): axum::Json<AdminBoardUpsertRequest>,
 ) -> Result<(StatusCode, axum::Json<BoardConfig>), ApiError> {
+    let _inventory_guard = state.board_inventory_gate.lock().await;
     let board = build_board_config_for_create(&state, request).await?;
+    validate_board_config(&board)?;
+    validate_virtual_binding(&state, &board, true).await?;
 
     {
         let boards = state.boards.read().await;
@@ -364,6 +387,7 @@ async fn create_board(
                 board.id
             )));
         }
+        ensure_unique_network_identity(&boards, &board, None)?;
     }
 
     state.board_store.write_board(&board).await?;
@@ -381,7 +405,14 @@ async fn update_board(
     State(state): State<AppState>,
     axum::Json(request): axum::Json<AdminBoardUpsertRequest>,
 ) -> Result<axum::Json<BoardConfig>, ApiError> {
+    let _inventory_guard = state.board_inventory_gate.lock().await;
     let board = build_board_config_for_update(&state, &board_id, request).await?;
+    validate_board_config(&board)?;
+    let existing_board = state.boards.read().await.get(&board_id).cloned();
+    let changes_virtual_binding = existing_board
+        .as_ref()
+        .is_none_or(|existing| virtual_binding(existing) != virtual_binding(&board));
+    validate_virtual_binding(&state, &board, changes_virtual_binding).await?;
 
     {
         let boards = state.boards.read().await;
@@ -394,6 +425,7 @@ async fn update_board(
                 board.id
             )));
         }
+        ensure_unique_network_identity(&boards, &board, Some(&board_id))?;
     }
 
     let runtime = state
@@ -407,8 +439,17 @@ async fn update_board(
     }
 
     state.board_store.write_board(&board).await?;
-    if board.id != board_id {
-        state.board_store.delete_board(&board_id).await?;
+    if board.id != board_id
+        && let Err(error) = state.board_store.delete_board(&board_id).await
+    {
+        if let Err(rollback_error) = state.board_store.delete_board(&board.id).await {
+            return Err(ApiError::internal(format!(
+                "failed to remove old board config `{board_id}`: {error:#}; \
+                 failed to roll back new board config `{}`: {rollback_error:#}",
+                board.id
+            )));
+        }
+        return Err(error.into());
     }
 
     {
@@ -419,6 +460,386 @@ async fn update_board(
     state.sync_board_runtime_states().await;
 
     Ok(axum::Json(board))
+}
+
+fn ensure_unique_network_identity(
+    boards: &BTreeMap<String, BoardConfig>,
+    candidate: &BoardConfig,
+    replaced_board_id: Option<&str>,
+) -> Result<(), ApiError> {
+    let Some(identity) = candidate.network_identity.as_ref() else {
+        return Ok(());
+    };
+    if let Some((board_id, _)) = boards.iter().find(|(board_id, board)| {
+        Some(board_id.as_str()) != replaced_board_id
+            && board
+                .network_identity
+                .as_ref()
+                .is_some_and(|existing| existing.mac_address == identity.mac_address)
+    }) {
+        return Err(ApiError::mac_already_bound(format!(
+            "MAC {} is already bound to board `{board_id}`",
+            identity.mac_address
+        )));
+    }
+    Ok(())
+}
+
+fn validate_board_config(board: &BoardConfig) -> Result<(), ApiError> {
+    board
+        .validate()
+        .map_err(|error| ApiError::bad_request(format!("{error:#}")))
+}
+
+async fn validate_virtual_binding(
+    state: &AppState,
+    board: &BoardConfig,
+    require_discovery: bool,
+) -> Result<(), ApiError> {
+    let PowerManagementConfig::Qemu { virtual_device_id } = &board.power_management else {
+        return Ok(());
+    };
+    let device = state
+        .virtual_boards
+        .snapshot(virtual_device_id)
+        .await
+        .ok_or_else(|| {
+            ApiError::bad_request(format!(
+                "virtual device `{virtual_device_id}` does not exist"
+            ))
+        })?;
+    let board_mac = board
+        .network_identity
+        .as_ref()
+        .expect("validated QEMU board has a network identity")
+        .mac_address;
+    if device.mac_address != board_mac {
+        return Err(ApiError::bad_request(format!(
+            "virtual device `{virtual_device_id}` has MAC {}, not {board_mac}",
+            device.mac_address
+        )));
+    }
+    if require_discovery
+        && !state
+            .loader_registry
+            .snapshots()
+            .await
+            .iter()
+            .any(|loader| virtual_loader_is_bindable(loader, board_mac))
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "virtual_device_not_discovered",
+            format!(
+                "virtual device `{virtual_device_id}` has not completed real UDP/HTTP discovery"
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn virtual_loader_is_bindable(
+    loader: &crate::loader::LoaderDeviceSnapshot,
+    board_mac: MacAddress,
+) -> bool {
+    loader.mac_address == board_mac && loader.online && !loader.conflict
+}
+
+fn virtual_binding(board: &BoardConfig) -> Option<(&str, MacAddress)> {
+    let PowerManagementConfig::Qemu { virtual_device_id } = &board.power_management else {
+        return None;
+    };
+    Some((
+        virtual_device_id,
+        board.network_identity.as_ref()?.mac_address,
+    ))
+}
+
+async fn list_loader_devices(
+    State(state): State<AppState>,
+) -> Result<axum::Json<Vec<LoaderDeviceSummary>>, ApiError> {
+    let boards = state.boards.read().await;
+    let snapshots = state.loader_registry.snapshots().await;
+    Ok(axum::Json(
+        snapshots
+            .into_iter()
+            .map(|device| LoaderDeviceSummary {
+                bound_board_id: board_id_for_mac(&boards, device.mac_address),
+                mac_address: device.mac_address,
+                current_mac_address: device.current_mac_address,
+                ip_address: device.ip_address,
+                arch: device.arch,
+                loader_version: device.loader_version,
+                hardware: device.hardware,
+                last_seen_at: device.last_seen_at,
+                online: device.online,
+                conflict: device.conflict,
+                current_registration_id: device.current_registration_id,
+            })
+            .collect(),
+    ))
+}
+
+async fn list_virtual_devices(State(state): State<AppState>) -> axum::Json<VirtualDevicesResponse> {
+    let devices = state
+        .virtual_boards
+        .snapshots()
+        .await
+        .into_iter()
+        .map(virtual_device_summary)
+        .collect();
+    axum::Json(VirtualDevicesResponse {
+        enabled: state.virtual_boards.enabled(),
+        devices,
+    })
+}
+
+async fn create_virtual_device(
+    State(state): State<AppState>,
+    axum::Json(request): axum::Json<CreateVirtualDeviceRequest>,
+) -> Result<(StatusCode, axum::Json<VirtualDeviceSummary>), ApiError> {
+    let device = state
+        .virtual_boards
+        .create_device(request.mac_address)
+        .await
+        .map_err(|error| ApiError::service_unavailable(format!("{error:#}")))?;
+    Ok((
+        StatusCode::CREATED,
+        axum::Json(virtual_device_summary(device)),
+    ))
+}
+
+async fn delete_virtual_device(
+    Path(device_id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<StatusCode, ApiError> {
+    let _inventory_guard = state.board_inventory_gate.lock().await;
+    let boards = state.boards.read().await;
+    if let Some(board) = boards.values().find(|board| {
+        matches!(
+            &board.power_management,
+            PowerManagementConfig::Qemu { virtual_device_id } if virtual_device_id == &device_id
+        )
+    }) {
+        return Err(ApiError::conflict(format!(
+            "virtual device `{device_id}` is bound to board `{}`",
+            board.id
+        )));
+    }
+    drop(boards);
+    state
+        .virtual_boards
+        .delete_device(&device_id)
+        .await
+        .map_err(|error| ApiError::not_found(format!("{error:#}")))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+fn virtual_device_summary(
+    snapshot: crate::virtual_qemu::VirtualDeviceSnapshot,
+) -> VirtualDeviceSummary {
+    VirtualDeviceSummary {
+        id: snapshot.id,
+        mac_address: snapshot.mac_address,
+        tap: snapshot.tap,
+        powered: snapshot.powered,
+        serial_connected: snapshot.serial_connected,
+        generation: snapshot.generation,
+    }
+}
+
+async fn poll_loader(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<axum::Json<LoaderPollResponse>, ApiError> {
+    let request: LoaderPollRequest = parse_loader_json(request).await?;
+    let conflict = match state.loader_registry.accept_poll(&request).await {
+        Ok(conflict) => conflict,
+        Err(error) => return Ok(axum::Json(loader_reject(error))),
+    };
+    if conflict {
+        return Ok(axum::Json(LoaderPollResponse::Reject {
+            code: "duplicate_mac".into(),
+            message: "another active loader is reporting the same permanent MAC".into(),
+            retry_after_ms: Some(2_000),
+        }));
+    }
+
+    let boards = state.boards.read().await;
+    let Some(board_id) = board_id_for_mac(&boards, request.mac_address) else {
+        return Ok(axum::Json(LoaderPollResponse::Unbound));
+    };
+    drop(boards);
+
+    let Some(runtime) = state.board_runtime_status(&board_id).await else {
+        return Ok(axum::Json(LoaderPollResponse::Reject {
+            code: "board_unavailable".into(),
+            message: "the bound board has no runtime state".into(),
+            retry_after_ms: Some(2_000),
+        }));
+    };
+    let Some(session_id) = runtime.active_session_id else {
+        return Ok(axum::Json(LoaderPollResponse::BoundIdle { board_id }));
+    };
+    if runtime.lease_state != BoardLeaseState::Using {
+        return Ok(axum::Json(LoaderPollResponse::Reject {
+            code: "board_releasing".into(),
+            message: "the bound board is being released".into(),
+            retry_after_ms: Some(2_000),
+        }));
+    }
+    let Some(session) = state.session_state(&session_id).await else {
+        return Ok(axum::Json(LoaderPollResponse::Reject {
+            code: "session_unavailable".into(),
+            message: "the active session is unavailable".into(),
+            retry_after_ms: Some(2_000),
+        }));
+    };
+    let Some(command) = session.boot_command().await else {
+        return Ok(axum::Json(LoaderPollResponse::BoundIdle { board_id }));
+    };
+    if command.arch != request.arch {
+        return Ok(axum::Json(LoaderPollResponse::Reject {
+            code: "architecture_mismatch".into(),
+            message: "the published kernel architecture does not match this loader".into(),
+            retry_after_ms: None,
+        }));
+    }
+    Ok(axum::Json(LoaderPollResponse::Boot {
+        board_id,
+        session_id,
+        boot_id: command.boot_id,
+        kernel_path: command.kernel_path,
+        kernel_size: command.kernel_size,
+        kernel_sha256: command.kernel_sha256,
+        arch: command.arch,
+        image_format: command.image_format,
+        entry_symbol: command.entry_symbol,
+    }))
+}
+
+async fn report_loader_status(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<StatusCode, ApiError> {
+    let report: LoaderStatusReport = parse_loader_json(request).await?;
+    state
+        .loader_registry
+        .accept_status(&report)
+        .await
+        .map_err(registration_api_error)?;
+    let session = active_session_state_or_404(&state, &report.session_id).await?;
+    if session
+        .board()
+        .network_identity
+        .as_ref()
+        .is_none_or(|identity| identity.mac_address != report.mac_address)
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "loader_board_mismatch",
+            "loader MAC does not own this session",
+        ));
+    }
+    session
+        .update_loader_status(report.registration_id, &report.boot_id, report.status)
+        .await
+        .map_err(|error| match error {
+            LoaderStatusUpdateError::NoBootCommand => {
+                ApiError::conflict("session has no published boot command")
+            }
+            LoaderStatusUpdateError::StaleBoot => ApiError::new(
+                StatusCode::CONFLICT,
+                "stale_boot_id",
+                "status belongs to a superseded boot command",
+            ),
+        })?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn parse_loader_json<T: serde::de::DeserializeOwned>(
+    request: Request,
+) -> Result<T, ApiError> {
+    let body = to_bytes(request.into_body(), 64 * 1024)
+        .await
+        .map_err(|_| ApiError::bad_request("failed to read loader JSON body"))?;
+    serde_json::from_slice(&body)
+        .map_err(|error| ApiError::bad_request(format!("invalid loader JSON: {error}")))
+}
+
+async fn get_loader_status(
+    Path(session_id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<axum::Json<LoaderStatusResponse>, ApiError> {
+    let session = state
+        .session_state(&session_id)
+        .await
+        .ok_or_else(|| ApiError::not_found(format!("session `{session_id}` not found")))?;
+    session
+        .loader_status()
+        .await
+        .map(axum::Json)
+        .ok_or_else(|| ApiError::not_found("session has no published boot command"))
+}
+
+fn board_id_for_mac(boards: &BTreeMap<String, BoardConfig>, mac: MacAddress) -> Option<String> {
+    boards.iter().find_map(|(board_id, board)| {
+        board
+            .network_identity
+            .as_ref()
+            .filter(|identity| identity.mac_address == mac)
+            .map(|_| board_id.clone())
+    })
+}
+
+fn loader_reject(error: RegistrationError) -> LoaderPollResponse {
+    let (code, message) = match error {
+        RegistrationError::ProtocolVersion => {
+            ("unsupported_protocol", "unsupported protocol version")
+        }
+        RegistrationError::Unknown => ("unknown_registration", "registration is unknown"),
+        RegistrationError::Expired => ("expired_registration", "registration has expired"),
+        RegistrationError::MacMismatch => (
+            "registration_mac_mismatch",
+            "registration belongs to another MAC",
+        ),
+        RegistrationError::Replaced => (
+            "replaced_registration",
+            "registration was replaced by a newer loader",
+        ),
+        RegistrationError::Conflict => (
+            "duplicate_mac",
+            "multiple active loaders report the same MAC",
+        ),
+    };
+    LoaderPollResponse::Reject {
+        code: code.into(),
+        message: message.into(),
+        retry_after_ms: Some(2_000),
+    }
+}
+
+fn registration_api_error(error: RegistrationError) -> ApiError {
+    let (code, message) = match error {
+        RegistrationError::ProtocolVersion => {
+            ("unsupported_protocol", "unsupported protocol version")
+        }
+        RegistrationError::Unknown => ("unknown_registration", "registration is unknown"),
+        RegistrationError::Expired => ("expired_registration", "registration has expired"),
+        RegistrationError::MacMismatch => (
+            "registration_mac_mismatch",
+            "registration belongs to another MAC",
+        ),
+        RegistrationError::Replaced => (
+            "replaced_registration",
+            "registration was replaced by a newer loader",
+        ),
+        RegistrationError::Conflict => (
+            "duplicate_mac",
+            "multiple active loaders report the same MAC",
+        ),
+    };
+    ApiError::new(StatusCode::CONFLICT, code, message)
 }
 
 async fn build_board_config_for_create(
@@ -457,6 +878,12 @@ fn normalize_board_upsert_request(
     normalize_serial_config(request.serial.as_mut())?;
     normalize_power_management_config(&mut request.power_management)?;
     normalize_boot_config(&mut request.boot)?;
+
+    if matches!(request.boot, BootConfig::UefiHttp(_)) && request.network_identity.is_none() {
+        return Err(ApiError::bad_request(
+            "network_identity.mac_address is required for httpboot boards",
+        ));
+    }
 
     if let Some(id) = request.id.as_ref()
         && (id.contains('/') || id.contains('\\'))
@@ -550,6 +977,9 @@ fn normalize_power_management_config(
         PowerManagementConfig::ZhongshengRelay(relay) => {
             normalize_serial_key_value(&mut relay.key, "power_management.key.value")?;
         }
+        PowerManagementConfig::Qemu { virtual_device_id } => {
+            normalize_required_string(virtual_device_id, "power_management.virtual_device_id")?;
+        }
     }
 
     Ok(())
@@ -582,9 +1012,7 @@ fn normalize_boot_config(boot: &mut BootConfig) -> Result<(), ApiError> {
         BootConfig::Pxe(profile) => {
             normalize_optional_string(&mut profile.notes);
         }
-        BootConfig::UefiHttp(profile) => {
-            profile.mac = None;
-        }
+        BootConfig::UefiHttp(_) => {}
     }
     Ok(())
 }
@@ -609,6 +1037,7 @@ impl AdminBoardUpsertRequest {
             serial: self.serial,
             power_management: self.power_management,
             boot: self.boot,
+            network_identity: self.network_identity,
             notes: self.notes,
             disabled: self.disabled,
         }
@@ -707,6 +1136,7 @@ async fn delete_board(
     Path(board_id): Path<String>,
     State(state): State<AppState>,
 ) -> Result<StatusCode, ApiError> {
+    let _inventory_guard = state.board_inventory_gate.lock().await;
     let runtime = state
         .board_runtime_status(&board_id)
         .await
@@ -717,15 +1147,12 @@ async fn delete_board(
         )));
     }
 
-    {
-        let mut boards = state.boards.write().await;
-        if boards.remove(&board_id).is_none() {
-            return Err(ApiError::not_found(format!("board `{board_id}` not found")));
-        }
+    if !state.boards.read().await.contains_key(&board_id) {
+        return Err(ApiError::not_found(format!("board `{board_id}` not found")));
     }
-    state.sync_board_runtime_states().await;
-
     state.board_store.delete_board(&board_id).await?;
+    state.boards.write().await.remove(&board_id);
+    state.sync_board_runtime_states().await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1075,12 +1502,28 @@ async fn get_serial_status(
         .map(|session| session.serial_connected)
         .unwrap_or(false);
     let response = if let Some(serial) = board.serial {
-        let resolved = resolve_serial_config(&serial)
-            .map_err(|err| ApiError::service_unavailable(format!("{err:#}")))?;
+        let port = if serial.key.kind == crate::config::SerialPortKeyKind::Qemu {
+            if state
+                .virtual_boards
+                .snapshot(&serial.key.value)
+                .await
+                .is_none()
+            {
+                return Err(ApiError::service_unavailable(format!(
+                    "virtual device `{}` is unavailable",
+                    serial.key.value
+                )));
+            }
+            format!("qemu:{}", serial.key.value)
+        } else {
+            resolve_serial_config(&serial)
+                .map_err(|err| ApiError::service_unavailable(format!("{err:#}")))?
+                .current_device_path
+        };
         SerialStatusResponse {
             available: true,
             connected,
-            port: Some(resolved.current_device_path),
+            port: Some(port),
             baud_rate: Some(serial.baud_rate),
             ws_url: Some(format!("/api/v1/sessions/{session_id}/serial/ws")),
         }
@@ -1097,11 +1540,14 @@ async fn get_serial_status(
 }
 
 fn with_resolved_serial_config(mut board: BoardConfig) -> BoardConfig {
-    if let Some(serial) = board.serial.as_mut()
-        && let Ok(resolved) = resolve_serial_config(serial)
-    {
-        serial.resolved_device_path = Some(resolved.current_device_path);
-        serial.resolved_usb_path = resolved.usb_path;
+    if let Some(serial) = board.serial.as_mut() {
+        if serial.key.kind == crate::config::SerialPortKeyKind::Qemu {
+            serial.resolved_device_path = Some(format!("qemu:{}", serial.key.value));
+            serial.resolved_usb_path = None;
+        } else if let Ok(resolved) = resolve_serial_config(serial) {
+            serial.resolved_device_path = Some(resolved.current_device_path);
+            serial.resolved_usb_path = resolved.usb_path;
+        }
     }
 
     board
@@ -1247,7 +1693,17 @@ async fn read_session_file_response(
     let body = fs::read(&disk_path)
         .await
         .map_err(|err| ApiError::from(anyhow::Error::from(err)))?;
-    Ok(([(header::CONTENT_TYPE, content_type)], body).into_response())
+    let content_length = HeaderValue::from_str(&body.len().to_string()).map_err(|err| {
+        ApiError::service_unavailable(format!("invalid content length header: {err}"))
+    })?;
+    Ok((
+        [
+            (header::CONTENT_TYPE, content_type),
+            (header::CONTENT_LENGTH, content_length),
+        ],
+        body,
+    )
+        .into_response())
 }
 
 async fn read_file_range(
@@ -1327,9 +1783,9 @@ async fn put_http_boot_kernel(
     let remote_name = optional_header(headers, "X-HttpBoot-Remote-Name")?
         .unwrap_or_else(|| "kernel.elf".to_string());
     let remote_name = parse_relative_path(&remote_name)?;
-    let _arch = parse_httpboot_arch_header(headers)?;
-    let _image_format = parse_httpboot_image_format_header(headers)?;
-    let _entry_symbol = optional_header(headers, "X-HttpBoot-Entry-Symbol")?
+    let arch = parse_httpboot_arch_header(headers)?;
+    let image_format = parse_httpboot_image_format_header(headers)?;
+    let entry_symbol = optional_header(headers, "X-HttpBoot-Entry-Symbol")?
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
     if !state.config.read().await.http_boot.enabled {
@@ -1351,6 +1807,21 @@ async fn put_http_boot_kernel(
         kernel_size,
         kernel_sha256: Some(kernel_sha256),
     });
+    let kernel_path = kernel_response.http_url.path().to_string();
+    session
+        .publish_boot_command(SessionBootCommand {
+            boot_id: response.boot_id.clone(),
+            kernel_path,
+            kernel_size,
+            kernel_sha256: response
+                .kernel_sha256
+                .clone()
+                .expect("kernel upload always computes SHA-256"),
+            arch,
+            image_format,
+            entry_symbol,
+        })
+        .await;
 
     Ok((StatusCode::CREATED, axum::Json(response)))
 }
@@ -1708,7 +2179,7 @@ fn http_boot_url(
     Ok(url)
 }
 
-fn http_boot_public_base_url(config: &ServerConfig) -> Result<Url, ApiError> {
+pub(crate) fn http_boot_public_base_url(config: &ServerConfig) -> Result<Url, ApiError> {
     if let Some(public_base_url) = config.http_boot.public_base_url.as_deref()
         && !public_base_url.trim().is_empty()
     {
@@ -2116,6 +2587,10 @@ mod tests {
         body::{Body, to_bytes},
         http::{Request, StatusCode, header},
     };
+    use httpboot_protocol::{
+        BootArch, LoaderDiscoveryProbe, LoaderHardwareInfo, LoaderPollRequest, LoaderPollResponse,
+        LoaderStatusPhase, LoaderStatusReport, PROTOCOL_VERSION,
+    };
     use serde::Serialize;
     use serde_json::json;
     #[cfg(unix)]
@@ -2131,7 +2606,7 @@ mod tests {
 
     use super::{
         DTB_UPLOAD_MAX_MIB, ResolvedNetwork, boot_profile_with_resolved_network, build_router,
-        http_boot_url, mib_to_bytes, resolve_server_network,
+        http_boot_url, mib_to_bytes, resolve_server_network, virtual_loader_is_bindable,
     };
     use crate::{
         api::models::{
@@ -2174,6 +2649,10 @@ mod tests {
             dtb_dir: root.join("dtbs"),
             tftp: TftpConfig::Builtin(BuiltinTftpConfig::default_with_root(root.join("tftp"))),
             http_boot: crate::config::HttpBootConfig::default_with_root(root.join("http-boot")),
+            loader_network: crate::config::LoaderNetworkConfig::default(),
+            virtual_qemu: crate::config::VirtualQemuConfig::default_with_runtime_dir(
+                root.join("qemu"),
+            ),
             network: crate::TftpNetworkConfig {
                 interface: "lo".into(),
             },
@@ -2186,6 +2665,13 @@ mod tests {
     }
 
     async fn test_router_with_config(update: impl FnOnce(&mut ServerConfig)) -> Router {
+        let (router, _) = test_router_and_state_with_config(update).await;
+        router
+    }
+
+    async fn test_router_and_state_with_config(
+        update: impl FnOnce(&mut ServerConfig),
+    ) -> (Router, crate::AppState) {
         let temp = tempdir().unwrap();
         let root = temp.path().to_path_buf();
         std::mem::forget(temp);
@@ -2195,7 +2681,7 @@ mod tests {
         let manager: Arc<dyn TftpManager> = build_tftp_manager(&config.tftp);
         let state = build_app_state(config_path, config, manager).await.unwrap();
         state.ensure_data_dirs().await.unwrap();
-        build_router(state)
+        (build_router(state.clone()), state)
     }
 
     async fn create_board(app: &Router, request: impl Serialize) -> StatusCode {
@@ -2274,6 +2760,7 @@ mod tests {
                 use_tftp: true,
                 ..Default::default()
             }),
+            network_identity: None,
             notes: Some("rack-a".into()),
             disabled: false,
         }
@@ -2285,7 +2772,9 @@ mod tests {
         board.tags = vec!["uefi-http".into()];
         board.boot = BootConfig::UefiHttp(UefiHttpProfile {
             boot_arch: Some(UefiBootArch::X86_64),
-            mac: None,
+        });
+        board.network_identity = Some(crate::config::BoardNetworkIdentity {
+            mac_address: "02:00:00:00:00:01".parse().unwrap(),
         });
         board
     }
@@ -2485,6 +2974,7 @@ mod tests {
                 use_tftp: true,
                 ..Default::default()
             }),
+            network_identity: None,
             notes: None,
             disabled: false,
         };
@@ -2572,7 +3062,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_httpboot_board_keeps_arch_and_drops_unused_mac_field() {
+    async fn create_httpboot_board_persists_canonical_network_identity() {
         let app = test_router().await;
         let response = app
             .clone()
@@ -2594,8 +3084,10 @@ mod tests {
                             },
                             "boot": {
                                 "kind": "httpboot",
-                                "boot_arch": "x86_64",
-                                "mac": "1C-69-7A-DC-F3-47"
+                                "boot_arch": "x86_64"
+                            },
+                            "network_identity": {
+                                "mac_address": "1C:69:7A:DC:F3:47"
                             },
                             "notes": null,
                             "disabled": false
@@ -2614,7 +3106,162 @@ mod tests {
             panic!("expected httpboot");
         };
         assert_eq!(profile.boot_arch, Some(UefiBootArch::X86_64));
-        assert_eq!(profile.mac, None);
+        assert_eq!(
+            board.network_identity.unwrap().mac_address.to_string(),
+            "1c:69:7a:dc:f3:47"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_board_rejects_duplicate_mac_with_stable_error_code() {
+        let app = test_router().await;
+        let first = sample_httpboot_board("uefi-http-01");
+        assert_eq!(
+            create_board(&app, serde_json::to_value(&first).unwrap()).await,
+            StatusCode::CREATED
+        );
+        let mut second = sample_httpboot_board("uefi-http-02");
+        second.board_type = "another-pool".into();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/admin/boards")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(serde_json::to_vec(&second).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let error: crate::api::models::ErrorResponse = serde_json::from_slice(&body).unwrap();
+        assert_eq!(error.code, "mac_already_bound");
+    }
+
+    #[tokio::test]
+    async fn virtual_device_list_reports_disabled_without_starting_qemu() {
+        let app = test_router().await;
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/admin/virtual-devices")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let virtual_devices: crate::api::models::VirtualDevicesResponse =
+            serde_json::from_slice(&body).unwrap();
+        assert!(!virtual_devices.enabled);
+        assert!(virtual_devices.devices.is_empty());
+    }
+
+    #[tokio::test]
+    async fn qemu_board_binding_requires_real_loader_discovery() {
+        let (app, state) = test_router_and_state_with_config(|config| {
+            config.virtual_qemu.enabled = true;
+            config.virtual_qemu.tap_pool = vec!["test-tap".into()];
+        })
+        .await;
+        let virtual_id = "virtual-discovery-test";
+        let mac = "02:00:00:00:00:42".parse().unwrap();
+        state
+            .virtual_boards
+            .insert_test_device(virtual_id, mac)
+            .await
+            .unwrap();
+        let board = json!({
+            "id": "qemu-discovery-test",
+            "board_type": "qemu-x86_64",
+            "tags": [],
+            "serial": {
+                "key": { "kind": "qemu", "value": virtual_id },
+                "baud_rate": 115200
+            },
+            "power_management": { "kind": "qemu", "virtual_device_id": virtual_id },
+            "boot": { "kind": "httpboot", "boot_arch": "x86_64" },
+            "network_identity": { "mac_address": mac },
+            "notes": null,
+            "disabled": false
+        });
+
+        let rejected = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/admin/boards")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(serde_json::to_vec(&board).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(rejected.status(), StatusCode::CONFLICT);
+        let body_bytes = to_bytes(rejected.into_body(), usize::MAX).await.unwrap();
+        let error: crate::api::models::ErrorResponse = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(error.code, "virtual_device_not_discovered");
+
+        let offer = state
+            .loader_registry
+            .offer(
+                &LoaderDiscoveryProbe {
+                    protocol_version: PROTOCOL_VERSION,
+                    mac_address: mac,
+                    current_mac_address: mac,
+                    arch: BootArch::X86_64,
+                    loader_version: "test-loader".into(),
+                },
+                "http://10.77.0.1:2999".into(),
+            )
+            .await
+            .unwrap();
+        state
+            .loader_registry
+            .accept_poll(&LoaderPollRequest {
+                protocol_version: PROTOCOL_VERSION,
+                registration_id: offer.registration_id,
+                mac_address: mac,
+                current_mac_address: mac,
+                ip_address: "10.77.0.100".into(),
+                arch: BootArch::X86_64,
+                loader_version: "test-loader".into(),
+                hardware: LoaderHardwareInfo::default(),
+            })
+            .await
+            .unwrap();
+        assert_eq!(create_board(&app, &board).await, StatusCode::CREATED);
+        state.virtual_boards.shutdown().await;
+    }
+
+    #[test]
+    fn qemu_binding_accepts_only_online_non_conflicting_loader() {
+        let mac = "02:00:00:00:00:42".parse().unwrap();
+        let mut loader = crate::loader::LoaderDeviceSnapshot {
+            mac_address: mac,
+            current_mac_address: mac,
+            ip_address: "10.77.0.2".into(),
+            arch: BootArch::X86_64,
+            loader_version: "test-loader".into(),
+            hardware: LoaderHardwareInfo::default(),
+            last_seen_at: chrono::Utc::now(),
+            online: true,
+            conflict: false,
+            current_registration_id: Some("registration-1".into()),
+        };
+
+        assert!(virtual_loader_is_bindable(&loader, mac));
+        loader.online = false;
+        assert!(!virtual_loader_is_bindable(&loader, mac));
+        loader.online = true;
+        loader.conflict = true;
+        assert!(!virtual_loader_is_bindable(&loader, mac));
     }
 
     #[tokio::test]
@@ -3610,6 +4257,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(download_kernel.status(), StatusCode::OK);
+        assert_eq!(download_kernel.headers()[header::CONTENT_LENGTH], "12");
         let kernel_body = to_bytes(download_kernel.into_body(), usize::MAX)
             .await
             .unwrap();
@@ -3699,6 +4347,148 @@ mod tests {
         );
         assert_eq!(ready_value["kernel_size"], 10);
         assert!(ready_value["kernel_sha256"].as_str().unwrap().len() == 64);
+    }
+
+    #[tokio::test]
+    async fn network_loader_reuses_session_boot_after_a_new_registration() {
+        let (app, state) = test_router_and_state_with_config(|_| {}).await;
+        let board = sample_httpboot_board("httpboot-network-1");
+        let mac = board.network_identity.as_ref().unwrap().mac_address;
+        assert_eq!(
+            create_board(&app, serde_json::to_value(&board).unwrap()).await,
+            StatusCode::CREATED
+        );
+        let session_id = create_session(&app, &board.board_type).await;
+
+        let upload_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(format!("/api/v1/sessions/{session_id}/http-boot/kernel"))
+                    .header("X-HttpBoot-Remote-Name", "kernel.elf")
+                    .header("X-HttpBoot-Arch", "x86_64")
+                    .header("X-HttpBoot-Image-Format", "elf64")
+                    .header("X-HttpBoot-Entry-Symbol", "httpboot_entry")
+                    .body(Body::from(vec![0x5a; 4096]))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(upload_response.status(), StatusCode::CREATED);
+        let body = to_bytes(upload_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let published: httpboot_protocol::KernelPublishResponse =
+            serde_json::from_slice(&body).unwrap();
+
+        let probe = LoaderDiscoveryProbe {
+            protocol_version: PROTOCOL_VERSION,
+            mac_address: mac,
+            current_mac_address: mac,
+            arch: BootArch::X86_64,
+            loader_version: "test-loader".into(),
+        };
+        let first = state
+            .loader_registry
+            .offer(&probe, "http://127.0.0.1:2999".into())
+            .await
+            .unwrap();
+        let make_poll = |registration_id: String| LoaderPollRequest {
+            protocol_version: PROTOCOL_VERSION,
+            registration_id,
+            mac_address: mac,
+            current_mac_address: mac,
+            ip_address: "10.77.0.2".into(),
+            arch: BootArch::X86_64,
+            loader_version: "test-loader".into(),
+            hardware: LoaderHardwareInfo {
+                manufacturer: Some("QEMU".into()),
+                product: Some("Standard PC".into()),
+                version: None,
+                serial: None,
+            },
+        };
+
+        let first_poll = make_poll(first.registration_id.clone());
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/loaders/poll")
+                    .body(Body::from(serde_json::to_vec(&first_poll).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let first_boot: LoaderPollResponse = serde_json::from_slice(&body).unwrap();
+        let LoaderPollResponse::Boot { boot_id, .. } = first_boot else {
+            panic!("expected boot response");
+        };
+        assert_eq!(boot_id, published.boot_id);
+
+        let status = LoaderStatusReport {
+            protocol_version: PROTOCOL_VERSION,
+            registration_id: first.registration_id.clone(),
+            mac_address: mac,
+            session_id: session_id.clone(),
+            boot_id: published.boot_id.clone(),
+            status: LoaderStatusPhase::ReadyToHandoff,
+        };
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/loaders/status")
+                    .body(Body::from(serde_json::to_vec(&status).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        let second = state
+            .loader_registry
+            .offer(&probe, "http://127.0.0.1:2999".into())
+            .await
+            .unwrap();
+        let second_poll = make_poll(second.registration_id);
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/loaders/poll")
+                    .body(Body::from(serde_json::to_vec(&second_poll).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let second_boot: LoaderPollResponse = serde_json::from_slice(&body).unwrap();
+        let LoaderPollResponse::Boot { boot_id, .. } = second_boot else {
+            panic!("expected boot response after restart");
+        };
+        assert_eq!(boot_id, published.boot_id);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/loaders/poll")
+                    .body(Body::from(serde_json::to_vec(&first_poll).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let stale: LoaderPollResponse = serde_json::from_slice(&body).unwrap();
+        assert!(
+            matches!(stale, LoaderPollResponse::Reject { ref code, .. } if code == "duplicate_mac")
+        );
     }
 
     #[tokio::test]
@@ -4058,6 +4848,7 @@ mod tests {
             id: Some("demo".into()),
             board_type: "demo".into(),
             tags: vec![],
+            network_identity: None,
             notes: None,
             disabled: false,
             serial: None,
