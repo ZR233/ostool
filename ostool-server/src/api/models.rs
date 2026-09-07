@@ -1,12 +1,13 @@
 use chrono::{DateTime, Utc};
-pub use httpboot_protocol::KernelPublishResponse;
+use httpboot_protocol::{BootArch, LoaderHardwareInfo, MacAddress};
+pub use httpboot_protocol::{KernelPublishResponse, LoaderStatusResponse};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::{
     config::{
-        BoardConfig, BootConfig, PowerManagementConfig, SerialConfig, SerialPortKeyKind,
-        TftpConfig, TftpNetworkConfig, UploadLimitsConfig,
+        BoardConfig, BoardNetworkIdentity, BootConfig, PowerManagementConfig, SerialConfig,
+        SerialPortKeyKind, TftpConfig, TftpNetworkConfig, UploadLimitsConfig,
     },
     dtb_store::DtbFile,
     session::Session,
@@ -93,6 +94,45 @@ pub struct AdminBoardUpsertRequest {
     pub serial: Option<SerialConfig>,
     pub power_management: PowerManagementConfig,
     pub boot: BootConfig,
+    #[serde(default)]
+    pub network_identity: Option<BoardNetworkIdentity>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoaderDeviceSummary {
+    pub mac_address: MacAddress,
+    pub current_mac_address: MacAddress,
+    pub ip_address: String,
+    pub arch: BootArch,
+    pub loader_version: String,
+    pub hardware: LoaderHardwareInfo,
+    pub last_seen_at: DateTime<Utc>,
+    pub online: bool,
+    pub conflict: bool,
+    pub bound_board_id: Option<String>,
+    pub current_registration_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CreateVirtualDeviceRequest {
+    #[serde(default)]
+    pub mac_address: Option<MacAddress>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VirtualDeviceSummary {
+    pub id: String,
+    pub mac_address: MacAddress,
+    pub tap: String,
+    pub powered: bool,
+    pub serial_connected: bool,
+    pub generation: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VirtualDevicesResponse {
+    pub enabled: bool,
+    pub devices: Vec<VirtualDeviceSummary>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -7,13 +7,14 @@ keywords = ["httpboot", "uefi", "bootloader"]
 license = "MIT OR Apache-2.0"
 name = "httpboot-protocol"
 repository = "https://github.com/drivercraft/ostool"
-version = "0.1.1"
+version = "0.2.0"
 
 [features]
-default = ["std", "serde"]
-serde = ["dep:serde", "dep:serde_json"]
-std = []
+default = ["std", "json"]
+alloc = []
+json = ["alloc", "dep:serde", "dep:serde_json"]
+std = ["alloc", "serde?/std", "serde_json?/std"]
 
 [dependencies]
-serde = { workspace = true, features = ["derive"], optional = true }
-serde_json = { workspace = true, optional = true }
+serde = { version = "1", default-features = false, features = ["alloc", "derive"], optional = true }
+serde_json = { version = "1", default-features = false, features = ["alloc"], optional = true }

@@ -2,7 +2,7 @@ use std::fmt;
 
 use anyhow::Context as _;
 use chrono::{DateTime, Utc};
-use httpboot_protocol::KernelPublishResponse;
+use httpboot_protocol::{KernelPublishResponse, LoaderStatusResponse};
 use reqwest::{Method, StatusCode};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use thiserror::Error;
@@ -137,7 +137,6 @@ pub enum UefiBootArch {
 #[derive(Debug, Clone, Deserialize)]
 pub struct UefiHttpProfile {
     pub boot_arch: Option<UefiBootArch>,
-    pub mac: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -333,6 +332,22 @@ impl BoardServerClient {
             .request(
                 Method::GET,
                 self.endpoint(&format!("/api/v1/sessions/{session_id}/serial")),
+            )
+            .await?
+            .send()
+            .await
+            .map_err(Self::request_error)?;
+        self.decode_json(response).await
+    }
+
+    pub async fn get_loader_status(
+        &self,
+        session_id: &str,
+    ) -> Result<LoaderStatusResponse, BoardServerClientError> {
+        let response = self
+            .request(
+                Method::GET,
+                self.endpoint_segments(&["api", "v1", "sessions", session_id, "loader-status"]),
             )
             .await?
             .send()
@@ -856,8 +871,7 @@ mod tests {
             r#"{
                 "boot": {
                     "kind": "httpboot",
-                    "boot_arch": "x86_64",
-                    "mac": "1c:69:7a:dc:f3:47"
+                    "boot_arch": "x86_64"
                 },
                 "server_ip": null,
                 "netmask": null,
@@ -869,7 +883,6 @@ mod tests {
         match response.boot {
             BootConfig::UefiHttp(profile) => {
                 assert_eq!(profile.boot_arch, Some(super::UefiBootArch::X86_64));
-                assert_eq!(profile.mac.as_deref(), Some("1c:69:7a:dc:f3:47"));
             }
             _ => panic!("expected httpboot profile"),
         }

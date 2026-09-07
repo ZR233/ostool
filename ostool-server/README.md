@@ -106,10 +106,10 @@ is disabled. Upload responses include a board-reachable `http_url`; both the
 file and URL expire when the session is released or times out.
 
 For boards using the UEFI HTTP Boot loader, configure the board boot profile
-with `kind = "httpboot"` and, when needed, `boot_arch`. The server uses the
-allocated board session and that board's serial configuration to send the boot
-offer to axloader; the board NIC MAC address is not part of the current control
-flow.
+with `kind = "httpboot"`, `network_identity.mac_address`, and, when needed,
+`boot_arch`. The server binds each UDP/HTTP loader registration to the board by
+its persisted permanent MAC address. Boot manifests and status reports stay in
+the active session; serial is used only for target-system interaction.
 
 ## Useful Commands
 

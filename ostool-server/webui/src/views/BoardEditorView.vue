@@ -9,13 +9,15 @@ import type {
   BoardConfig,
   BootConfig,
   DtbFileResponse,
+  LoaderDeviceSummary,
   PowerManagementConfig,
   SerialPortKeyKind,
   SerialPortSummary,
   UbootNetworkMode,
+  VirtualDeviceSummary,
 } from "@/types/api";
 
-type PowerManagementKind = "custom" | "zhongsheng_relay";
+type PowerManagementKind = "custom" | "zhongsheng_relay" | "qemu";
 type BootKind = "uboot" | "pxe" | "httpboot";
 
 interface BoardEditorFormState {
@@ -33,8 +35,10 @@ interface BoardEditorFormState {
   power_off_cmd: string;
   relay_serial_key_kind: SerialPortKeyKind;
   relay_serial_key_value: string;
+  virtual_device_id: string;
   boot_kind: BootKind;
   boot_arch: string;
+  network_mac: string;
   use_tftp: boolean;
   dtb_name: string;
   kernel_load_addr: string;
@@ -65,6 +69,8 @@ const validationError = ref("");
 const form = ref<BoardEditorFormState>(defaultFormState());
 const serialPorts = ref<SerialPortSummary[]>([]);
 const dtbs = ref<DtbFileResponse[]>([]);
+const loaderDevices = ref<LoaderDeviceSummary[]>([]);
+const virtualDevices = ref<VirtualDeviceSummary[]>([]);
 const tftpStatus = ref<{ resolved_server_ip: string | null; resolved_netmask: string | null } | null>(null);
 const dtbUploadName = ref("");
 const dtbUploadFile = ref<File | null>(null);
@@ -80,6 +86,14 @@ const selectedRelaySerialSummary = computed(() => {
   const selected = selectedRelaySerialOptionValue();
   return serialPorts.value.find((port) => serialOptionValue(port) === selected) ?? null;
 });
+const selectedLoaderDevice = computed(() =>
+  loaderDevices.value.find((device) => device.mac_address === form.value.network_mac.trim().toLowerCase()) ?? null,
+);
+const selectableLoaderDevices = computed(() =>
+  loaderDevices.value.filter(
+    (device) => device.bound_board_id === null || device.bound_board_id === boardId.value,
+  ),
+);
 
 function defaultFormState(): BoardEditorFormState {
   return {
@@ -97,8 +111,10 @@ function defaultFormState(): BoardEditorFormState {
     power_off_cmd: "",
     relay_serial_key_kind: "serial_number",
     relay_serial_key_value: "",
+    virtual_device_id: "",
     boot_kind: "uboot",
     boot_arch: "",
+    network_mac: "",
     use_tftp: false,
     dtb_name: "",
     kernel_load_addr: "",
@@ -120,6 +136,7 @@ function boardToFormState(board: BoardConfig): BoardEditorFormState {
   next.tags_text = board.tags.join(", ");
   next.notes = board.notes ?? "";
   next.disabled = board.disabled;
+  next.network_mac = board.network_identity?.mac_address ?? "";
 
   if (board.serial) {
     next.serial_enabled = true;
@@ -132,10 +149,13 @@ function boardToFormState(board: BoardConfig): BoardEditorFormState {
     next.power_management_kind = "custom";
     next.power_on_cmd = board.power_management.power_on_cmd;
     next.power_off_cmd = board.power_management.power_off_cmd;
-  } else {
+  } else if (board.power_management.kind === "zhongsheng_relay") {
     next.power_management_kind = "zhongsheng_relay";
     next.relay_serial_key_kind = board.power_management.key.kind;
     next.relay_serial_key_value = board.power_management.key.value;
+  } else {
+    next.power_management_kind = "qemu";
+    next.virtual_device_id = board.power_management.virtual_device_id;
   }
 
   if (board.boot.kind === "uboot") {
@@ -213,12 +233,19 @@ function buildPowerManagementConfig(): PowerManagementConfig {
     };
   }
 
+  if (form.value.power_management_kind === "zhongsheng_relay") {
+    return {
+      kind: "zhongsheng_relay",
+      key: {
+        kind: form.value.relay_serial_key_kind,
+        value: form.value.relay_serial_key_value.trim(),
+      },
+    };
+  }
+
   return {
-    kind: "zhongsheng_relay",
-    key: {
-      kind: form.value.relay_serial_key_kind,
-      value: form.value.relay_serial_key_value.trim(),
-    },
+    kind: "qemu",
+    virtual_device_id: form.value.virtual_device_id.trim(),
   };
 }
 
@@ -240,6 +267,9 @@ function buildRequestPayload(): AdminBoardUpsertRequest {
       : null,
     power_management: buildPowerManagementConfig(),
     boot: buildBootConfig(),
+    network_identity: trimToNull(form.value.network_mac)
+      ? { mac_address: form.value.network_mac.trim() }
+      : null,
   };
 }
 
@@ -269,9 +299,30 @@ function validateForm(): string {
   if (form.value.power_management_kind === "zhongsheng_relay" && !form.value.relay_serial_key_value.trim()) {
     errors.push("中盛继电模块必须选择串口设备");
   }
+  if (form.value.power_management_kind === "qemu") {
+    if (!form.value.virtual_device_id.trim()) {
+      errors.push("QEMU 电源管理必须选择虚拟设备");
+    }
+    if (!form.value.serial_enabled || form.value.serial_key_kind !== "qemu") {
+      errors.push("QEMU 电源管理必须启用 QEMU 虚拟串口");
+    } else if (form.value.serial_key_value.trim() !== form.value.virtual_device_id.trim()) {
+      errors.push("QEMU 电源和虚拟串口必须引用同一个虚拟设备");
+    }
+    if (form.value.boot_kind !== "httpboot") {
+      errors.push("QEMU 虚拟设备必须使用 HTTPboot");
+    }
+  }
   if (form.value.boot_kind === "uboot" && form.value.use_tftp && form.value.network_mode === "static_ip") {
     if (!form.value.board_ip.trim()) {
       errors.push("静态 IP 模式必须填写开发板 IP");
+    }
+  }
+  if (form.value.boot_kind === "httpboot") {
+    const mac = form.value.network_mac.trim();
+    if (!mac) {
+      errors.push("HTTPboot 板卡必须绑定 MAC 地址");
+    } else if (!/^[0-9a-f]{2}(?::[0-9a-f]{2}){5}$/i.test(mac)) {
+      errors.push("MAC 地址必须是六字节冒号格式，例如 02:00:00:00:00:01");
     }
   }
   return errors.join("\n");
@@ -315,7 +366,7 @@ function selectedRelaySerialOptionValue() {
 
 function parseSerialSelection(value: string): { kind: SerialPortKeyKind; value: string } | null {
   const [kind, ...rest] = value.split(":");
-  if (kind === "serial_number" || kind === "usb_path") {
+  if (kind === "serial_number" || kind === "usb_path" || kind === "qemu") {
     return {
       kind,
       value: rest.join(":"),
@@ -349,9 +400,15 @@ function boardSerialOptions(currentValue: string) {
       disabled: !port.stable_identity,
     });
   }
+  for (const device of virtualDevices.value) {
+    options.set(`qemu:${device.id}`, {
+      label: `[QEMU] ${device.id} | ${device.mac_address} / ${device.tap}`,
+      disabled: false,
+    });
+  }
   const trimmed = currentValue.trim();
   if (trimmed && !options.has(trimmed)) {
-    const keyKind = form.value.serial_key_kind === "serial_number" ? "SN" : "USB PATH";
+    const keyKind = serialPrimaryLabel(form.value.serial_key_kind);
     options.set(trimmed, {
       label: `[${keyKind}] ${form.value.serial_key_value} (当前配置，未检测到)`,
       disabled: false,
@@ -392,10 +449,28 @@ function relaySerialOptions(currentValue: string) {
 }
 
 function serialPrimaryLabel(kind: SerialPortKeyKind) {
+  if (kind === "qemu") {
+    return "QEMU";
+  }
   return kind === "serial_number" ? "SN" : "USB PATH";
 }
 
 function selectedBoardSerialDescription() {
+  if (form.value.serial_key_kind === "qemu") {
+    const device = virtualDevices.value.find(
+      (candidate) => candidate.id === form.value.serial_key_value.trim(),
+    );
+    return form.value.serial_key_value.trim()
+      ? {
+          primaryLabel: "QEMU",
+          primaryValue: form.value.serial_key_value.trim(),
+          secondary: device
+            ? [device.mac_address, device.tap, device.powered ? "运行中" : "已停止"]
+            : ["当前未检测到对应虚拟设备"],
+          unresolved: !device,
+        }
+      : null;
+  }
   if (selectedBoardSerialSummary.value) {
     const port = selectedBoardSerialSummary.value;
     const secondary = [
@@ -505,16 +580,24 @@ async function loadEditor() {
   ui.clearMessages();
 
   try {
-    const [ports, dtbList, statusResponse, board] = await Promise.all([
+    const [ports, dtbList, devices, virtualDeviceList, statusResponse, board] = await Promise.all([
       api.listSerialPorts(),
       api.listDtbs(),
+      api.listLoaderDevices(),
+      api.listVirtualDevices(),
       api.getTftpStatus().catch(() => null),
       isEditing.value && boardId.value ? api.getBoard(boardId.value) : Promise.resolve(null),
     ]);
     serialPorts.value = ports;
     dtbs.value = dtbList;
+    loaderDevices.value = devices;
+    virtualDevices.value = virtualDeviceList.devices;
     tftpStatus.value = statusResponse?.status ?? null;
     form.value = board ? boardToFormState(board) : defaultFormState();
+    if (!board && typeof route.query?.mac === "string") {
+      form.value.boot_kind = "httpboot";
+      form.value.network_mac = route.query.mac;
+    }
   } catch (error) {
     ui.setError((error as Error).message);
   } finally {
@@ -760,6 +843,7 @@ onMounted(() => {
             <select v-model="form.power_management_kind" aria-label="电源管理类型">
               <option value="custom">Custom</option>
               <option value="zhongsheng_relay">中盛继电模块</option>
+              <option v-if="virtualDevices.length" value="qemu">QEMU 虚拟设备</option>
             </select>
           </label>
 
@@ -802,6 +886,17 @@ onMounted(() => {
                 {{ detail }}
               </p>
             </div>
+          </label>
+
+          <label v-else-if="form.power_management_kind === 'qemu'" class="field" style="margin-top: 16px">
+            <span>虚拟设备</span>
+            <select v-model="form.virtual_device_id">
+              <option value="">请选择虚拟设备</option>
+              <option v-for="device in virtualDevices" :key="device.id" :value="device.id">
+                {{ device.id }} · {{ device.mac_address }} · {{ device.tap }}
+              </option>
+            </select>
+            <small class="field-hint">电源、虚拟串口和 MAC 必须指向同一个虚拟设备。</small>
           </label>
 
         </section>
@@ -930,10 +1025,46 @@ onMounted(() => {
             <textarea v-model="form.pxe_notes" rows="4" />
           </label>
 
-          <label v-else-if="form.boot_kind === 'httpboot'" class="field" style="margin-top: 16px">
-            <span>启动架构</span>
-            <input v-model="form.boot_arch" placeholder="例如 x86_64" />
-          </label>
+          <div v-else-if="form.boot_kind === 'httpboot'" class="form-grid two-columns" style="margin-top: 16px">
+            <label class="field">
+              <span>启动架构</span>
+              <input v-model="form.boot_arch" placeholder="例如 x86_64" />
+            </label>
+            <label class="field">
+              <span>板卡 MAC</span>
+              <input v-model="form.network_mac" list="loader-device-macs" placeholder="02:00:00:00:00:01" />
+              <datalist id="loader-device-macs">
+                <option
+                  v-for="device in selectableLoaderDevices"
+                  :key="device.current_registration_id ?? device.mac_address"
+                  :value="device.mac_address"
+                >
+                  {{ device.hardware.manufacturer ?? "未知厂商" }}
+                  {{ device.hardware.product ?? device.arch }} · {{ device.ip_address }}
+                </option>
+              </datalist>
+              <small class="field-hint">可手工输入，也可从自动探测设备中选择；不会自动填写板型、电源或串口。</small>
+              <div v-if="selectedLoaderDevice" class="serial-key-card">
+                <span class="serial-key-badge">{{ selectedLoaderDevice.online ? "ONLINE" : "OFFLINE" }}</span>
+                <strong>{{ selectedLoaderDevice.mac_address }}</strong>
+                <p class="serial-key-secondary">
+                  {{ selectedLoaderDevice.hardware.manufacturer ?? "未知厂商" }}
+                  {{ selectedLoaderDevice.hardware.product ?? "未知型号" }}
+                  {{ selectedLoaderDevice.hardware.version ?? "" }}
+                </p>
+                <p class="serial-key-secondary">
+                  IP {{ selectedLoaderDevice.ip_address }} · {{ selectedLoaderDevice.arch }} ·
+                  {{ selectedLoaderDevice.loader_version }}
+                </p>
+                <p v-if="selectedLoaderDevice.hardware.serial" class="serial-key-secondary">
+                  机器序列号 {{ selectedLoaderDevice.hardware.serial }}
+                </p>
+                <p v-if="selectedLoaderDevice.conflict" class="serial-key-secondary unresolved">
+                  检测到重复 MAC，server 已暂停下发启动命令。
+                </p>
+              </div>
+            </label>
+          </div>
         </section>
 
         <div class="danger-zone" v-if="isEditing">

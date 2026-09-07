@@ -1,16 +1,20 @@
-use std::time::Duration;
+use std::{
+    pin::Pin,
+    task::{Context as TaskContext, Poll},
+    time::Duration,
+};
 
 use anyhow::Context;
 use axum::extract::ws::{Message, WebSocket};
 use base64::Engine;
 use futures_util::{Sink, SinkExt, StreamExt};
 use serde::Deserialize;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::task::JoinHandle;
 use tokio_serial::{ClearBuffer, SerialPort, SerialPortBuilderExt};
 
 use crate::{
-    config::BoardConfig,
+    config::{BoardConfig, SerialConfig, SerialPortKeyKind},
     power::{PowerAction, PowerActionError},
     serial::discovery::resolve_serial_config,
     session::SessionState,
@@ -19,6 +23,54 @@ use crate::{
 
 const SERIAL_READ_BUFFER_SIZE: usize = 64;
 const SERIAL_READ_TIMEOUT: Duration = Duration::from_millis(20);
+
+enum BoardSerialStream {
+    Physical(tokio_serial::SerialStream),
+    Qemu(tokio::io::DuplexStream),
+}
+
+impl AsyncRead for BoardSerialStream {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut TaskContext<'_>,
+        buffer: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        match &mut *self {
+            Self::Physical(stream) => Pin::new(stream).poll_read(cx, buffer),
+            Self::Qemu(stream) => Pin::new(stream).poll_read(cx, buffer),
+        }
+    }
+}
+
+impl AsyncWrite for BoardSerialStream {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut TaskContext<'_>,
+        bytes: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        match &mut *self {
+            Self::Physical(stream) => Pin::new(stream).poll_write(cx, bytes),
+            Self::Qemu(stream) => Pin::new(stream).poll_write(cx, bytes),
+        }
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<std::io::Result<()>> {
+        match &mut *self {
+            Self::Physical(stream) => Pin::new(stream).poll_flush(cx),
+            Self::Qemu(stream) => Pin::new(stream).poll_flush(cx),
+        }
+    }
+
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        cx: &mut TaskContext<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        match &mut *self {
+            Self::Physical(stream) => Pin::new(stream).poll_shutdown(cx),
+            Self::Qemu(stream) => Pin::new(stream).poll_shutdown(cx),
+        }
+    }
+}
 
 #[derive(Debug, Deserialize)]
 struct ClientControlMessage {
@@ -51,16 +103,7 @@ async fn run_serial_ws_inner(
         .serial
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("board has no serial configuration"))?;
-    let resolved_serial = resolve_serial_config(serial)?;
-    let mut port = tokio_serial::new(&resolved_serial.current_device_path, serial.baud_rate)
-        .timeout(SERIAL_READ_TIMEOUT)
-        .open_native_async()
-        .with_context(|| {
-            format!(
-                "failed to open serial port {}",
-                resolved_serial.current_device_path
-            )
-        })?;
+    let mut port = open_board_serial(state, serial).await?;
     clear_serial_input_after_open(&session_id, &mut port);
 
     let (mut ws_sender, mut ws_receiver) = socket.split();
@@ -202,6 +245,32 @@ async fn run_serial_ws_inner(
     result
 }
 
+async fn open_board_serial(
+    state: &AppState,
+    serial: &SerialConfig,
+) -> anyhow::Result<BoardSerialStream> {
+    if serial.key.kind == SerialPortKeyKind::Qemu {
+        return Ok(BoardSerialStream::Qemu(
+            state
+                .virtual_boards
+                .attach_serial(&serial.key.value)
+                .await?,
+        ));
+    }
+
+    let resolved_serial = resolve_serial_config(serial)?;
+    let port = tokio_serial::new(&resolved_serial.current_device_path, serial.baud_rate)
+        .timeout(SERIAL_READ_TIMEOUT)
+        .open_native_async()
+        .with_context(|| {
+            format!(
+                "failed to open serial port {}",
+                resolved_serial.current_device_path
+            )
+        })?;
+    Ok(BoardSerialStream::Physical(port))
+}
+
 fn spawn_power_action_task(
     state: AppState,
     board: BoardConfig,
@@ -270,6 +339,15 @@ impl SerialOpenCleanup for tokio_serial::SerialStream {
     }
 }
 
+impl SerialOpenCleanup for BoardSerialStream {
+    fn clear_input_buffer(&mut self) -> std::io::Result<()> {
+        match self {
+            Self::Physical(stream) => stream.clear_input_buffer(),
+            Self::Qemu(_) => Ok(()),
+        }
+    }
+}
+
 fn clear_serial_input_after_open<T>(session_id: &str, port: &mut T)
 where
     T: SerialOpenCleanup + ?Sized,
@@ -279,10 +357,13 @@ where
     }
 }
 
-async fn write_serial_payload(
-    port: &mut tokio::io::WriteHalf<tokio_serial::SerialStream>,
+async fn write_serial_payload<T>(
+    port: &mut tokio::io::WriteHalf<T>,
     payload: &[u8],
-) -> anyhow::Result<()> {
+) -> anyhow::Result<()>
+where
+    T: AsyncWrite + Unpin,
+{
     port.write_all(payload).await?;
     port.flush().await?;
     Ok(())
@@ -302,6 +383,20 @@ impl SerialQueueCleanup for tokio_serial::SerialStream {
 
     fn clear_all_buffers(&mut self) -> std::io::Result<()> {
         self.clear(ClearBuffer::All).map_err(std::io::Error::from)
+    }
+}
+
+#[async_trait::async_trait]
+impl SerialQueueCleanup for BoardSerialStream {
+    async fn flush_output(&mut self) -> std::io::Result<()> {
+        AsyncWriteExt::flush(self).await
+    }
+
+    fn clear_all_buffers(&mut self) -> std::io::Result<()> {
+        match self {
+            Self::Physical(stream) => stream.clear_all_buffers(),
+            Self::Qemu(_) => Ok(()),
+        }
     }
 }
 
@@ -561,6 +656,7 @@ mod tests {
                 power_off_cmd: format!("printf 'off\\n' >> {}", output_path.display()),
             }),
             boot: BootConfig::Pxe(PxeProfile::default()),
+            network_identity: None,
             notes: None,
             disabled: false,
         };
@@ -592,6 +688,7 @@ mod tests {
                 power_off_cmd: format!("printf 'off\\n' >> {}", output_path.display()),
             }),
             boot: BootConfig::Pxe(PxeProfile::default()),
+            network_identity: None,
             notes: None,
             disabled: false,
         };

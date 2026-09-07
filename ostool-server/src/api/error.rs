@@ -38,6 +38,10 @@ impl ApiError {
         Self::new(StatusCode::CONFLICT, "conflict", message)
     }
 
+    pub fn mac_already_bound(message: impl Into<String>) -> Self {
+        Self::new(StatusCode::CONFLICT, "mac_already_bound", message)
+    }
+
     pub fn service_unavailable(message: impl Into<String>) -> Self {
         Self::new(
             StatusCode::SERVICE_UNAVAILABLE,

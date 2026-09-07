@@ -272,6 +272,7 @@ fn serial_key_kind_short_label(kind: &SerialPortKeyKind) -> &'static str {
     match kind {
         SerialPortKeyKind::SerialNumber => "SN",
         SerialPortKeyKind::UsbPath => "USB PATH",
+        SerialPortKeyKind::Qemu => "QEMU",
     }
 }
 
@@ -279,6 +280,7 @@ fn serial_key_kind_label(kind: &SerialPortKeyKind) -> &'static str {
     match kind {
         SerialPortKeyKind::SerialNumber => "serial number",
         SerialPortKeyKind::UsbPath => "usb path",
+        SerialPortKeyKind::Qemu => "qemu virtual device",
     }
 }
 

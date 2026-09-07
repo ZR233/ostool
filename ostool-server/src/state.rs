@@ -6,18 +6,21 @@ use std::{
     time::Duration,
 };
 
+use anyhow::Context;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{Mutex, RwLock, mpsc};
 
 use crate::{
     board_pool::{BoardAllocationStatus, allocate_board},
     board_store::fs::FileBoardStore,
     config::{BoardConfig, PowerManagementConfig, ServerConfig},
     dtb_store::DtbStore,
+    loader::LoaderRegistry,
     power::{PowerAction, PowerActionError, execute_power_action_for_board},
     session::{Session, SessionState, SessionStopReason},
     tftp::service::TftpManager,
+    virtual_qemu::VirtualBoardManager,
 };
 
 const RELEASE_RETRY_ATTEMPTS: usize = 3;
@@ -96,6 +99,9 @@ pub struct AppState {
     pub boards: Arc<RwLock<BTreeMap<String, BoardConfig>>>,
     pub board_runtimes: Arc<RwLock<BTreeMap<String, BoardRuntimeState>>>,
     pub sessions: Arc<RwLock<BTreeMap<String, Arc<SessionState>>>>,
+    pub loader_registry: LoaderRegistry,
+    pub virtual_boards: VirtualBoardManager,
+    pub(crate) board_inventory_gate: Arc<Mutex<()>>,
     pub board_store: Arc<FileBoardStore>,
     pub dtb_store: Arc<DtbStore>,
     pub tftp_manager: Arc<RwLock<Arc<dyn TftpManager>>>,
@@ -115,12 +121,33 @@ pub async fn build_app_state(
     let board_runtimes = initial_board_runtimes(&boards);
     let (release_tx, release_rx) = mpsc::unbounded_channel();
 
+    let virtual_boards = VirtualBoardManager::new(config.virtual_qemu.clone());
+    if virtual_boards.enabled() {
+        for board in boards.values() {
+            if let PowerManagementConfig::Qemu { virtual_device_id } = &board.power_management {
+                let mac_address = board
+                    .network_identity
+                    .as_ref()
+                    .expect("validated QEMU boards have a MAC")
+                    .mac_address;
+                virtual_boards
+                    .ensure_device(virtual_device_id, mac_address)
+                    .await
+                    .with_context(|| {
+                        format!("failed to restore virtual device for board `{}`", board.id)
+                    })?;
+            }
+        }
+    }
     let state = AppState {
         config_path: Arc::new(config_path),
         config: Arc::new(RwLock::new(config)),
         boards: Arc::new(RwLock::new(boards)),
         board_runtimes: Arc::new(RwLock::new(board_runtimes)),
         sessions: Arc::new(RwLock::new(BTreeMap::new())),
+        loader_registry: LoaderRegistry::new(),
+        virtual_boards,
+        board_inventory_gate: Arc::new(Mutex::new(())),
         board_store,
         dtb_store,
         tftp_manager: Arc::new(RwLock::new(tftp_manager)),
@@ -161,6 +188,7 @@ impl AppState {
         client_name: Option<String>,
     ) -> Result<Session, BoardAllocationStatus> {
         loop {
+            let _inventory_guard = self.board_inventory_gate.lock().await;
             let boards = self.boards.read().await;
             let runtimes = self.board_runtimes.read().await;
             let unavailable_board_ids = runtimes
@@ -261,8 +289,15 @@ impl AppState {
     }
 
     pub async fn board_power_status(&self, board_id: &str) -> Option<BoardPowerStatusSnapshot> {
-        if !self.boards.read().await.contains_key(board_id) {
-            return None;
+        let board = self.boards.read().await.get(board_id).cloned()?;
+        if let PowerManagementConfig::Qemu { virtual_device_id } = &board.power_management {
+            let snapshot = self.virtual_boards.snapshot(virtual_device_id).await;
+            return Some(BoardPowerStatusSnapshot {
+                available: snapshot.is_some(),
+                powered: snapshot.as_ref().map(|snapshot| snapshot.powered),
+                last_action: None,
+                updated_at: None,
+            });
         }
         Some(BoardPowerStatusSnapshot {
             available: false,
@@ -287,6 +322,30 @@ impl AppState {
         board: &BoardConfig,
         action: PowerAction,
     ) -> Result<String, PowerActionError> {
+        if let PowerManagementConfig::Qemu { virtual_device_id } = &board.power_management {
+            return match action {
+                PowerAction::On => {
+                    let mac = board
+                        .network_identity
+                        .as_ref()
+                        .ok_or_else(|| {
+                            PowerActionError::InvalidConfig(
+                                "QEMU board has no network identity".into(),
+                            )
+                        })?
+                        .mac_address;
+                    self.virtual_boards
+                        .power_on(virtual_device_id, mac)
+                        .await
+                        .map_err(PowerActionError::Execution)
+                }
+                PowerAction::Off => self
+                    .virtual_boards
+                    .power_off(virtual_device_id)
+                    .await
+                    .map_err(PowerActionError::Execution),
+            };
+        }
         execute_power_action_for_board(board, action).await
     }
 
@@ -683,6 +742,7 @@ mod tests {
                 power_off_cmd: "echo off".into(),
             }),
             boot: BootConfig::Pxe(PxeProfile::default()),
+            network_identity: None,
             notes: None,
             disabled: false,
         }
@@ -975,6 +1035,7 @@ mod tests {
                 power_off_cmd: format!("printf off >> {}", power_log.display()),
             }),
             boot: BootConfig::Pxe(PxeProfile::default()),
+            network_identity: None,
             notes: None,
             disabled: false,
         };
@@ -1041,6 +1102,7 @@ mod tests {
                 power_off_cmd: "printf off >/dev/null".into(),
             }),
             boot: BootConfig::Pxe(PxeProfile::default()),
+            network_identity: None,
             notes: None,
             disabled: false,
         };
@@ -1096,6 +1158,7 @@ mod tests {
                 power_off_cmd: format!("printf 'off\\n' >> {}", power_log.display()),
             }),
             boot: BootConfig::Pxe(PxeProfile::default()),
+            network_identity: None,
             notes: None,
             disabled: false,
         };
@@ -1144,6 +1207,7 @@ mod tests {
                 },
             ),
             boot: BootConfig::Pxe(PxeProfile::default()),
+            network_identity: None,
             notes: None,
             disabled: false,
         };

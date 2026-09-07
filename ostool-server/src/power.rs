@@ -94,6 +94,9 @@ pub async fn execute_power_action(
                 resolved_serial.current_device_path
             ))
         }
+        PowerManagementConfig::Qemu { .. } => Err(PowerActionError::InvalidConfig(
+            "QEMU power actions must be executed by AppState".into(),
+        )),
     }
 }
 
@@ -114,6 +117,7 @@ fn relay_serial_key_kind_label(kind: &SerialPortKeyKind) -> &'static str {
     match kind {
         SerialPortKeyKind::SerialNumber => "serial number",
         SerialPortKeyKind::UsbPath => "usb path",
+        SerialPortKeyKind::Qemu => "qemu virtual device",
     }
 }
 
@@ -179,6 +183,7 @@ mod tests {
             serial: None,
             power_management,
             boot: BootConfig::Pxe(PxeProfile::default()),
+            network_identity: None,
             notes: None,
             disabled: false,
         }

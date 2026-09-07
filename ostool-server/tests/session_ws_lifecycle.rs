@@ -90,6 +90,7 @@ fn sample_board_with_power_on(serial_port: String, power_on_cmd: String) -> Boar
             dtb_name: None,
             ..Default::default()
         }),
+        network_identity: None,
         notes: None,
         disabled: false,
     }
@@ -124,6 +125,8 @@ fn spawn_test_server_with_power_on(
         dtb_dir,
         tftp: TftpConfig::Builtin(tftp),
         http_boot: ostool_server::config::HttpBootConfig::default_with_root(http_boot_root),
+        loader_network: ostool_server::LoaderNetworkConfig::default(),
+        virtual_qemu: ostool_server::VirtualQemuConfig::default(),
         network: ostool_server::TftpNetworkConfig {
             interface: "lo".into(),
         },

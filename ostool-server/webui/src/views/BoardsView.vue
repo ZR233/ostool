@@ -1,21 +1,30 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 
 import StatusPill from "@/components/StatusPill.vue";
 import { api } from "@/api/client";
 import { useUiStore } from "@/stores/ui";
-import type { BoardConfig, Session } from "@/types/api";
+import type {
+  BoardConfig,
+  LoaderDeviceSummary,
+  Session,
+  VirtualDevicesResponse,
+} from "@/types/api";
 
 const ui = useUiStore();
 const loading = ref(true);
 const boards = ref<BoardConfig[]>([]);
 const sessions = ref<Session[]>([]);
+const loaderDevices = ref<LoaderDeviceSummary[]>([]);
+const virtualDevices = ref<VirtualDevicesResponse>({ enabled: false, devices: [] });
+const startingVirtualDevice = ref(false);
 const typeFilter = ref("");
 const tagFilter = ref("");
 const statusFilter = ref<"all" | "available" | "leased" | "disabled">("all");
 
 const leasedBoardIds = computed(() => new Set(sessions.value.map((session) => session.board_id)));
+const unboundDevices = computed(() => loaderDevices.value.filter((device) => !device.bound_board_id));
 const boardTypes = computed(() =>
   Array.from(new Set(boards.value.map((board) => board.board_type))).sort(),
 );
@@ -77,6 +86,9 @@ function serialPrimaryLabel(board: BoardConfig): string {
   if (!board.serial) {
     return "";
   }
+  if (board.serial.key.kind === "qemu") {
+    return "QEMU";
+  }
   return board.serial.key.kind === "serial_number" ? "SN" : "USB PATH";
 }
 
@@ -87,6 +99,16 @@ function serialSecondaryLines(board: BoardConfig): string[] {
   return [board.serial.resolved_usb_path, board.serial.resolved_device_path]
     .filter((value): value is string => Boolean(value))
     .filter((value, index, items) => items.indexOf(value) === index);
+}
+
+function hardwareLabel(device: LoaderDeviceSummary): string {
+  return [device.hardware.manufacturer, device.hardware.product, device.hardware.version]
+    .filter(Boolean)
+    .join(" ") || "未识别硬件";
+}
+
+function formatLastSeen(value: string): string {
+  return new Date(value).toLocaleString();
 }
 
 async function removeBoard(boardId: string) {
@@ -102,12 +124,42 @@ async function removeBoard(boardId: string) {
   }
 }
 
+async function startVirtualDevice() {
+  startingVirtualDevice.value = true;
+  try {
+    const device = await api.createVirtualDevice();
+    ui.setSuccess(`已启动虚拟设备 ${device.id}；等待 axloader 通过真实网络发现。`);
+    await loadBoards();
+  } catch (error) {
+    ui.setError((error as Error).message);
+  } finally {
+    startingVirtualDevice.value = false;
+  }
+}
+
+async function stopVirtualDevice(deviceId: string) {
+  try {
+    await api.deleteVirtualDevice(deviceId);
+    ui.setSuccess(`已停止虚拟设备 ${deviceId}`);
+    await loadBoards();
+  } catch (error) {
+    ui.setError((error as Error).message);
+  }
+}
+
 async function loadBoards() {
   loading.value = true;
   try {
-    const [boardList, sessionList] = await Promise.all([api.listBoards(), api.listSessions()]);
+    const [boardList, sessionList, deviceList, virtualDeviceList] = await Promise.all([
+      api.listBoards(),
+      api.listSessions(),
+      api.listLoaderDevices(),
+      api.listVirtualDevices(),
+    ]);
     boards.value = boardList;
     sessions.value = sessionList.sessions;
+    loaderDevices.value = deviceList;
+    virtualDevices.value = virtualDeviceList;
   } catch (error) {
     ui.setError((error as Error).message);
   } finally {
@@ -115,9 +167,16 @@ async function loadBoards() {
   }
 }
 
+let refreshTimer: number | undefined;
 onMounted(() => {
   ui.clearMessages();
   void loadBoards();
+  refreshTimer = window.setInterval(() => void loadBoards(), 5_000);
+});
+onBeforeUnmount(() => {
+  if (refreshTimer !== undefined) {
+    window.clearInterval(refreshTimer);
+  }
 });
 </script>
 
@@ -140,6 +199,86 @@ onMounted(() => {
       <div class="stats-chip stats-chip-neutral">
         <span class="stats-num">{{ boardStats.disabled }}</span>
         <span class="stats-label">已禁用</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">网络自动发现</p>
+          <h3>未绑定设备</h3>
+        </div>
+        <span class="board-card-muted">每 5 秒刷新</span>
+      </div>
+      <div v-if="virtualDevices.enabled" class="toolbar-actions" style="margin-top: 16px">
+        <button class="primary-button" :disabled="startingVirtualDevice" @click="startVirtualDevice">
+          {{ startingVirtualDevice ? "启动中..." : "启动虚拟设备" }}
+        </button>
+        <span class="board-card-muted">虚拟板也必须经 UDP/HTTP 真实发现后才能绑定。</span>
+      </div>
+      <div v-if="virtualDevices.devices.length" class="board-card-grid" style="margin-top: 16px">
+        <div v-for="device in virtualDevices.devices" :key="device.id" class="board-card">
+          <div class="board-card-header">
+            <div>
+              <code>{{ device.id }}</code>
+              <div class="board-card-type">{{ device.mac_address }} · {{ device.tap }}</div>
+            </div>
+            <StatusPill :tone="device.powered ? 'good' : 'neutral'" :label="device.powered ? '运行中' : '已停止'" />
+          </div>
+          <div class="board-card-meta-item">
+            <span class="board-card-meta-label">启动代次</span>
+            <span>{{ device.generation }}</span>
+          </div>
+          <div class="board-card-actions">
+            <button class="danger-button compact-button" @click="stopVirtualDevice(device.id)">停止并清理</button>
+          </div>
+        </div>
+      </div>
+      <div v-if="unboundDevices.length === 0" class="empty-state">
+        当前没有未绑定的 axloader 设备。
+      </div>
+      <div v-else class="board-card-grid">
+        <div v-for="device in unboundDevices" :key="device.mac_address" class="board-card">
+          <div class="board-card-header">
+            <div class="board-card-id">
+              <span class="board-card-status-dot" :data-tone="device.conflict ? 'danger' : device.online ? 'good' : 'neutral'" />
+              <div>
+                <code>{{ device.mac_address }}</code>
+                <div class="board-card-type">{{ hardwareLabel(device) }}</div>
+              </div>
+            </div>
+            <StatusPill
+              :tone="device.conflict ? 'danger' : device.online ? 'good' : 'neutral'"
+              :label="device.conflict ? 'MAC 冲突' : device.online ? '在线' : '离线'"
+            />
+          </div>
+          <div class="board-card-meta">
+            <div class="board-card-meta-item">
+              <span class="board-card-meta-label">网络</span>
+              <span>{{ device.ip_address }} · {{ device.current_mac_address }}</span>
+            </div>
+            <div class="board-card-meta-item">
+              <span class="board-card-meta-label">Loader</span>
+              <span>{{ device.arch }} · {{ device.loader_version }}</span>
+            </div>
+            <div class="board-card-meta-item">
+              <span class="board-card-meta-label">机器序列号</span>
+              <span>{{ device.hardware.serial ?? '未提供' }}</span>
+            </div>
+            <div class="board-card-meta-item">
+              <span class="board-card-meta-label">最近发现</span>
+              <span>{{ formatLastSeen(device.last_seen_at) }}</span>
+            </div>
+          </div>
+          <div class="board-card-actions">
+            <RouterLink
+              class="primary-button compact-button"
+              :to="{ path: '/boards/new', query: { mac: device.mac_address } }"
+            >
+              创建配置
+            </RouterLink>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -221,6 +360,19 @@ onMounted(() => {
             <div class="board-card-meta-item">
               <span class="board-card-meta-label">启动方式</span>
               <span>{{ board.boot.kind }}</span>
+            </div>
+            <div v-if="board.network_identity" class="board-card-meta-item">
+              <span class="board-card-meta-label">网络身份</span>
+              <span>
+                {{ board.network_identity.mac_address }} ·
+                {{ loaderDevices.find((device) => device.bound_board_id === board.id)?.online ? '在线' : '离线' }}
+              </span>
+            </div>
+            <div v-if="board.network_identity" class="board-card-meta-item">
+              <span class="board-card-meta-label">Loader 启动代次</span>
+              <code>
+                {{ loaderDevices.find((device) => device.bound_board_id === board.id)?.current_registration_id ?? '尚未发现' }}
+              </code>
             </div>
           </div>
 

@@ -15,6 +15,8 @@
 
 ## 📖 Project Overview
 
+See [docs/axloader-network-control.md](docs/axloader-network-control.md) for the axloader 0.2 network control, persistent MAC binding, web administration, and built-in QEMU virtual board design. The complete API contract is documented in [docs/api.md](docs/api.md).
+
 **ostool** is a Rust toolset designed specifically for operating system development, aiming to provide OS developers with convenient build, configuration, and startup environments. It's particularly suitable for embedded system development, supporting system testing and debugging through Qemu virtual machines and U-Boot bootloader.
 
 ### ✨ Core Features
