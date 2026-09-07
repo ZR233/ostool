@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/drivercraft/ostool/compare/httpboot-protocol-v0.1.1...httpboot-protocol-v0.2.0) - 2026-09-07
+
+### Added
+
+- *(ostool-server)* add network axloader control plane ([#179](https://github.com/drivercraft/ostool/pull/179))
+
 ## [0.1.1](https://github.com/drivercraft/ostool/compare/httpboot-protocol-v0.1.0...httpboot-protocol-v0.1.1) - 2026-06-15
 
 ### Other
