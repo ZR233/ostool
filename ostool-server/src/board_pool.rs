@@ -131,6 +131,7 @@ mod tests {
                 power_off_cmd: "echo off".into(),
             }),
             boot: BootConfig::Uboot(Default::default()),
+            network_identity: None,
             notes: None,
             disabled: false,
         }
