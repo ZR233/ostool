@@ -53,3 +53,36 @@ pub async fn run_program_command(program: &str, args: &[&str]) -> anyhow::Result
         );
     }
 }
+
+/// Bound explicit admin commands without killing an unrelated process group.
+/// The group is created by this invocation and reaped before releasing ownership.
+#[cfg(target_os = "linux")]
+pub async fn run_admin_shell_command(command: &str) -> anyhow::Result<()> {
+    use nix::{
+        sys::signal::{Signal, killpg},
+        unistd::Pid,
+    };
+    let mut child = Command::new("sh")
+        .arg("-c")
+        .arg(command)
+        .process_group(0)
+        .kill_on_drop(true)
+        .spawn()
+        .context("start power command")?;
+    let pid = child.id().context("power command has no process id")?;
+    match tokio::time::timeout(std::time::Duration::from_secs(60), child.wait()).await {
+        Ok(status) => {
+            if status?.success() {
+                Ok(())
+            } else {
+                anyhow::bail!("power command failed")
+            }
+        }
+        Err(_) => {
+            // SIGKILL the group even if the shell has descendants holding IO.
+            let _ = killpg(Pid::from_raw(pid as i32), Signal::SIGKILL);
+            child.wait().await.context("reap timed out power command")?;
+            anyhow::bail!("power command timed out after 60 seconds")
+        }
+    }
+}

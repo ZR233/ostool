@@ -1,5 +1,8 @@
 //! Server crate for managing development boards, serial sessions, and TFTP files.
 
+pub mod admin_events;
+pub mod admin_monitor;
+pub mod admin_power;
 pub mod api;
 pub mod board_pool;
 pub mod board_store;

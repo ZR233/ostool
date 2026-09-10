@@ -40,6 +40,7 @@ pub struct VirtualDeviceSnapshot {
 
 #[derive(Clone)]
 pub struct VirtualBoardManager {
+    events: crate::admin_events::AdminEvents,
     config: Arc<VirtualQemuConfig>,
     devices: Arc<RwLock<BTreeMap<String, Arc<VirtualDevice>>>>,
 }
@@ -73,11 +74,24 @@ struct SerialHub {
 impl VirtualBoardManager {
     pub fn new(config: VirtualQemuConfig) -> Self {
         Self {
+            events: crate::admin_events::AdminEvents::default(),
             config: Arc::new(config),
             devices: Arc::new(RwLock::new(BTreeMap::new())),
         }
     }
 
+    pub(crate) fn set_events(&mut self, events: crate::admin_events::AdminEvents) {
+        self.events = events;
+    }
+    fn observe_serial(&self, hub: &SerialHub) {
+        let mut changes = hub.input_tx.subscribe();
+        let events = self.events.clone();
+        tokio::spawn(async move {
+            while changes.changed().await.is_ok() {
+                events.invalidate(&["virtual"]);
+            }
+        });
+    }
     pub fn enabled(&self) -> bool {
         self.config.enabled
     }
@@ -188,6 +202,7 @@ impl VirtualBoardManager {
             .cloned()
             .context("no free TAP device in virtual_qemu.tap_pool")?;
         let hub = SerialHub::new().await?;
+        self.observe_serial(&hub);
         let run_dir = self.config.runtime_dir.join(id);
         let device = Arc::new(VirtualDevice {
             id: id.to_string(),
