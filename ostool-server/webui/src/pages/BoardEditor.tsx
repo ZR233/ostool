@@ -404,13 +404,15 @@ function Editor({ board }: { board?: BoardConfig }) {
               { value: "httpboot", label: "HTTP Boot" },
             ]}
           />
-          <MacPicker
-            value={form.network_mac}
-            onChange={(v) => set("network_mac", v)}
-            devices={loaders}
-            boardId={board?.id}
-          />
-          {selectedLoader && (
+          {form.boot_kind !== "uboot" && (
+            <MacPicker
+              value={form.network_mac}
+              onChange={(v) => set("network_mac", v)}
+              devices={loaders}
+              boardId={board?.id}
+            />
+          )}
+          {form.boot_kind !== "uboot" && selectedLoader && (
             <p className="hint">
               {selectedLoader.ip_address} · 设备架构 {selectedLoader.arch} ·{" "}
               {selectedLoader.hardware.product} ·{" "}

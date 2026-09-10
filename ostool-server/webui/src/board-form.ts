@@ -219,9 +219,10 @@ export function buildRequestPayload(
       : null,
     power_management: buildPowerManagementConfig(form),
     boot: buildBootConfig(form),
-    network_identity: trimToNull(form.network_mac)
-      ? { mac_address: form.network_mac.trim() }
-      : null,
+    network_identity:
+      form.boot_kind !== "uboot" && trimToNull(form.network_mac)
+        ? { mac_address: form.network_mac.trim() }
+        : null,
   };
 }
 

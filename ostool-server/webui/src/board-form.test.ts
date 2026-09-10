@@ -47,7 +47,10 @@ describe("board configuration contracts", () => {
         gatewayip: "10.0.0.1",
       },
     };
-    expect(buildRequestPayload(boardToFormState(b))).toEqual(b);
+    expect(buildRequestPayload(boardToFormState(b))).toEqual({
+      ...b,
+      network_identity: null,
+    });
   });
   it("preserves PXE notes and manually entered MAC", () => {
     const f = defaultFormState();

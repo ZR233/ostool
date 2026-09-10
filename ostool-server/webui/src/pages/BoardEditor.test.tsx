@@ -131,3 +131,25 @@ it("does not overwrite a local draft when another client edits the board", async
   await user.click(screen.getByRole("button", { name: "载入服务器版本" }));
   expect(screen.getByLabelText("备注")).toHaveValue("remote");
 });
+
+it("switches to U-Boot without requiring or submitting a stale MAC", async () => {
+  const create = vi
+    .spyOn(api, "createBoard")
+    .mockResolvedValue({} as BoardConfig);
+  mount();
+  const user = userEvent.setup();
+  await user.clear(screen.getByLabelText("MAC 地址"));
+  await user.type(screen.getByLabelText("MAC 地址"), "unfinished");
+  await user.selectOptions(screen.getByLabelText("启动方式"), "uboot");
+  expect(screen.queryByLabelText("MAC 地址")).not.toBeInTheDocument();
+  await user.type(screen.getByLabelText("板型"), "arm");
+  await user.type(screen.getByLabelText("上电命令"), "true");
+  await user.type(screen.getByLabelText("下电命令"), "true");
+  await user.click(screen.getByRole("button", { name: "保存开发板" }));
+  expect(create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      boot: expect.objectContaining({ kind: "uboot" }),
+      network_identity: null,
+    }),
+  );
+});
