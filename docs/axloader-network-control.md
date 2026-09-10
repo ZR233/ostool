@@ -102,7 +102,7 @@ boot_arch = "aarch64"
 
 MAC 保存为小写六字节冒号格式并全局唯一。HTTP Boot 板卡缺少 MAC 时配置无效。只有板卡处于 `idle` 时才允许修改 MAC、重命名或删除；使用中和释放中返回 `409 Conflict`。重复绑定返回错误码 `mac_already_bound`。
 
-管理页面的未绑定设备区域每 5 秒刷新。选择探测设备只会把 MAC 带入编辑器并展示 IP、架构、loader 版本和 SMBIOS；不会自动填写板卡 ID、`board_type`、电源、串口或启动设置。也可以手工输入 MAC。
+管理页面通过 `/api/v1/admin/events` 接收设备快照与增量事件，取消定时刷新。创建页可以在未保存板卡、未填写 MAC 时直接按当前电源配置手动上电或下电；设备上报后实时出现在 MAC 选择列表。选择探测设备只会把 MAC 带入编辑器并展示 IP、架构、loader 版本和 SMBIOS；不会自动填写板卡 ID、`board_type`、电源、串口或启动设置。也可以手工输入 MAC。
 
 ## ostool CLI 行为
 

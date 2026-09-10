@@ -17,6 +17,9 @@
 
 axloader 0.2 的网络控制、持久 MAC 绑定、Web 管理和内建 QEMU 虚拟板设计见 [docs/axloader-network-control.md](docs/axloader-network-control.md)，完整接口契约见 [docs/api.md](docs/api.md)。
 
+管理后台位于 `/admin/`，使用 React + shadcn/ui。新建开发板时可先选择电源模块并手动上电，再从实时发现列表选择或手工填写 MAC；保存后完成绑定。全部管理页面采用 SSE 推送更新，断线重连保留页面与编辑草稿。详见 [管理界面与事件协议](docs/admin-ui.md)。
+不兼容的板卡 TOML 会在启动时移入板卡目录下的 `quarantine/`，保留原文件和原因，其余有效板卡继续加载。
+
 **ostool** 是一个专为操作系统开发而设计的 Rust 工具集，旨在为 OS 开发者提供便捷的构建、配置和启动环境。它特别适合嵌入式系统开发，支持通过 Qemu 虚拟机和 U-Boot 引导程序进行系统测试和调试。
 
 ### ✨ 核心特性

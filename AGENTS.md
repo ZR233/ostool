@@ -10,7 +10,7 @@
   board-client 和 `cargo-osrun` 流程。
 - `ostool-server/`: 开发板管理服务器，包含 API、串口会话、TFTP 文件、电源管理和
   面向 systemd 的部署脚本。
-- `ostool-server/webui/`: `ostool-server` 嵌入的 Vue/Vite/pnpm 前端。
+- `ostool-server/webui/`: `ostool-server` 嵌入的 React/Vite/pnpm 前端。
 - `jkconfig/`: 基于 Ratatui 的 JSON Schema 配置编辑器库，并提供可选 web 功能。
 - `fitimage/`: 用于构建 U-Boot 兼容 FIT 镜像的库。
 - `uboot-shell/`: 异步 U-Boot shell 与 YMODEM 通信库。

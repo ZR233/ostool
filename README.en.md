@@ -17,6 +17,9 @@
 
 See [docs/axloader-network-control.md](docs/axloader-network-control.md) for the axloader 0.2 network control, persistent MAC binding, web administration, and built-in QEMU virtual board design. The complete API contract is documented in [docs/api.md](docs/api.md).
 
+The management console at `/admin/` uses React + shadcn/ui. In the new-board form, choose a power module and power it on before selecting a discovered MAC or entering one manually; saving completes the binding. All management pages receive SSE updates and preserve displayed data and drafts across reconnects. See [Admin UI and event protocol](docs/admin-ui.md).
+At startup, incompatible board TOML files move into `quarantine/` under the board directory with their original contents and diagnostic metadata; valid boards continue to load.
+
 **ostool** is a Rust toolset designed specifically for operating system development, aiming to provide OS developers with convenient build, configuration, and startup environments. It's particularly suitable for embedded system development, supporting system testing and debugging through Qemu virtual machines and U-Boot bootloader.
 
 ### ✨ Core Features
