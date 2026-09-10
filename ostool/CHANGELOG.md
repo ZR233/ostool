@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.1](https://github.com/drivercraft/ostool/compare/ostool-v0.29.0...ostool-v0.29.1) - 2026-09-10
+
+### Added
+
+- Connect to specific board using --board-id ([#178](https://github.com/drivercraft/ostool/pull/178))
+
 ## [0.29.0](https://github.com/drivercraft/ostool/compare/ostool-v0.28.2...ostool-v0.29.0) - 2026-09-07
 
 ### Added
