@@ -21,10 +21,13 @@ describe("api client", () => {
   });
 
   it("reports a service connection hint when fetch fails", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    );
 
     await expect(api.getOverview()).rejects.toThrow(
-      "无法连接 ostool-server，服务可能正在安装、升级或重启，请稍后刷新页面。",
+      "无法连接 ostool-server，服务可能正在安装、升级或重启，连接恢复后将自动同步状态。",
     );
   });
 });

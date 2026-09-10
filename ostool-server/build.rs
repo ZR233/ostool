@@ -10,6 +10,7 @@ fn main() {
     for path in [
         "webui/index.html",
         "webui/package.json",
+        "webui/components.json",
         "webui/pnpm-lock.yaml",
         "webui/tsconfig.json",
         "webui/vite.config.ts",

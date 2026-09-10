@@ -13,7 +13,10 @@ describe("formatLeaseRemaining", () => {
 
   it("returns expired for past timestamps", () => {
     expect(
-      formatLeaseRemaining("2026-01-01T00:00:00Z", new Date("2026-01-01T00:01:00Z")),
+      formatLeaseRemaining(
+        "2026-01-01T00:00:00Z",
+        new Date("2026-01-01T00:01:00Z"),
+      ),
     ).toBe("已过期");
   });
 });
