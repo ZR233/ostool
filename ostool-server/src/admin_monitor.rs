@@ -19,34 +19,73 @@ mod linux {
             }
         }
     }
+    fn serial_watcher(
+        handler: impl notify::EventHandler,
+    ) -> notify::Result<notify::RecommendedWatcher> {
+        // Observe udev links themselves; following /dev/fd escapes into transient
+        // /proc descriptors and can fail while installing recursive watches.
+        notify::RecommendedWatcher::new(
+            handler,
+            notify::Config::default().with_follow_symlinks(false),
+        )
+    }
+
+    #[test]
+    fn serial_watch_does_not_traverse_directory_links() {
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        std::os::unix::fs::symlink(outside.path(), root.path().join("fd")).unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut watcher = serial_watcher(move |event| {
+            let _ = tx.send(event);
+        })
+        .unwrap();
+        watcher
+            .watch(root.path(), notify::RecursiveMode::Recursive)
+            .unwrap();
+        std::fs::create_dir(outside.path().join("unrelated")).unwrap();
+        std::fs::create_dir(root.path().join("serial")).unwrap();
+        loop {
+            let event = rx.recv_timeout(Duration::from_secs(3)).unwrap().unwrap();
+            assert!(
+                !event.paths.iter().any(|p| p.ends_with("unrelated")),
+                "followed unrelated directory link: {event:?}"
+            );
+            if event.paths.iter().any(|p| p == &root.path().join("serial")) {
+                break;
+            }
+        }
+    }
+
     pub fn start(state: &AppState) -> anyhow::Result<Monitors> {
         let events = state.admin_events.clone();
-        let mut files =
-            notify::recommended_watcher(move |event: notify::Result<notify::Event>| match event {
-                Ok(event)
-                    if matches!(
-                        event.kind,
-                        notify::EventKind::Create(_)
-                            | notify::EventKind::Remove(_)
-                            | notify::EventKind::Modify(
-                                notify::event::ModifyKind::Name(_)
-                                    | notify::event::ModifyKind::Metadata(_)
-                            )
-                    ) && event.paths.iter().any(|path| {
-                        path.starts_with("/dev/serial")
-                            || path
-                                .file_name()
-                                .is_some_and(|name| name.to_string_lossy().starts_with("tty"))
-                    }) =>
-                {
-                    events.invalidate(&["serial"])
-                }
-                Err(error) => log::warn!("serial device watcher: {error}"),
-                _ => {}
-            })?;
+        let mut files = serial_watcher(move |event: notify::Result<notify::Event>| match event {
+            Ok(event)
+                if matches!(
+                    event.kind,
+                    notify::EventKind::Create(_)
+                        | notify::EventKind::Remove(_)
+                        | notify::EventKind::Modify(
+                            notify::event::ModifyKind::Name(_)
+                                | notify::event::ModifyKind::Metadata(_)
+                        )
+                ) && event.paths.iter().any(|path| {
+                    path.starts_with("/dev/serial")
+                        || path
+                            .file_name()
+                            .is_some_and(|name| name.to_string_lossy().starts_with("tty"))
+                }) =>
+            {
+                events.invalidate(&["serial"])
+            }
+            Err(error) => log::warn!("serial device watcher: {error}"),
+            _ => {}
+        })?;
         // udev creates by-path/by-id links after the tty node. Observe that
         // second step too; otherwise serials without an SN stay unresolved.
-        files.watch(Path::new("/dev"), notify::RecursiveMode::Recursive)?;
+        files
+            .watch(Path::new("/dev"), notify::RecursiveMode::Recursive)
+            .context("failed to watch /dev recursively")?;
         let mut tasks = vec![];
         let events = state.admin_events.clone();
         let mut socket = netlink_sys::Socket::new(netlink_sys::protocols::NETLINK_ROUTE)?;
