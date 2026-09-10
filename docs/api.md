@@ -1028,3 +1028,11 @@ Board REST 和 Management API 业务处理器产生的错误使用以下格式�
 `details` 是预留 JSON 字段，当前 `ostool-server` 的 `ApiError` 固定返回 `null`。常见 `code` 包括 `bad_request`、`payload_too_large`、`not_found`、`conflict`、`service_unavailable` 和 `internal_server_error`。请求在进入业务处理器前由 Axum 拒绝时不保证使用此结构，例如无法反序列化 JSON 请求体时可能直接返回 `422 Unprocessable Entity`；WebSocket Upgrade 提取失败时也使用框架自身的错误响应。
 
 `ostool` 客户端只使用 Board REST API 错误中的 `code` 和 `message`。任一 Board REST 请求返回 `401 Unauthorized` 时，客户端删除当前 endpoint 的本地凭据；不会自动刷新并重试该业务请求。WebSocket 握手返回 `401` 时当前不会触发该凭据清理逻辑。Management API 本身当前不会生成认证类错误，反向代理增加的认证错误也不保证使用上述 JSON 格式。
+
+## ostool-server 实时管理接口
+
+管理端新增 `GET /api/v1/admin/events`（SSE）、
+`POST /api/v1/admin/power-actions` 和
+`GET /api/v1/admin/power-actions/{id}`。快照、重放、错误恢复以及电源请求
+幂等语义见 [管理界面与事件协议](admin-ui.md)。现有 CLI/loader REST 和串口
+WebSocket 契约保持不变。

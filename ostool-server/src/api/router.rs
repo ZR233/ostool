@@ -70,6 +70,15 @@ const DTB_UPLOAD_MAX_MIB: u32 = 10;
 
 pub fn build_router(state: AppState) -> Router {
     Router::new()
+        .route("/api/v1/admin/events", get(crate::admin_events::subscribe))
+        .route(
+            "/api/v1/admin/power-actions",
+            post(crate::admin_power::create),
+        )
+        .route(
+            "/api/v1/admin/power-actions/{id}",
+            get(crate::admin_power::get),
+        )
         .route(
             "/",
             get(|| async { Redirect::temporary("/admin/overview") }),
@@ -194,12 +203,35 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/sessions/{session_id}/tftp",
             get(get_session_tftp_status),
         )
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            notify_admin_changes,
+        ))
         .with_state(state)
 }
 
 async fn get_admin_overview(
     State(state): State<AppState>,
 ) -> Result<axum::Json<AdminOverviewResponse>, ApiError> {
+    let status = get_tftp_status(State(state.clone())).await?.0.status;
+    Ok(axum::Json(build_admin_overview(&state, status).await))
+}
+
+pub(crate) async fn projected_overview(
+    state: &AppState,
+    status: serde_json::Value,
+) -> Result<serde_json::Value, ApiError> {
+    let status = serde_json::from_value(status).map_err(|error| {
+        ApiError::service_unavailable(format!("TFTP status unavailable: {error}"))
+    })?;
+    serde_json::to_value(build_admin_overview(state, status).await)
+        .map_err(|error| ApiError::internal(error.to_string()))
+}
+
+async fn build_admin_overview(
+    state: &AppState,
+    tftp_status: crate::tftp::status::TftpStatus,
+) -> AdminOverviewResponse {
     let boards = state.boards.read().await;
     let runtimes = state.board_runtimes.read().await;
     let board_types = summarize_board_types(&boards, &runtimes);
@@ -218,26 +250,12 @@ async fn get_admin_overview(
     drop(runtimes);
     drop(boards);
 
-    let mut tftp_status = state
-        .tftp_manager
-        .read()
-        .await
-        .status()
-        .await
-        .map_err(|err| {
-            ApiError::service_unavailable(format!("failed to get TFTP status: {err}"))
-        })?;
     let config = state.config.read().await.clone();
-    tftp_status.resolved_server_ip =
-        resolve_server_network(&config)?.and_then(|network| network.server_ip);
-    tftp_status.resolved_netmask =
-        resolve_server_network(&config)?.and_then(|network| network.netmask);
-
-    Ok(axum::Json(AdminOverviewResponse {
+    AdminOverviewResponse {
         board_count_total,
         board_count_available,
         disabled_board_count,
-        active_session_count: session_snapshots(&state)
+        active_session_count: session_snapshots(state)
             .await
             .into_iter()
             .filter(|session| session.state == crate::session::SessionLifecycleState::Active)
@@ -245,7 +263,7 @@ async fn get_admin_overview(
         board_types,
         tftp_status,
         server: readonly_server_config(&config),
-    }))
+    }
 }
 
 async fn list_boards(
@@ -377,6 +395,9 @@ async fn create_board(
     let _inventory_guard = state.board_inventory_gate.lock().await;
     let board = build_board_config_for_create(&state, request).await?;
     validate_board_config(&board)?;
+    if state.admin_power.is_busy(&board.power_management) {
+        return Err(ApiError::conflict("power resource has a running action"));
+    }
     validate_virtual_binding(&state, &board, true).await?;
 
     {
@@ -408,7 +429,16 @@ async fn update_board(
     let _inventory_guard = state.board_inventory_gate.lock().await;
     let board = build_board_config_for_update(&state, &board_id, request).await?;
     validate_board_config(&board)?;
+    if state.admin_power.is_busy(&board.power_management) {
+        return Err(ApiError::conflict("power resource has a running action"));
+    }
     let existing_board = state.boards.read().await.get(&board_id).cloned();
+    if existing_board
+        .as_ref()
+        .is_some_and(|b| state.admin_power.is_busy(&b.power_management))
+    {
+        return Err(ApiError::conflict("power resource has a running action"));
+    }
     let changes_virtual_binding = existing_board
         .as_ref()
         .is_none_or(|existing| virtual_binding(existing) != virtual_binding(&board));
@@ -614,6 +644,11 @@ async fn delete_virtual_device(
     State(state): State<AppState>,
 ) -> Result<StatusCode, ApiError> {
     let _inventory_guard = state.board_inventory_gate.lock().await;
+    if state.admin_power.is_busy(&PowerManagementConfig::Qemu {
+        virtual_device_id: device_id.clone(),
+    }) {
+        return Err(ApiError::conflict("power resource has a running action"));
+    }
     let boards = state.boards.read().await;
     if let Some(board) = boards.values().find(|board| {
         matches!(
@@ -1137,6 +1172,11 @@ async fn delete_board(
     State(state): State<AppState>,
 ) -> Result<StatusCode, ApiError> {
     let _inventory_guard = state.board_inventory_gate.lock().await;
+    if let Some(board) = state.boards.read().await.get(&board_id)
+        && state.admin_power.is_busy(&board.power_management)
+    {
+        return Err(ApiError::conflict("power resource has a running action"));
+    }
     let runtime = state
         .board_runtime_status(&board_id)
         .await
@@ -2692,6 +2732,182 @@ mod tests {
             },
             upload_limits: UploadLimitsConfig::default(),
         }
+    }
+
+    #[tokio::test]
+    async fn unbound_power_action_requires_neither_board_nor_mac() {
+        let (app, state) = test_router_and_state_with_config(|_| {}).await;
+        let response = app.oneshot(Request::builder()
+            .method("POST").uri("/api/v1/admin/power-actions")
+            .header("content-type", "application/json")
+            .body(Body::from(serde_json::json!({
+                "request_id": "unbound-regression", "action": "on",
+                "power_management": {"kind": "custom", "power_on_cmd": "true", "power_off_cmd": "true"}
+            }).to_string())).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+        assert!(state.boards.read().await.is_empty());
+        assert!(state.sessions.read().await.is_empty());
+    }
+
+    async fn post_power(app: &Router, request: serde_json::Value) -> axum::response::Response {
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/admin/power-actions")
+                    .header("content-type", "application/json")
+                    .body(Body::from(request.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn power_action_is_idempotent_and_completion_is_pushed_to_all_subscribers() {
+        use futures_util::StreamExt;
+        let (app, state) = test_router_and_state_with_config(|_| {}).await;
+        let path = state.config.read().await.data_dir.join("power-count");
+        let mut streams = Vec::new();
+        for _ in 0..2 {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri("/api/v1/admin/events")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let mut stream = response.into_body().into_data_stream();
+            let first = stream.next().await.unwrap().unwrap();
+            assert!(String::from_utf8_lossy(&first).contains("snapshot"));
+            streams.push(stream);
+        }
+        let request = json!({"request_id":"repeat", "action":"on", "power_management":{"kind":"custom","power_on_cmd":format!("printf x >> '{}'", path.display()),"power_off_cmd":"true"}});
+        assert_eq!(
+            post_power(&app, request.clone()).await.status(),
+            StatusCode::ACCEPTED
+        );
+        assert_eq!(
+            post_power(&app, request.clone()).await.status(),
+            StatusCode::ACCEPTED
+        );
+        for mut stream in streams {
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                while let Some(chunk) = stream.next().await {
+                    let text = String::from_utf8(chunk.unwrap().to_vec()).unwrap();
+                    if text.contains("succeeded") {
+                        return;
+                    }
+                }
+                panic!("SSE ended before completion");
+            })
+            .await
+            .expect("power completion event");
+        }
+        assert_eq!(tokio::fs::read(&path).await.unwrap(), b"x");
+        let mut changed = request.clone();
+        changed["action"] = json!("off");
+        assert_eq!(
+            post_power(&app, changed).await.status(),
+            StatusCode::CONFLICT
+        );
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/admin/power-actions/repeat")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(body["state"], "succeeded");
+        assert!(state.boards.read().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn unbound_power_rejects_busy_board() {
+        let (app, state) = test_router_and_state_with_config(|_| {}).await;
+        let board = json!({"id":"busy", "board_type":"test", "tags":[], "disabled":false, "serial":null, "notes":null, "network_identity":null, "boot":{"kind":"pxe","notes":null}, "power_management":{"kind":"custom","power_on_cmd":"true","power_off_cmd":"true"}});
+        assert_eq!(create_board(&app, board.clone()).await, StatusCode::CREATED);
+        let session = state.create_session("test", &[], None).await.unwrap();
+        for action in ["on", "off"] {
+            let response = post_power(&app, json!({"request_id": action, "action":action, "power_management":board["power_management"]})).await;
+            assert_eq!(response.status(), StatusCode::CONFLICT);
+        }
+        assert_eq!(state.get_session(&session.id).await.unwrap().id, session.id);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn unbound_relay_action_uses_real_modbus_transport() {
+        let (app, state) = test_router_and_state_with_config(|_| {}).await;
+        let (relay_port, _handle, server, mut requests, stop_tx) = spawn_relay_test_server();
+        let response = post_power(&app, json!({"request_id":"relay", "action":"on", "power_management":{"kind":"zhongsheng_relay","key":{"kind":"usb_path","value":relay_port}}})).await;
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+        let write = tokio::time::timeout(std::time::Duration::from_secs(2), requests.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(write, (1, 0, true));
+        assert!(state.boards.read().await.is_empty());
+        let _ = stop_tx.send(());
+        let _ = server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn sse_reconnect_replays_and_failed_power_is_observable() {
+        use futures_util::StreamExt;
+        let app = test_router().await;
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/admin/events")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let mut stream = response.into_body().into_data_stream();
+        let first = String::from_utf8(stream.next().await.unwrap().unwrap().to_vec()).unwrap();
+        let cursor = first
+            .lines()
+            .find_map(|line| line.strip_prefix("id:"))
+            .unwrap()
+            .trim()
+            .to_string();
+        drop(stream);
+        assert_eq!(post_power(&app, json!({"request_id":"failure", "action":"on", "power_management":{"kind":"custom","power_on_cmd":"exit 17","power_off_cmd":"true"}})).await.status(), StatusCode::ACCEPTED);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/admin/events")
+                    .header("last-event-id", cursor)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let mut stream = response.into_body().into_data_stream();
+        tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            while let Some(chunk) = stream.next().await {
+                let text = String::from_utf8(chunk.unwrap().to_vec()).unwrap();
+                assert!(!text.contains("event: snapshot"));
+                if text.contains("failed") {
+                    return;
+                }
+            }
+            panic!("stream closed before failed result");
+        })
+        .await
+        .unwrap();
     }
 
     async fn test_router() -> Router {
@@ -5309,4 +5525,67 @@ mod tests {
         assert_eq!(value["code"], "bad_request");
         assert_eq!(value["message"], "board_type must not be empty");
     }
+}
+
+async fn notify_admin_changes(
+    State(state): State<AppState>,
+    request: Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let mutation =
+        request.method() != axum::http::Method::GET && request.method() != axum::http::Method::HEAD;
+    let path = request.uri().path().to_owned();
+    let response = next.run(request).await;
+    if mutation {
+        let topics: &[&str] = if path.contains("/loaders/") {
+            &["loaders"]
+        } else if path.contains("/boards") {
+            &["boards"]
+        } else if path.contains("/sessions") {
+            &["sessions", "virtual"]
+        } else if path.contains("/virtual-devices") {
+            &["virtual", "serial"]
+        } else if path.contains("/dtbs") {
+            &["dtbs"]
+        } else if path.contains("/tftp") {
+            &["tftp"]
+        } else if path.contains("/server-config") {
+            &["server"]
+        } else {
+            &[]
+        };
+        state.admin_events.invalidate(topics);
+    }
+    response
+}
+
+pub(crate) async fn admin_topic(
+    state: &AppState,
+    topic: &str,
+) -> Result<serde_json::Value, ApiError> {
+    let extractor = State(state.clone());
+    let value = match topic {
+        "quarantined_boards" => serde_json::to_value(state.board_store.quarantined().await?),
+        "boards" => serde_json::to_value(list_boards(extractor).await?.0),
+        "sessions" => serde_json::to_value(list_admin_sessions(extractor).await?.0.sessions),
+        "loaders" => serde_json::to_value(list_loader_devices(extractor).await?.0),
+        "virtual" => serde_json::to_value(list_virtual_devices(extractor).await.0),
+        "dtbs" => serde_json::to_value(list_dtbs(extractor).await?.0),
+        "serial" => serde_json::to_value(list_serial_ports().await?.0),
+        "network" => serde_json::to_value(list_network_interfaces().await?.0),
+        "server" => serde_json::to_value(get_server_config(extractor).await?.0),
+        "tftp" => serde_json::to_value(get_tftp_config(extractor).await?.0.tftp),
+        "tftp_status" => serde_json::to_value(get_tftp_status(extractor).await?.0.status),
+        "overview" => serde_json::to_value(get_admin_overview(extractor).await?.0),
+        "power_actions" => serde_json::to_value(state.admin_power.snapshots()),
+        "runtimes" => {
+            let mut values = BTreeMap::new();
+            for (id, r) in state.board_runtimes.read().await.iter() {
+                values.insert(id.clone(), serde_json::json!({"lease_state":r.lease_state,"active_session_id":r.active_session_id,"last_release_error":r.last_release_error,"updated_at":r.updated_at}));
+            }
+            serde_json::to_value(values)
+        }
+        _ => return Err(ApiError::bad_request("unknown admin topic")),
+    };
+    value.map_err(|e| ApiError::internal(e.to_string()))
 }

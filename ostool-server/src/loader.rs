@@ -57,6 +57,8 @@ struct LoaderRegistryState {
 
 #[derive(Debug, Clone)]
 pub struct LoaderRegistry {
+    events: crate::admin_events::AdminEvents,
+    deadline_changed: Arc<tokio::sync::Notify>,
     server_id: Arc<str>,
     state: Arc<Mutex<LoaderRegistryState>>,
 }
@@ -74,11 +76,78 @@ pub enum RegistrationError {
 impl LoaderRegistry {
     pub fn new() -> Self {
         Self {
+            events: crate::admin_events::AdminEvents::default(),
+            deadline_changed: Arc::new(tokio::sync::Notify::new()),
             server_id: uuid::Uuid::new_v4().to_string().into(),
             state: Arc::new(Mutex::new(LoaderRegistryState::default())),
         }
     }
 
+    pub(crate) fn with_events(events: crate::admin_events::AdminEvents) -> Self {
+        Self {
+            events,
+            ..Self::new()
+        }
+    }
+    pub(crate) fn start_deadlines(&self) {
+        let registry = self.clone();
+        tokio::spawn(async move {
+            loop {
+                let now = Utc::now();
+                let next = {
+                    let state = registry.state.lock().await;
+                    state
+                        .devices
+                        .values()
+                        .flat_map(|d| {
+                            [
+                                d.last_seen_at + ONLINE_TTL,
+                                d.last_seen_at + RECORD_RETENTION,
+                            ]
+                        })
+                        .chain(state.registrations.values().flat_map(|r| {
+                            [
+                                r.issued_at + REGISTRATION_TTL,
+                                r.last_seen_at.unwrap_or(r.issued_at) + ONLINE_TTL,
+                            ]
+                        }))
+                        .filter(|deadline| *deadline >= now)
+                        .min()
+                };
+                match next {
+                    Some(deadline) => {
+                        let wait = (deadline - now).to_std().unwrap_or_default()
+                            + std::time::Duration::from_millis(1);
+                        tokio::select! {
+                            _ = registry.deadline_changed.notified() => {},
+                            _ = tokio::time::sleep(wait) => {
+                                registry.events.invalidate(&["loaders"]);
+                            }
+                        }
+                    }
+                    None => registry.deadline_changed.notified().await,
+                }
+            }
+        });
+    }
+    pub async fn accept_poll(
+        &self,
+        request: &LoaderPollRequest,
+    ) -> Result<bool, RegistrationError> {
+        let result = self.accept_poll_inner(request).await;
+        self.events.invalidate(&["loaders"]);
+        self.deadline_changed.notify_one();
+        result
+    }
+    pub async fn accept_status(
+        &self,
+        report: &LoaderStatusReport,
+    ) -> Result<(), RegistrationError> {
+        let result = self.accept_status_inner(report).await;
+        self.events.invalidate(&["loaders"]);
+        self.deadline_changed.notify_one();
+        result
+    }
     pub async fn offer(
         &self,
         probe: &LoaderDiscoveryProbe,
@@ -109,7 +178,7 @@ impl LoaderRegistry {
         })
     }
 
-    pub async fn accept_poll(
+    async fn accept_poll_inner(
         &self,
         request: &LoaderPollRequest,
     ) -> Result<bool, RegistrationError> {
@@ -191,7 +260,7 @@ impl LoaderRegistry {
         Ok(conflict)
     }
 
-    pub async fn accept_status(
+    async fn accept_status_inner(
         &self,
         report: &LoaderStatusReport,
     ) -> Result<(), RegistrationError> {

@@ -119,3 +119,22 @@ systemctl restart ostool-server
 journalctl -u ostool-server -f
 vi /etc/ostool-server/config.toml
 ```
+
+## Management console
+
+Open `/admin/` for the React + shadcn/ui console. Boards, discovery, virtual
+hardware, DTBs, leases, TFTP and server settings update through a single SSE
+connection; browser list polling is not used. Draft edits remain local until
+saved and concurrent configuration changes are reported without overwriting them.
+
+A new board does not have to be saved before powering it on. Configure Custom,
+Zhongsheng relay or an existing QEMU device, then click **上电** or **下电**.
+Choose a MAC from live discovery or enter it manually, then save the board.
+Power completion means the command completed, not confirmed physical feedback.
+Leaving the page does not reverse or cancel a submitted power action.
+
+See [the management protocol and development guide](../docs/admin-ui.md).
+
+Incompatible board TOML files are moved into `board_dir/quarantine/<timestamp>-<UUID>/`
+with their original contents and a `reason.json` report. Valid boards still load;
+the console shows backup locations. Storage/backup errors remain explicit failures.

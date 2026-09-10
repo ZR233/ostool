@@ -2,7 +2,7 @@
 
 ## 适用范围
 
-适用于 `ostool-server/webui/` 中的 Vue/Vite 前端。
+适用于 `ostool-server/webui/` 中的 React/TypeScript/Vite 前端。
 
 ## 局部规则
 
@@ -16,8 +16,13 @@
 - 保持现有的运维型 UI 风格：紧凑的 board/session/server 状态视图、明确的错误状态，以及
   直接映射到服务器动作的控件。
 
+- 页面数据统一订阅 `src/api/events.ts`；不要新增轮询或 mutation 后全量 GET。
+- 使用官方 shadcn 组件和统一设计 token；推送不得覆盖编辑草稿、焦点或滚动位置。
+
 ## 验证
 
 - UI 逻辑改动优先运行 `pnpm --dir ostool-server/webui test`。
 - 修改路由、类型使用、构建配置或嵌入资源时，运行
   `pnpm --dir ostool-server/webui build`。
+
+- 浏览器集成测试先运行 `cargo build -p ostool-server`，再运行 `pnpm --dir ostool-server/webui test:e2e`。测试启动独立服务器，使用 HTTP 4175、Vite 4174、UDP 2998；这些端口必须空闲。

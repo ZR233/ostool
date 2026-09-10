@@ -1,4 +1,7 @@
-export function formatLeaseRemaining(expiresAt: string, now = new Date()): string {
+export function formatLeaseRemaining(
+  expiresAt: string,
+  now = new Date(),
+): string {
   const expires = new Date(expiresAt);
   const deltaMs = expires.getTime() - now.getTime();
   if (Number.isNaN(expires.getTime())) {

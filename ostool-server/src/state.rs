@@ -97,6 +97,8 @@ fn release_settle_delay(board: &BoardConfig) -> Option<Duration> {
 
 #[derive(Clone)]
 pub struct AppState {
+    pub admin_events: crate::admin_events::AdminEvents,
+    pub admin_power: crate::admin_power::AdminPower,
     pub config_path: Arc<PathBuf>,
     pub config: Arc<RwLock<ServerConfig>>,
     pub boards: Arc<RwLock<BTreeMap<String, BoardConfig>>>,
@@ -124,7 +126,9 @@ pub async fn build_app_state(
     let board_runtimes = initial_board_runtimes(&boards);
     let (release_tx, release_rx) = mpsc::unbounded_channel();
 
-    let virtual_boards = VirtualBoardManager::new(config.virtual_qemu.clone());
+    let admin_events = crate::admin_events::AdminEvents::default();
+    let mut virtual_boards = VirtualBoardManager::new(config.virtual_qemu.clone());
+    virtual_boards.set_events(admin_events.clone());
     if virtual_boards.enabled() {
         for board in boards.values() {
             if let PowerManagementConfig::Qemu { virtual_device_id } = &board.power_management {
@@ -143,12 +147,14 @@ pub async fn build_app_state(
         }
     }
     let state = AppState {
+        admin_events: admin_events.clone(),
+        admin_power: crate::admin_power::AdminPower::default(),
         config_path: Arc::new(config_path),
         config: Arc::new(RwLock::new(config)),
         boards: Arc::new(RwLock::new(boards)),
         board_runtimes: Arc::new(RwLock::new(board_runtimes)),
         sessions: Arc::new(RwLock::new(BTreeMap::new())),
-        loader_registry: LoaderRegistry::new(),
+        loader_registry: LoaderRegistry::with_events(admin_events),
         virtual_boards,
         board_inventory_gate: Arc::new(Mutex::new(())),
         board_store,
@@ -159,6 +165,8 @@ pub async fn build_app_state(
 
     tokio::spawn(run_release_coordinator(state.clone(), release_rx));
 
+    state.admin_events.start(state.clone());
+    state.loader_registry.start_deadlines();
     Ok(state)
 }
 
@@ -228,11 +236,16 @@ impl AppState {
             let _inventory_guard = self.board_inventory_gate.lock().await;
             let boards = self.boards.read().await;
             let runtimes = self.board_runtimes.read().await;
-            let unavailable_board_ids = runtimes
+            let mut unavailable_board_ids = runtimes
                 .iter()
                 .filter(|(_, runtime)| runtime.lease_state != BoardLeaseState::Idle)
                 .map(|(board_id, _)| board_id.clone())
                 .collect::<BTreeSet<_>>();
+            for board in boards.values() {
+                if self.admin_power.is_busy(&board.power_management) {
+                    unavailable_board_ids.insert(board.id.clone());
+                }
+            }
             let board = match board_id {
                 Some(board_id) => allocate_board_with_board_id(
                     &boards,
@@ -263,6 +276,7 @@ impl AppState {
                 SessionState::new_with_actor(session_id, board, client_name.clone(), self.clone());
             let info = session.snapshot().await;
             self.sessions.write().await.insert(info.id.clone(), session);
+            self.admin_events.invalidate(&["sessions"]);
             return Ok(info);
         }
     }
@@ -471,6 +485,7 @@ impl AppState {
         runtime.active_session_id = Some(session_id.to_string());
         runtime.last_release_error = None;
         runtime.updated_at = Utc::now();
+        self.admin_events.invalidate(&["runtimes"]);
         true
     }
 
@@ -500,6 +515,7 @@ impl AppState {
 
         runtime.lease_state = BoardLeaseState::Releasing;
         runtime.updated_at = Utc::now();
+        self.admin_events.invalidate(&["runtimes"]);
         Ok(())
     }
 
@@ -526,6 +542,7 @@ impl AppState {
         runtime.active_session_id = None;
         runtime.last_release_error = None;
         runtime.updated_at = Utc::now();
+        self.admin_events.invalidate(&["runtimes"]);
         sessions.remove(session_id);
         Ok(())
     }
@@ -548,6 +565,7 @@ impl AppState {
         runtime.lease_state = BoardLeaseState::Error;
         runtime.last_release_error = Some(error);
         runtime.updated_at = Utc::now();
+        self.admin_events.invalidate(&["runtimes"]);
         Ok(())
     }
 

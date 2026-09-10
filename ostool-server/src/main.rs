@@ -80,6 +80,9 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    #[cfg(target_os = "linux")]
+    let _admin_monitors =
+        ostool_server::admin_monitor::start(&state).context("failed to start admin OS monitors")?;
     let app = build_router(state.clone());
     let listen_addr = state.config.read().await.listen_addr;
     let listener = tokio::net::TcpListener::bind(listen_addr)

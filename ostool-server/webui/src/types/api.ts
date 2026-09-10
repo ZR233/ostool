@@ -101,9 +101,7 @@ export interface QemuPowerManagement {
 }
 
 export type PowerManagementConfig =
-  | CustomPowerManagement
-  | ZhongshengRelayPowerManagement
-  | QemuPowerManagement;
+  CustomPowerManagement | ZhongshengRelayPowerManagement | QemuPowerManagement;
 
 export type UbootNetworkMode = "dhcp" | "static_ip";
 
@@ -242,6 +240,7 @@ export interface AdminOverviewResponse {
 }
 
 export interface AdminServerConfigReadonly {
+  http_boot_public_base_url: string | null;
   listen_addr: string;
   data_dir: string;
   board_dir: string;

@@ -22,7 +22,7 @@ type RequestOptions = RequestInit & {
 };
 
 const NETWORK_ERROR_MESSAGE =
-  "无法连接 ostool-server，服务可能正在安装、升级或重启，请稍后刷新页面。";
+  "无法连接 ostool-server，服务可能正在安装、升级或重启，连接恢复后将自动同步状态。";
 
 async function readJsonBody<T>(response: Response): Promise<T | undefined> {
   const text = await response.text();
@@ -32,7 +32,10 @@ async function readJsonBody<T>(response: Response): Promise<T | undefined> {
   return JSON.parse(text) as T;
 }
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+async function request<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
   const headers = new Headers(options.headers);
   let body = options.body;
 
@@ -50,7 +53,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   });
 
   if (!response.ok) {
-    const error = (await readJsonBody<ErrorResponse>(response).catch(() => null)) ?? null;
+    const error =
+      (await readJsonBody<ErrorResponse>(response).catch(() => null)) ?? null;
     throw new Error(error?.message || `请求失败：${response.status}`);
   }
 
@@ -58,6 +62,21 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 }
 
 export const api = {
+  powerAction(payload: {
+    request_id: string;
+    action: "on" | "off";
+    power_management: import("@/types/api").PowerManagementConfig;
+  }) {
+    return request<import("./events").PowerResult>(
+      "/api/v1/admin/power-actions",
+      { method: "POST", bodyJson: payload },
+    );
+  },
+  getPowerAction(id: string) {
+    return request<import("./events").PowerResult>(
+      `/api/v1/admin/power-actions/${encodeURIComponent(id)}`,
+    );
+  },
   getOverview() {
     return request<AdminOverviewResponse>("/api/v1/admin/overview");
   },
@@ -77,18 +96,25 @@ export const api = {
     });
   },
   deleteVirtualDevice(deviceId: string) {
-    return request<void>(`/api/v1/admin/virtual-devices/${encodeURIComponent(deviceId)}`, {
-      method: "DELETE",
-    });
+    return request<void>(
+      `/api/v1/admin/virtual-devices/${encodeURIComponent(deviceId)}`,
+      {
+        method: "DELETE",
+      },
+    );
   },
   getBoard(boardId: string) {
-    return request<BoardConfig>(`/api/v1/admin/boards/${encodeURIComponent(boardId)}`);
+    return request<BoardConfig>(
+      `/api/v1/admin/boards/${encodeURIComponent(boardId)}`,
+    );
   },
   listDtbs() {
     return request<DtbFileResponse[]>("/api/v1/admin/dtbs");
   },
   getDtb(dtbName: string) {
-    return request<DtbFileResponse>(`/api/v1/admin/dtbs/${encodeURIComponent(dtbName)}`);
+    return request<DtbFileResponse>(
+      `/api/v1/admin/dtbs/${encodeURIComponent(dtbName)}`,
+    );
   },
   createDtb(dtbName: string, file: Blob) {
     return request<DtbFileResponse>("/api/v1/admin/dtbs", {
@@ -104,11 +130,14 @@ export const api = {
     if (nextName) {
       headers.set("X-Dtb-Name", nextName);
     }
-    return request<DtbFileResponse>(`/api/v1/admin/dtbs/${encodeURIComponent(currentName)}`, {
-      method: "PUT",
-      headers,
-      body: file ?? undefined,
-    });
+    return request<DtbFileResponse>(
+      `/api/v1/admin/dtbs/${encodeURIComponent(currentName)}`,
+      {
+        method: "PUT",
+        headers,
+        body: file ?? undefined,
+      },
+    );
   },
   deleteDtb(dtbName: string) {
     return request<void>(`/api/v1/admin/dtbs/${encodeURIComponent(dtbName)}`, {
@@ -119,7 +148,9 @@ export const api = {
     return request<SerialPortSummary[]>("/api/v1/admin/serial-ports");
   },
   listNetworkInterfaces() {
-    return request<NetworkInterfaceSummary[]>("/api/v1/admin/network-interfaces");
+    return request<NetworkInterfaceSummary[]>(
+      "/api/v1/admin/network-interfaces",
+    );
   },
   createBoard(payload: AdminBoardUpsertRequest) {
     return request<BoardConfig>("/api/v1/admin/boards", {
@@ -128,23 +159,32 @@ export const api = {
     });
   },
   updateBoard(boardId: string, payload: AdminBoardUpsertRequest) {
-    return request<BoardConfig>(`/api/v1/admin/boards/${encodeURIComponent(boardId)}`, {
-      method: "PUT",
-      bodyJson: payload,
-    });
+    return request<BoardConfig>(
+      `/api/v1/admin/boards/${encodeURIComponent(boardId)}`,
+      {
+        method: "PUT",
+        bodyJson: payload,
+      },
+    );
   },
   deleteBoard(boardId: string) {
-    return request<void>(`/api/v1/admin/boards/${encodeURIComponent(boardId)}`, {
-      method: "DELETE",
-    });
+    return request<void>(
+      `/api/v1/admin/boards/${encodeURIComponent(boardId)}`,
+      {
+        method: "DELETE",
+      },
+    );
   },
   listSessions() {
     return request<AdminSessionsResponse>("/api/v1/admin/sessions");
   },
   deleteSession(sessionId: string) {
-    return request<void>(`/api/v1/admin/sessions/${encodeURIComponent(sessionId)}`, {
-      method: "DELETE",
-    });
+    return request<void>(
+      `/api/v1/admin/sessions/${encodeURIComponent(sessionId)}`,
+      {
+        method: "DELETE",
+      },
+    );
   },
   getTftpConfig() {
     return request<AdminTftpConfigResponse>("/api/v1/admin/tftp");
